@@ -7,10 +7,13 @@ export const config = {
   databaseUrl:
     process.env.DATABASE_URL ?? 'postgres://bropprop:bropprop@localhost:5433/bropprop',
   pollCron: process.env.POLL_CRON ?? '*/15 * * * *',
-  leagues: (process.env.LEAGUES ?? 'CS2,LOL,APEX,VAL')
+  leagues: (process.env.LEAGUES ?? 'CS2,LOL')
     .split(',')
     .map((s) => s.trim().toUpperCase())
     .filter(Boolean),
-  archiveRaw: bool(process.env.ARCHIVE_RAW, true),
+  // Defaults OFF: Underdog's payload is ~15MB and at a 15-minute cadence this
+  // writes ~1.4GB/day, which fills an ephemeral container disk in about a day.
+  // Turn it on locally when you want replayable payloads for a backfill.
+  archiveRaw: bool(process.env.ARCHIVE_RAW, false),
   rawDir: process.env.RAW_DIR ?? './raw',
 };

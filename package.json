@@ -13,21 +13,22 @@
     "db:migrate": "tsx src/migrate.ts",
     "db:reset": "docker compose down -v && docker compose up -d && sleep 6 && npm run db:migrate",
     "poll": "tsx src/poll.ts",
-    "start": "tsx src/cron.ts",
+    "start": "npm run db:migrate && tsx src/cron.ts",
     "report": "tsx src/report.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test src/*.test.ts"
+    "test": "tsx --test src/*.test.ts",
+    "worker": "tsx src/cron.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.7",
     "node-cron": "^3.0.3",
-    "pg": "^8.13.1"
+    "pg": "^8.13.1",
+    "tsx": "^4.19.2"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
     "@types/node-cron": "^3.0.11",
     "@types/pg": "^8.11.10",
-    "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }
 }
