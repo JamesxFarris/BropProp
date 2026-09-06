@@ -15,6 +15,28 @@ export async function openSlip(): Promise<{ id: number }> {
 }
 
 /**
+ * Which app the open slip is committed to, or null while it's empty.
+ *
+ * A slip lives on one app: PrizePicks and Underdog are separate books and you
+ * cannot combine their props into a single entry. The first leg therefore
+ * decides the app for the whole slip.
+ */
+export async function openSlipBook(): Promise<string | null> {
+  const row = await one<{ book: string }>(
+    `SELECT p.book FROM pick p
+     JOIN slip s ON s.id = p.slip_id AND s.status = 'open'
+     LIMIT 1`,
+  );
+  return row?.book ?? null;
+}
+
+export class WrongBookError extends Error {
+  constructor(public readonly locked: string) {
+    super(`slip is locked to ${locked}`);
+  }
+}
+
+/**
  * Copy the line as it stands right now onto the pick. Never join to the live
  * line later — the board moves, and a pick has to remember the number it was
  * actually taken at or every future backtest is measuring the wrong thing.
@@ -25,6 +47,12 @@ export async function addPick(propId: number, side: 'over' | 'under'): Promise<v
     [propId],
   );
   if (!line) throw new Error(`no current line for prop ${propId}`);
+
+  // Enforced here, not just hidden in the UI: a hidden button is still a
+  // submittable form, and a mixed slip is not an entry that could ever be
+  // placed on either app.
+  const locked = await openSlipBook();
+  if (locked && locked !== line.book) throw new WrongBookError(locked);
 
   const slip = await openSlip();
   await q(
@@ -98,8 +126,8 @@ export async function placeSlip(opts: {
   );
   if (!slip || slip.n === 0) return null;
 
-  // A slip drawn from one book is that book's; mixing is legitimate for
-  // comparison but is never a real entry, so label it honestly.
+  // Every leg shares a book because addPick refuses otherwise; 'mixed' should
+  // now be unreachable and is kept only so a legacy row still reads honestly.
   const books = await q<{ book: string }>(`SELECT DISTINCT book FROM pick WHERE slip_id = $1`, [slip.id]);
   const book = books.length === 1 ? books[0]!.book : 'mixed';
 

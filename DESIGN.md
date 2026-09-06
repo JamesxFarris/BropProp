@@ -93,6 +93,15 @@ The dashboard writes as well as reads. Rules that fell out of building it:
   player and must never be cross-book matched against one.
 - **Legs read PENDING and stay there** until grading exists. Better an honest
   empty column than a fabricated result.
+- **A slip belongs to one app.** PrizePicks and Underdog are separate books
+  and no single entry can draw legs from both, so the first leg decides the app
+  and the board narrows to it. Enforced server-side, not just hidden: a hidden
+  button is still a submittable form. Choosing an app in the filter narrows the
+  board the same way — the other book's column disappears rather than sitting
+  there with live buttons that lead nowhere.
+- **The other app's number survives as the gap.** Narrowing drops the column
+  but keeps the comparison, relabelled "vs Underdog" / "vs PrizePicks", because
+  knowing your number is worse elsewhere is the reason this tool exists.
 - **The payout multiplier is never asserted.** PrizePicks reprices correlated
   legs and demotes individual props, so a leg-count table is a hint, not a
   quote. The field starts empty with the standard rate as placeholder text, and

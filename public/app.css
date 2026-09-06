@@ -485,3 +485,24 @@ button.link:hover { color: var(--under); text-decoration: underline; }
   .top-in, .filters, .page { padding-left: 14px; padding-right: 14px; }
   .brand { font-size: 18px; }
 }
+
+/* Explains why a column or a set of buttons is missing. Without it, the
+   narrowed board just looks broken. */
+.notice {
+  padding: 12px 16px; margin-bottom: 18px;
+  border-radius: var(--r);
+  border: 1px solid var(--line-2);
+  background: var(--surface-2); color: var(--text-2);
+  font-size: 14px;
+}
+.notice.warn-notice {
+  border-color: var(--under); background: var(--under-bg); color: var(--under);
+  font-weight: 500;
+}
+
+.seg-locked {
+  display: inline-flex; align-items: center;
+  padding: 8px 16px; border-radius: var(--r);
+  background: var(--text); color: var(--surface);
+  font-size: 14px; font-weight: 600;
+}

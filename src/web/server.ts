@@ -6,7 +6,10 @@ import { pool } from '../db.js';
 import { config } from '../config.js';
 import { movements, health, leagues } from './queries.js';
 import { markets, propHistory, siblingProps } from './boardq.js';
-import { openPicks, addPick, removePick, placeSlip, clearOpenSlip, slips, slipPicks } from './picks.js';
+import {
+  openPicks, addPick, removePick, placeSlip, clearOpenSlip, slips, slipPicks,
+  openSlipBook, WrongBookError,
+} from './picks.js';
 import { boardPage, edgesPage, slipsPage, historyPage } from './render.js';
 
 const PORT = Number(process.env.PORT ?? 3000);
@@ -109,7 +112,17 @@ const server = createServer(async (req, res) => {
         const propId = Number(body.get('prop_id'));
         const side = body.get('side');
         if (Number.isFinite(propId) && (side === 'over' || side === 'under')) {
-          await addPick(propId, side);
+          try {
+            await addPick(propId, side);
+          } catch (err) {
+            // Say why the pick didn't land rather than redirecting to a board
+            // that silently looks unchanged.
+            if (err instanceof WrongBookError) {
+              const sep = back.includes('?') ? '&' : '?';
+              return redirect(res, `${back}${sep}locked=${encodeURIComponent(err.locked)}`);
+            }
+            throw err;
+          }
         }
         return redirect(res, back);
       }
@@ -146,6 +159,13 @@ const server = createServer(async (req, res) => {
       search: url.searchParams.get('q')?.trim() || null,
     };
 
+    // A slip already committed to an app narrows the board to that app: props
+    // from the other one can't join this entry, so showing them as takeable
+    // would be offering something that cannot be done.
+    const lockedBook = await openSlipBook();
+    if (lockedBook) filters.book = lockedBook;
+    const blocked = url.searchParams.get('locked');
+
     const propMatch = url.pathname.match(/^\/prop\/(\d+)$/);
     if (propMatch) {
       const id = Number(propMatch[1]);
@@ -160,7 +180,7 @@ const server = createServer(async (req, res) => {
 
     if (url.pathname === '/board') {
       const [rows, picks, h] = await Promise.all([markets(filters), openPicks(), health(filters.league)]);
-      return html(res, boardPage({ rows, picks, health: h, leagues: known, filters }));
+      return html(res, boardPage({ rows, picks, health: h, leagues: known, filters, lockedBook, blocked }));
     }
 
     if (url.pathname === '/slips') {
@@ -178,7 +198,7 @@ const server = createServer(async (req, res) => {
         openPicks(),
         health(filters.league),
       ]);
-      return html(res, edgesPage({ rows, mov, picks, health: h, leagues: known, filters }));
+      return html(res, edgesPage({ rows, mov, picks, health: h, leagues: known, filters, lockedBook, blocked }));
     }
 
     res.writeHead(404, { 'content-type': 'text/plain' }).end('Not found');

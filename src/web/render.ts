@@ -16,6 +16,9 @@ const STAT_LABEL: Record<string, string> = {
 };
 const statLabel = (s: string) => STAT_LABEL[s] ?? s.replace(/_/g, ' ');
 
+const bookName = (b: string) => (b === 'prizepicks' ? 'PrizePicks' : 'Underdog');
+const otherBook = (b: string) => (b === 'prizepicks' ? 'underdog' : 'prizepicks');
+
 const LEAGUE_CLASS: Record<string, string> = { CS2: 'cs2', LOL: 'lol' };
 const leagueBadge = (l: string) =>
   `<span class="lg ${LEAGUE_CLASS[l] ?? 'other'}">${esc(l)}</span>`;
@@ -85,7 +88,7 @@ function qs(f: Partial<Filters>, base: Filters): string {
   return p.toString() ? `?${p}` : '';
 }
 
-function filterBar(path: string, f: Filters, leagues: string[]): string {
+function filterBar(path: string, f: Filters, leagues: string[], locked: string | null = null): string {
   const a = (href: string, label: string, on: boolean, cls = '') =>
     `<a class="${cls}" href="${esc(path + href)}"${on ? ' aria-current="page"' : ''}>${label}</a>`;
 
@@ -101,16 +104,22 @@ function filterBar(path: string, f: Filters, leagues: string[]): string {
     ),
   ].join('');
 
-  const bookBtns = [
-    a(qs({ book: null }, f), 'Both', f.book === null),
-    a(qs({ book: 'prizepicks' }, f), 'PrizePicks', f.book === 'prizepicks'),
-    a(qs({ book: 'underdog' }, f), 'Underdog', f.book === 'underdog'),
-  ].join('');
+  // While a slip is open the app is decided by its first leg, so the control
+  // reports that state rather than offering a switch that would be refused.
+  const bookBtns = locked
+    ? `<span class="seg-locked" aria-current="page">${bookName(locked)}</span>`
+    : [
+        a(qs({ book: null }, f), 'Both', f.book === null),
+        a(qs({ book: 'prizepicks' }, f), 'PrizePicks', f.book === 'prizepicks'),
+        a(qs({ book: 'underdog' }, f), 'Underdog', f.book === 'underdog'),
+      ].join('');
 
   return `
   <div class="filters">
     <div class="group"><span class="lab">League</span><nav class="seg">${leagueBtns}</nav></div>
-    <div class="group"><span class="lab">App</span><nav class="seg">${bookBtns}</nav></div>
+    <div class="group"><span class="lab">App</span><nav class="seg">${bookBtns}</nav>${
+      locked ? '<span class="lab">set by your slip</span>' : ''
+    }</div>
     <div class="group"><nav class="seg">
       ${a(qs({ matched: !f.matched }, f), 'On both apps', f.matched)}
     </nav></div>
@@ -323,6 +332,27 @@ function slipRail(picks: PickRow[], back: string): string {
   </div>`;
 }
 
+/**
+ * PrizePicks and Underdog are separate books — a single entry cannot draw legs
+ * from both. Once a slip has its first leg the board narrows to that app, and
+ * this says so, because otherwise the missing column just looks like a bug.
+ */
+function lockNotice(locked: string | null, blocked: string | null): string {
+  if (blocked) {
+    return `<div class="notice warn-notice">
+      That prop is on ${esc(bookName(blocked === 'prizepicks' ? 'underdog' : 'prizepicks'))},
+      but your slip is on ${esc(bookName(blocked))}. Entries can't mix the two apps —
+      clear the slip to switch.</div>`;
+  }
+  if (locked) {
+    return `<div class="notice">
+      Showing ${esc(bookName(locked))} only, because your slip started there.
+      ${esc(bookName(otherBook(locked)))} lines still show in the gap column.
+      Clear the slip to switch apps.</div>`;
+  }
+  return '';
+}
+
 // ------------------------------------------------------------------ board --
 
 function ouButtons(propId: number | null, back: string, picked: string | null): string {
@@ -345,8 +375,18 @@ export function boardPage(o: {
   health: Health;
   leagues: string[];
   filters: Filters;
+  lockedBook: string | null;
+  blocked: string | null;
 }): string {
   const back = `/board${qs({}, o.filters)}`;
+
+  // One app selected (by filter or by an open slip) means one column. Showing
+  // the other app's line with live take buttons offered a pick that cannot
+  // join this entry.
+  const only = o.lockedBook ?? o.filters.book;
+  const showPP = only === null || only === 'prizepicks';
+  const showUD = only === null || only === 'underdog';
+  const gapLabel = only ? `vs ${bookName(otherBook(only))}` : 'Gap';
 
   const body =
     o.rows.length === 0
@@ -362,9 +402,9 @@ export function boardPage(o: {
         <thead><tr>
           <th>Player</th>
           <th>Market</th>
-          <th class="n">PrizePicks</th>
-          <th class="c">Gap</th>
-          <th class="n">Underdog</th>
+          ${showPP ? '<th class="n">PrizePicks</th>' : ''}
+          <th class="c">${gapLabel}</th>
+          ${showUD ? '<th class="n">Underdog</th>' : ''}
           <th class="hide-sm">Match</th>
           <th class="n hide-md">Starts</th>
         </tr></thead>
@@ -400,19 +440,23 @@ export function boardPage(o: {
               <div class="sub2">${esc(statLabel(r.stat))}</div>
               <div class="meta">${esc(maps(r.map_start, r.map_end))}</div>
             </td>
-            <td class="n">
-              <div class="bookcell">
+            ${
+              showPP
+                ? `<td class="n"><div class="bookcell">
                 <span class="fig${r.pp_line === null ? ' muted' : ''}">${num(r.pp_line)}</span>
                 ${ouButtons(r.pp_prop_id, back, r.pp_side)}
-              </div>
-            </td>
+              </div></td>`
+                : ''
+            }
             <td class="c">${gap}</td>
-            <td class="n">
-              <div class="bookcell">
+            ${
+              showUD
+                ? `<td class="n"><div class="bookcell">
                 <span class="fig${r.ud_line === null ? ' muted' : ''}">${num(r.ud_line)}</span>
                 ${ouButtons(r.ud_prop_id, back, r.ud_side)}
-              </div>
-            </td>
+              </div></td>`
+                : ''
+            }
             <td class="match hide-sm"><span class="sub2" title="${esc(r.match_title ?? '')}">${esc(r.match_title ?? '—')}</span></td>
             <td class="n hide-md"><span class="meta">${starts(r.scheduled_at)}</span></td>
           </tr>`;
@@ -425,9 +469,9 @@ export function boardPage(o: {
     title: 'Board',
     active: 'board',
     health: o.health,
-    filters: filterBar('/board', o.filters, o.leagues),
+    filters: filterBar('/board', o.filters, o.leagues, o.lockedBook),
     rail: slipRail(o.picks, back),
-    body,
+    body: lockNotice(o.lockedBook, o.blocked) + body,
   });
 }
 
@@ -440,6 +484,8 @@ export function edgesPage(o: {
   health: Health;
   leagues: string[];
   filters: Filters;
+  lockedBook: string | null;
+  blocked: string | null;
 }): string {
   const back = `/${qs({}, o.filters)}`;
   const gaps = o.rows.filter((r) => r.delta !== null && Number(r.delta) !== 0);
@@ -475,10 +521,18 @@ export function edgesPage(o: {
             <td><div class="sub2">${esc(statLabel(r.stat))}</div>
                 <div class="meta">${esc(maps(r.map_start, r.map_end))}</div></td>
             <td class="n"><div class="bookcell"><span class="fig">${num(r.pp_line)}</span>
-              ${ouButtons(r.pp_prop_id, back, r.pp_side)}</div></td>
+              ${
+                o.lockedBook === 'underdog'
+                  ? ''
+                  : ouButtons(r.pp_prop_id, back, r.pp_side)
+              }</div></td>
             <td class="c"><span class="gap-chip ${d > 0 ? 'up' : 'down'}">${signed(d)}</span></td>
             <td class="n"><div class="bookcell"><span class="fig">${num(r.ud_line)}</span>
-              ${ouButtons(r.ud_prop_id, back, r.ud_side)}</div></td>
+              ${
+                o.lockedBook === 'prizepicks'
+                  ? ''
+                  : ouButtons(r.ud_prop_id, back, r.ud_side)
+              }</div></td>
             <td><span class="pickside ${cls}" style="padding:4px 9px;border-radius:4px;font-size:13px;font-weight:600">${cheaper}</span></td>
             <td class="match hide-sm"><span class="sub2" title="${esc(r.match_title ?? '')}">${esc(r.match_title ?? '—')}</span></td>
           </tr>`;
@@ -521,9 +575,9 @@ export function edgesPage(o: {
     title: 'Edges',
     active: 'signal',
     health: o.health,
-    filters: filterBar('/', o.filters, o.leagues),
+    filters: filterBar('/', o.filters, o.leagues, o.lockedBook),
     rail: slipRail(o.picks, back),
-    body: gapsCard + movCard,
+    body: lockNotice(o.lockedBook, o.blocked) + gapsCard + movCard,
   });
 }
 
