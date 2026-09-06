@@ -1,65 +1,5 @@
 import { q, one, pool } from '../db.js';
 
-export type BoardRow = {
-  prop_id: number;
-  book: string;
-  league: string;
-  handle: string;
-  canon_handle: string;
-  stat: string;
-  map_start: number;
-  map_end: number;
-  variant: string;
-  is_combo: boolean;
-  line: number;
-  over_price: number | null;
-  under_price: number | null;
-  match_title: string | null;
-  scheduled_at: string | null;
-  confirmed_at: string;
-  other_line: number | null;
-  picked_side: string | null;
-};
-
-/**
- * The full board, which is what you actually take props off.
- *
- * `other_line` is the same market on the opposite book when it exists, so the
- * cross-book gap is visible inline instead of forcing a jump to the
- * disagreements panel to check whether you're taking the better number.
- */
-export async function board(league: string | null, bookFilter: string | null): Promise<BoardRow[]> {
-  return q<BoardRow>(
-    `WITH cl AS (
-       SELECT * FROM current_line
-       WHERE (scheduled_at IS NULL OR scheduled_at > now() - interval '6 hours')
-     ),
-     open_picks AS (
-       SELECT pk.prop_id, pk.side FROM pick pk
-       JOIN slip s ON s.id = pk.slip_id AND s.status = 'open'
-     )
-     SELECT c.prop_id, c.book, c.league, c.handle, c.canon_handle, c.stat,
-            c.map_start, c.map_end, c.variant, c.is_combo, c.line, c.over_price, c.under_price,
-            c.match_title, c.scheduled_at, c.last_seen_at AS confirmed_at,
-            o.line AS other_line,
-            op.side AS picked_side
-     FROM cl c
-     LEFT JOIN LATERAL (
-       SELECT x.line FROM cl x
-       WHERE x.canon_handle = c.canon_handle AND x.league = c.league
-         AND x.stat = c.stat AND x.map_start = c.map_start AND x.map_end = c.map_end
-         AND x.book <> c.book AND x.variant = 'standard'
-         AND x.is_combo = c.is_combo
-       LIMIT 1
-     ) o ON true
-     LEFT JOIN open_picks op ON op.prop_id = c.prop_id
-     WHERE ($1::text IS NULL OR c.league = $1)
-       AND ($2::text IS NULL OR c.book = $2)
-       AND c.variant = 'standard'
-     ORDER BY c.scheduled_at NULLS LAST, c.handle, c.stat, c.book`,
-    [league, bookFilter],
-  );
-}
 
 /**
  * Exactly one slip is open at a time (enforced by a partial unique index), so
@@ -146,6 +86,7 @@ export async function placeSlip(opts: {
   name: string | null;
   entryType: string;
   stake: number | null;
+  multiplier: number | null;
 }): Promise<number | null> {
   const slip = await one<{ id: number; n: number }>(
     `SELECT s.id, count(p.id)::int AS n FROM slip s
@@ -161,9 +102,10 @@ export async function placeSlip(opts: {
 
   await q(
     `UPDATE slip SET status = 'placed', placed_at = now(),
-                     name = $2, entry_type = $3, stake = $4, book = $5
+                     name = $2, entry_type = $3, stake = $4, book = $5,
+                     payout_multiplier = $6
       WHERE id = $1`,
-    [slip.id, opts.name, opts.entryType, opts.stake, book],
+    [slip.id, opts.name, opts.entryType, opts.stake, book, opts.multiplier],
   );
   return slip.id;
 }
@@ -174,6 +116,7 @@ export type SlipSummary = {
   book: string | null;
   entry_type: string;
   stake: number | null;
+  payout_multiplier: number | null;
   status: string;
   placed_at: string | null;
   legs: number;
@@ -184,7 +127,7 @@ export type SlipSummary = {
 
 export async function slips(limit = 40): Promise<SlipSummary[]> {
   return q<SlipSummary>(
-    `SELECT s.id, s.name, s.book, s.entry_type, s.stake, s.status, s.placed_at,
+    `SELECT s.id, s.name, s.book, s.entry_type, s.stake, s.payout_multiplier, s.status, s.placed_at,
             count(p.id)::int AS legs,
             count(*) FILTER (WHERE p.status = 'pending')::int AS pending,
             count(*) FILTER (WHERE p.status = 'won')::int     AS won,

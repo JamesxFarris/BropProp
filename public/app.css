@@ -1,318 +1,487 @@
-/* BropProp — "technical instrument".
-   Structure comes from hairline rules and alignment, never shadows or cards.
-   Colour is reserved for encoding the sign of a number; everything else is
-   ink on paper. See DESIGN.md. */
+/* BropProp
+   ---------------------------------------------------------------------
+   The subject is a head-to-head between two books, so the board is built
+   like a scoreboard: one row per market, the two books paired, and the gap
+   between them as the thing the eye lands on. Boldness is spent on that gap
+   chip alone; everything around it stays quiet.
+
+   League identity carries the colour (CS2 amber, LOL cyan). Semantic colour
+   (over / under) is separate from that and from the neutral primary action,
+   so hues never compete for the same meaning.
+
+   Radius is spent by role: controls are rounded because they are pressable,
+   data rows are square because they are a table. */
 
 :root {
-  --paper:   #f5f4ef;   /* warm paper, not a cold grey */
-  --surface: #fcfbf8;
-  --ink:     #17181a;
-  --ink-2:   #55565a;
-  --ink-3:   #8a8b87;
-  --rule:    #deddd4;
-  --rule-2:  #c5c2b7;
-  --neg:     #8a3324;   /* oxide */
-  --neg-bg:  #8a332412;
-  --pos:     #1f5d50;   /* deep green-teal */
-  --pos-bg:  #1f5d5012;
-  --live:    #2f7d32;
+  color-scheme: light dark;
 
-  --mono: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
-  --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  /* Light: a cool paper with a blue bias toward the interface hues. */
+  --bg:        #f4f6f8;
+  --surface:   #ffffff;
+  --surface-2: #eef1f5;
+  --raised:    #ffffff;
+  --line:      #dde3ea;
+  --line-2:    #c8d1db;
+
+  --text:      #131c26;
+  --text-2:    #4f5c6b;
+  --text-3:    #7b8896;
+
+  --cs2:       #b8760e;
+  --cs2-bg:    #b8760e18;
+  --lol:       #14788f;
+  --lol-bg:    #14788f18;
+
+  --over:      #16815a;
+  --over-bg:   #16815a16;
+  --under:     #bf3a32;
+  --under-bg:  #bf3a3216;
+
+  --live:      #16815a;
+  --focus:     #1f7fd4;
+
+  --font: 'Barlow', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --r:  6px;   /* controls */
+  --r-s: 4px;  /* chips */
 }
 
-/* System-dark, unless the reader has explicitly chosen light. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --paper:   #131417;
-    --surface: #17191c;
-    --ink:     #e9e8e3;
-    --ink-2:   #9a9b98;
-    --ink-3:   #6e706e;
-    --rule:    #26282c;
-    --rule-2:  #3a3d43;
-    --neg:     #d2856c;
-    --neg-bg:  #d2856c1a;
-    --pos:     #6fb3a0;
-    --pos-bg:  #6fb3a01a;
-    --live:    #6fb37a;
+    --bg:        #0f1621;
+    --surface:   #16202d;
+    --surface-2: #1b2735;
+    --raised:    #1d2a39;
+    --line:      #26313f;
+    --line-2:    #35424f;
+
+    --text:      #e9eef4;
+    --text-2:    #9dabbb;
+    --text-3:    #6f7d8c;
+
+    --cs2:       #f2a03d;
+    --cs2-bg:    #f2a03d1f;
+    --lol:       #4cc2e0;
+    --lol-bg:    #4cc2e01f;
+
+    --over:      #31b57e;
+    --over-bg:   #31b57e1f;
+    --under:     #e5645b;
+    --under-bg:  #e5645b1f;
+
+    --live:      #31b57e;
+    --focus:     #4cc2e0;
   }
 }
 
-/* Explicit choice wins in both directions. */
 [data-theme="dark"] {
-  --paper:   #131417;
-  --surface: #17191c;
-  --ink:     #e9e8e3;
-  --ink-2:   #9a9b98;
-  --ink-3:   #6e706e;
-  --rule:    #26282c;
-  --rule-2:  #3a3d43;
-  --neg:     #d2856c;
-  --neg-bg:  #d2856c1a;
-  --pos:     #6fb3a0;
-  --pos-bg:  #6fb3a01a;
-  --live:    #6fb37a;
+  --bg:        #0f1621;
+  --surface:   #16202d;
+  --surface-2: #1b2735;
+  --raised:    #1d2a39;
+  --line:      #26313f;
+  --line-2:    #35424f;
+
+  --text:      #e9eef4;
+  --text-2:    #9dabbb;
+  --text-3:    #6f7d8c;
+
+  --cs2:       #f2a03d;
+  --cs2-bg:    #f2a03d1f;
+  --lol:       #4cc2e0;
+  --lol-bg:    #4cc2e01f;
+
+  --over:      #31b57e;
+  --over-bg:   #31b57e1f;
+  --under:     #e5645b;
+  --under-bg:  #e5645b1f;
+
+  --live:      #31b57e;
+  --focus:     #4cc2e0;
 }
 
 * { box-sizing: border-box; }
 
 body {
   margin: 0;
-  background: var(--paper);
-  color: var(--ink);
-  font-family: var(--sans);
-  font-size: 14px;
-  line-height: 1.45;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
 
-.wrap { max-width: 1180px; margin: 0 auto; padding: 0 28px 72px; }
+a { color: inherit; }
 
-/* ---- masthead ------------------------------------------------------- */
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
 
-.masthead {
-  display: flex; align-items: baseline; justify-content: space-between;
-  gap: 24px; flex-wrap: wrap;
-  padding: 26px 0 10px;
-  border-bottom: 1px solid var(--rule-2);
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
 }
-.wordmark {
-  font-family: var(--mono);
-  font-size: 13px; letter-spacing: .16em; text-transform: uppercase;
-  font-weight: 600; color: var(--ink); margin: 0;
-}
-.wordmark span { color: var(--ink-3); font-weight: 400; }
 
-.clock {
-  font-family: var(--mono); font-size: 12px; color: var(--ink-2);
-  font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 14px;
-}
-.pulse {
-  display: inline-flex; align-items: center; gap: 6px;
-  text-transform: uppercase; letter-spacing: .1em; font-size: 11px;
-}
-.pulse::before {
-  content: ""; width: 6px; height: 6px; border-radius: 50%;
-  background: var(--live);
-}
-.pulse.stale { color: var(--neg); }
-.pulse.stale::before { background: var(--neg); }
+/* ---- frame ---------------------------------------------------------- */
 
-/* ---- filter rail ---------------------------------------------------- */
+.top {
+  position: sticky; top: 0; z-index: 20;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.top-in {
+  max-width: 1560px; margin: 0 auto; padding: 12px 22px;
+  display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+}
 
-.rail {
-  display: flex; gap: 2px; align-items: center;
-  padding: 10px 0; border-bottom: 1px solid var(--rule);
-  flex-wrap: wrap;
+.brand {
+  display: flex; align-items: baseline; gap: 9px;
+  font-size: 20px; font-weight: 700; letter-spacing: -.02em;
+  margin: 0; white-space: nowrap;
 }
-.rail a {
-  font-family: var(--mono); font-size: 11px; letter-spacing: .1em;
-  text-transform: uppercase; text-decoration: none;
-  color: var(--ink-3); padding: 4px 10px; border: 1px solid transparent;
+.brand em {
+  font-style: normal; font-weight: 500; font-size: 14px; color: var(--text-3);
 }
-.rail a:hover { color: var(--ink); }
-.rail a[aria-current="page"] {
-  color: var(--ink); border-color: var(--rule-2); background: var(--surface);
-}
-.rail .spacer { flex: 1; }
-.rail button {
-  font-family: var(--mono); font-size: 11px; letter-spacing: .1em;
-  text-transform: uppercase; color: var(--ink-3);
-  background: none; border: 1px solid transparent; padding: 4px 10px; cursor: pointer;
-}
-.rail button:hover { color: var(--ink); border-color: var(--rule); }
 
-/* ---- panels --------------------------------------------------------- */
+.tabs { display: flex; gap: 4px; }
+.tabs a {
+  padding: 7px 15px; border-radius: var(--r);
+  font-size: 14px; font-weight: 600; color: var(--text-2);
+  text-decoration: none; white-space: nowrap;
+}
+.tabs a:hover { background: var(--surface-2); color: var(--text); }
+.tabs a[aria-current="page"] { background: var(--text); color: var(--surface); }
 
-.panel { margin-top: 34px; }
+.top .grow { flex: 1 1 auto; }
 
-.panel-head {
-  display: flex; align-items: baseline; gap: 14px;
-  border-bottom: 1px solid var(--rule-2);
-  padding-bottom: 6px;
+.status {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 13px; font-weight: 500; color: var(--text-2);
 }
-.panel-head h2 {
-  margin: 0; font-family: var(--mono); font-weight: 600;
-  font-size: 12px; letter-spacing: .14em; text-transform: uppercase;
+.dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--live); flex: none;
 }
-.panel-head .note {
-  font-size: 11px; color: var(--ink-3); letter-spacing: .04em;
-  margin-left: auto; font-family: var(--mono);
+.status.stale { color: var(--under); }
+.status.stale .dot { background: var(--under); }
+
+.icon-btn {
+  font-family: var(--font); font-size: 13px; font-weight: 600;
+  padding: 7px 13px; border-radius: var(--r);
+  background: var(--surface-2); color: var(--text-2);
+  border: 1px solid var(--line); cursor: pointer;
 }
+.icon-btn:hover { color: var(--text); border-color: var(--line-2); }
+
+/* ---- filter bar ----------------------------------------------------- */
+
+.filters {
+  max-width: 1560px; margin: 0 auto;
+  padding: 14px 22px 0;
+  display: flex; gap: 22px; align-items: center; flex-wrap: wrap;
+}
+
+.group { display: flex; align-items: center; gap: 8px; }
+.group > .lab {
+  font-size: 13px; font-weight: 500; color: var(--text-3);
+}
+
+/* Segmented control. Big enough to hit, coloured by what it selects. */
+.seg { display: flex; gap: 5px; }
+.seg a {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 16px; border-radius: var(--r);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 14px; font-weight: 600; text-decoration: none;
+  white-space: nowrap;
+}
+.seg a:hover { border-color: var(--line-2); color: var(--text); }
+.seg a[aria-current="page"] {
+  background: var(--text); border-color: var(--text); color: var(--surface);
+}
+.seg a.cs2[aria-current="page"] {
+  background: var(--cs2-bg); border-color: var(--cs2); color: var(--cs2);
+}
+.seg a.lol[aria-current="page"] {
+  background: var(--lol-bg); border-color: var(--lol); color: var(--lol);
+}
+.seg a .swatch {
+  width: 9px; height: 9px; border-radius: 2px; flex: none;
+}
+.seg a.cs2 .swatch { background: var(--cs2); }
+.seg a.lol .swatch { background: var(--lol); }
+
+.search { display: flex; gap: 6px; align-items: center; }
+.search input {
+  font-family: var(--font); font-size: 14px;
+  padding: 8px 12px; width: 200px;
+  border-radius: var(--r); border: 1px solid var(--line);
+  background: var(--surface); color: var(--text);
+}
+.search input::placeholder { color: var(--text-3); }
+
+/* ---- page ----------------------------------------------------------- */
+
+.page {
+  max-width: 1560px; margin: 0 auto; padding: 18px 22px 80px;
+  display: grid; gap: 22px;
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 1180px) {
+  .page.with-rail { grid-template-columns: minmax(0, 1fr) 330px; align-items: start; }
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.card + .card { margin-top: 20px; }
+
+.card-head {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.card-head h2 {
+  margin: 0; font-size: 16px; font-weight: 700; letter-spacing: -.01em;
+}
+.card-head .sub { font-size: 13px; color: var(--text-3); margin-left: auto; }
 
 .scroll { overflow-x: auto; }
 
-/* ---- tables --------------------------------------------------------- */
+/* ---- table ---------------------------------------------------------- */
 
 table { width: 100%; border-collapse: collapse; }
 
 thead th {
-  font-family: var(--mono); font-weight: 500;
-  font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
-  color: var(--ink-3); text-align: left;
-  padding: 9px 12px 8px; white-space: nowrap;
-  border-bottom: 1px solid var(--rule);
-}
-tbody td {
-  padding: 7px 12px;
-  border-bottom: 1px solid var(--rule);
+  font-size: 12px; font-weight: 600; color: var(--text-3);
+  text-align: left; padding: 10px 14px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
   white-space: nowrap;
 }
-tbody tr:hover td { background: var(--surface); }
+th.n, td.n { text-align: right; }
+th.c, td.c { text-align: center; }
 
-/* Figures are the subject of the page: mono, tabular, right-aligned. */
-.num {
+tbody td {
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+  vertical-align: middle;
+}
+tbody tr:last-child td { border-bottom: 0; }
+tbody tr:hover td { background: var(--surface-2); }
+
+.who { display: flex; align-items: center; gap: 10px; }
+.name { font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
+.name a { text-decoration: none; }
+.name a:hover { text-decoration: underline; }
+.meta { font-size: 13px; color: var(--text-3); }
+.sub2 { font-size: 13px; color: var(--text-2); }
+
+/* Match names run long ("RED Canids Academy vs Bounty Hunters") and would
+   otherwise push the columns after them out of view. Truncate the one cell
+   that can afford it rather than letting the table overflow its card. */
+td.match .sub2 {
+  display: block; max-width: 22ch;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+@media (min-width: 1500px) { td.match .sub2 { max-width: 34ch; } }
+
+/* Figures are the data: mono and tabular so columns align to the decimal. */
+.fig {
   font-family: var(--mono); font-variant-numeric: tabular-nums;
-  text-align: right; font-size: 14px;
+  font-size: 17px; font-weight: 500;
 }
-th.num { text-align: right; }
-.player { font-weight: 600; letter-spacing: -.005em; }
-.muted  { color: var(--ink-3); }
-.dim    { color: var(--ink-2); }
+.fig.sm { font-size: 15px; }
+.fig.muted { color: var(--text-3); }
 
-.tag {
-  font-family: var(--mono); font-size: 10px; letter-spacing: .1em;
-  text-transform: uppercase; color: var(--ink-2);
-  border: 1px solid var(--rule-2); padding: 1px 5px;
+/* League identity. An acronym badge, not a styled-caps label. */
+.lg {
+  display: inline-block; padding: 3px 8px; border-radius: var(--r-s);
+  font-size: 12px; font-weight: 700; letter-spacing: .02em;
+  border: 1px solid transparent;
 }
+.lg.cs2 { color: var(--cs2); background: var(--cs2-bg); border-color: var(--cs2); }
+.lg.lol { color: var(--lol); background: var(--lol-bg); border-color: var(--lol); }
+.lg.other { color: var(--text-2); background: var(--surface-2); border-color: var(--line-2); }
 
-/* Sign carries meaning, so it gets the only colour on the page. */
-.delta { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; font-weight: 600; }
-.delta.pos { color: var(--pos); }
-.delta.neg { color: var(--neg); }
-
-/* Magnitude bar: reads the size of a gap without parsing the digits. */
-.bar { width: 84px; padding-left: 0 !important; }
-.bar span {
-  display: block; height: 3px; background: var(--ink-3); opacity: .5;
-  min-width: 2px;
+.chip {
+  display: inline-block; padding: 3px 8px; border-radius: var(--r-s);
+  font-size: 12px; font-weight: 600; color: var(--text-2);
+  background: var(--surface-2); border: 1px solid var(--line);
 }
-.bar span.pos { background: var(--pos); opacity: .75; }
-.bar span.neg { background: var(--neg); opacity: .75; }
+.chip.warn { color: var(--under); border-color: var(--under); background: var(--under-bg); }
 
-.side {
-  font-family: var(--mono); font-size: 10px; letter-spacing: .08em;
-  text-transform: uppercase; padding: 1px 6px; border: 1px solid;
+/* The gap between the two books — the one loud element on the page. */
+.gap-chip {
+  display: inline-block; min-width: 62px; padding: 5px 10px;
+  border-radius: var(--r); text-align: center;
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+  font-size: 15px; font-weight: 600;
+  border: 1px solid transparent;
 }
-.side.pos { color: var(--pos); border-color: var(--pos); background: var(--pos-bg); }
-.side.neg { color: var(--neg); border-color: var(--neg); background: var(--neg-bg); }
+.gap-chip.up   { color: var(--over);  background: var(--over-bg);  border-color: var(--over); }
+.gap-chip.down { color: var(--under); background: var(--under-bg); border-color: var(--under); }
+.gap-chip.flat { color: var(--text-3); background: var(--surface-2); border-color: var(--line); }
 
-/* ---- footer readout ------------------------------------------------- */
+.move { font-family: var(--mono); font-size: 13px; font-weight: 500; }
+.move.up   { color: var(--over); }
+.move.down { color: var(--under); }
 
-.readout {
-  margin-top: 40px; padding-top: 10px;
-  border-top: 1px solid var(--rule-2);
-  display: flex; flex-wrap: wrap; gap: 26px;
-  font-family: var(--mono); font-size: 11px; letter-spacing: .08em;
-  text-transform: uppercase; color: var(--ink-3);
+/* ---- take buttons --------------------------------------------------- */
+
+.bookcell { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+
+.ou { display: flex; gap: 5px; }
+.ou button {
+  font-family: var(--font); font-size: 14px; font-weight: 700;
+  min-width: 38px; height: 34px; padding: 0 10px;
+  border-radius: var(--r); cursor: pointer;
+  background: var(--surface-2); color: var(--text-2);
+  border: 1px solid var(--line);
 }
-.readout b {
-  color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums;
-  letter-spacing: 0;
-}
-
-.empty {
-  padding: 30px 12px; color: var(--ink-3); font-size: 13px;
-  border-bottom: 1px solid var(--rule);
-}
-.empty b { color: var(--ink-2); font-weight: 500; }
-
-.warn {
-  margin-top: 14px; padding: 9px 12px;
-  border: 1px solid var(--neg); background: var(--neg-bg); color: var(--neg);
-  font-family: var(--mono); font-size: 11px; letter-spacing: .06em;
-}
-
-@media (max-width: 700px) {
-  .wrap { padding: 0 16px 56px; }
-  .hide-sm { display: none; }
-}
-
-/* ---- controls -------------------------------------------------------
-   Buttons are drawn like the tags and rules around them: hairline box,
-   small-caps mono, no fill until they mean something. A "take" button
-   that is on carries the same colour its side carries everywhere else. */
-
-.rail .div {
-  width: 1px; height: 14px; background: var(--rule-2); margin: 0 8px;
-}
+.ou button:hover { color: var(--text); border-color: var(--line-2); }
+.ou button.o.on { background: var(--over-bg);  border-color: var(--over);  color: var(--over); }
+.ou button.u.on { background: var(--under-bg); border-color: var(--under); color: var(--under); }
+.ou button:disabled { opacity: .3; cursor: not-allowed; }
 
 form.inline { display: inline; }
 
-.takes { display: flex; gap: 4px; }
+/* ---- slip rail ------------------------------------------------------ */
 
-button.take {
-  font-family: var(--mono); font-size: 11px; font-weight: 600;
-  letter-spacing: .06em;
-  width: 26px; height: 22px; line-height: 1;
-  background: none; color: var(--ink-3);
-  border: 1px solid var(--rule-2); cursor: pointer;
+.rail { position: sticky; top: 74px; }
+
+.slip-legs { display: flex; flex-direction: column; }
+.leg {
+  display: grid; grid-template-columns: 1fr auto auto;
+  gap: 10px; align-items: center;
+  padding: 11px 14px; border-bottom: 1px solid var(--line);
 }
-button.take:hover { color: var(--ink); border-color: var(--ink-3); }
-button.take.over.on  { color: var(--pos); border-color: var(--pos); background: var(--pos-bg); }
-button.take.under.on { color: var(--neg); border-color: var(--neg); background: var(--neg-bg); }
+.leg:last-child { border-bottom: 0; }
+.leg .l1 { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.leg .nm { font-weight: 600; font-size: 15px; overflow: hidden; text-overflow: ellipsis; }
+.leg .l2 { font-size: 13px; color: var(--text-3); }
+.leg .pickside {
+  font-size: 12px; font-weight: 700; padding: 2px 7px; border-radius: var(--r-s);
+}
+.leg .pickside.o { color: var(--over);  background: var(--over-bg); }
+.leg .pickside.u { color: var(--under); background: var(--under-bg); }
 
-button.x {
-  font-family: var(--mono); font-size: 13px; line-height: 1;
-  width: 22px; height: 22px;
-  background: none; color: var(--ink-3);
+button.rm {
+  font-family: var(--font); font-size: 16px; line-height: 1;
+  width: 28px; height: 28px; border-radius: var(--r);
+  background: none; color: var(--text-3);
   border: 1px solid transparent; cursor: pointer;
 }
-button.x:hover { color: var(--neg); border-color: var(--neg); }
+button.rm:hover { color: var(--under); border-color: var(--under); background: var(--under-bg); }
 
-/* A picked row is marked by a rule on its edge, not a fill — the numbers
-   have to stay as readable as every other row. */
-tr.picked td:first-child { box-shadow: inset 2px 0 0 var(--ink-3); }
+.payout {
+  padding: 14px; border-top: 1px solid var(--line);
+  background: var(--surface-2);
+  display: grid; gap: 10px;
+}
+.payout .row { display: flex; align-items: center; gap: 10px; }
+.payout .field { flex: 1 1 0; min-width: 0; }
+.payout .field label {
+  display: block; font-size: 12px; font-weight: 500;
+  color: var(--text-3); margin-bottom: 4px;
+}
+.payout .hint { font-size: 12px; color: var(--text-3); line-height: 1.4; }
+.payout input, .payout select {
+  font-family: var(--font); font-size: 14px;
+  padding: 8px 10px; width: 100%;
+  border-radius: var(--r); border: 1px solid var(--line);
+  background: var(--surface); color: var(--text);
+}
+.payout .towin {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 12px; padding: 10px 0 2px; border-top: 1px solid var(--line);
+}
+.payout .towin .k { font-size: 13px; color: var(--text-2); }
+.payout .towin .big {
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+  font-size: 24px; font-weight: 600;
+}
 
-/* ---- open slip ------------------------------------------------------ */
+button.go {
+  font-family: var(--font); font-size: 15px; font-weight: 700;
+  width: 100%; padding: 12px; border-radius: var(--r); cursor: pointer;
+  background: var(--text); color: var(--surface); border: 1px solid var(--text);
+}
+button.go:hover { opacity: .88; }
 
-.panel.slip {
-  border: 1px solid var(--rule-2);
-  padding: 0 14px 12px;
-  background: var(--surface);
+button.link {
+  font-family: var(--font); font-size: 13px; font-weight: 600;
+  background: none; border: 0; color: var(--text-3); cursor: pointer;
+  padding: 8px 0;
 }
-.panel.slip .panel-head { border-bottom-color: var(--rule); }
+button.link:hover { color: var(--under); text-decoration: underline; }
 
-.slipform {
-  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
-  padding-top: 12px;
+/* ---- history -------------------------------------------------------- */
+
+.hist-head {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+  padding: 16px 18px;
 }
-.slipform input, .slipform select {
-  font-family: var(--mono); font-size: 12px;
-  padding: 5px 8px;
-  background: var(--paper); color: var(--ink);
-  border: 1px solid var(--rule-2);
+.hist-head .name { font-size: 22px; }
+
+.chart { padding: 8px 18px 18px; }
+.chart svg { width: 100%; height: auto; display: block; }
+
+.facts { display: flex; flex-wrap: wrap; gap: 26px; padding: 0 18px 18px; }
+.fact .k { font-size: 13px; color: var(--text-3); }
+.fact .v {
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+  font-size: 20px; font-weight: 600;
 }
-.slipform input::placeholder { color: var(--ink-3); }
-.slipform input:focus, .slipform select:focus {
-  outline: none; border-color: var(--ink-3);
+/* Mono is for figures. A match name set in it reads as data, not a name. */
+.fact .v.txt { font-family: var(--font); font-size: 17px; font-weight: 600; }
+
+/* ---- misc ----------------------------------------------------------- */
+
+.banner {
+  max-width: 1560px; margin: 14px auto 0; padding: 11px 16px;
+  border-radius: var(--r); border: 1px solid var(--under);
+  background: var(--under-bg); color: var(--under);
+  font-size: 14px; font-weight: 500;
+}
+.banner-wrap { padding: 0 22px; }
+
+.empty {
+  padding: 34px 18px; color: var(--text-2); font-size: 15px;
+  max-width: 60ch;
+}
+.empty strong { color: var(--text); }
+
+.foot {
+  max-width: 1560px; margin: 0 auto; padding: 22px;
+  display: flex; flex-wrap: wrap; gap: 26px;
+  border-top: 1px solid var(--line);
+  font-size: 13px; color: var(--text-3);
+}
+.foot b {
+  color: var(--text); font-weight: 600;
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
 }
 
-button.primary, button.ghost {
-  font-family: var(--mono); font-size: 11px; letter-spacing: .1em;
-  text-transform: uppercase; padding: 6px 14px; cursor: pointer;
-}
-button.primary {
-  color: var(--paper); background: var(--ink); border: 1px solid var(--ink);
-}
-button.primary:hover { opacity: .85; }
-button.ghost {
-  color: var(--ink-3); background: none; border: 1px solid var(--rule-2);
-  margin-top: 8px;
-}
-button.ghost:hover { color: var(--neg); border-color: var(--neg); }
+.pending { color: var(--text-3); }
 
-.strong { font-weight: 600; }
-
-.note-block {
-  margin-top: 26px; padding: 12px 14px;
-  border-left: 2px solid var(--rule-2);
-  color: var(--ink-2); font-size: 12px;
+/* With the slip rail alongside, the table runs out of room before "Starts"
+   does. Drop that column rather than leaving it clipped at the card edge —
+   kick-off time is the least load-bearing thing on the row. */
+@media (max-width: 1499px) {
+  .hide-md { display: none; }
 }
-.note-block b { color: var(--ink); font-family: var(--mono); font-size: 11px; }
 
-/* A combo prop is several players' stats added together. It looks like a
-   normal row and is not one — grading it per-player is impossible, so it
-   gets marked rather than left to be misread as a single-player line. */
-.tag.combo { color: var(--neg); border-color: var(--neg); margin-left: 6px; }
+@media (max-width: 860px) {
+  .hide-sm { display: none; }
+  .top-in, .filters, .page { padding-left: 14px; padding-right: 14px; }
+  .brand { font-size: 18px; }
+}

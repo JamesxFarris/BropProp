@@ -4,9 +4,10 @@ import { join, extname, normalize } from 'node:path';
 import { timingSafeEqual } from 'node:crypto';
 import { pool } from '../db.js';
 import { config } from '../config.js';
-import { disagreements, movements, health, leagues } from './queries.js';
-import { board, openPicks, addPick, removePick, placeSlip, clearOpenSlip, slips, slipPicks } from './picks.js';
-import { page, boardPage, slipsPage } from './render.js';
+import { movements, health, leagues } from './queries.js';
+import { markets, propHistory, siblingProps } from './boardq.js';
+import { openPicks, addPick, removePick, placeSlip, clearOpenSlip, slips, slipPicks } from './picks.js';
+import { boardPage, edgesPage, slipsPage, historyPage } from './render.js';
 
 const PORT = Number(process.env.PORT ?? 3000);
 const PUBLIC = 'public';
@@ -17,7 +18,6 @@ const MIME: Record<string, string> = {
   '.ico': 'image/x-icon',
 };
 
-/** Constant-time compare so the password can't be recovered by timing. */
 function safeEqual(a: string, b: string): boolean {
   const ab = Buffer.from(a);
   const bb = Buffer.from(b);
@@ -26,7 +26,7 @@ function safeEqual(a: string, b: string): boolean {
 }
 
 function authorized(req: IncomingMessage): boolean {
-  if (!config.dashboardPassword) return true; // unset = open (local dev)
+  if (!config.dashboardPassword) return true;
   const header = req.headers.authorization ?? '';
   if (!header.startsWith('Basic ')) return false;
   const [user, ...rest] = Buffer.from(header.slice(6), 'base64').toString('utf8').split(':');
@@ -56,15 +56,20 @@ async function serveStatic(path: string) {
   }
 }
 
-/** Post/Redirect/Get, so a refresh never re-submits a pick. */
-function redirect(res: ServerResponse, to: string) {
+const redirect = (res: ServerResponse, to: string) => {
   res.writeHead(303, { location: to, 'cache-control': 'no-store' });
   res.end();
-}
+};
 
 const html = (res: ServerResponse, body: string) => {
   res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
   res.end(body);
+};
+
+const numOrNull = (v: string | null) => {
+  if (!v || v.trim() === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
 };
 
 const server = createServer(async (req, res) => {
@@ -77,9 +82,7 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    // Static assets are public; everything else sits behind auth when set.
-    if (req.method === 'GET' && url.pathname !== '/' && !url.pathname.startsWith('/board') &&
-        !url.pathname.startsWith('/slips')) {
+    if (req.method === 'GET' && /\.[a-z0-9]+$/i.test(url.pathname)) {
       const file = await serveStatic(url.pathname);
       if (file) {
         res.writeHead(200, { 'content-type': file.type, 'cache-control': 'public, max-age=300' });
@@ -93,7 +96,7 @@ const server = createServer(async (req, res) => {
         'www-authenticate': 'Basic realm="BropProp", charset="UTF-8"',
         'content-type': 'text/plain',
       });
-      res.end('Authentication required.');
+      res.end('Sign in to view the board.');
       return;
     }
 
@@ -120,50 +123,69 @@ const server = createServer(async (req, res) => {
         return redirect(res, back);
       }
       if (url.pathname === '/slip/place') {
-        const stakeRaw = body.get('stake');
-        const stake = stakeRaw && stakeRaw.trim() !== '' ? Number(stakeRaw) : null;
         const id = await placeSlip({
           name: body.get('name')?.trim() || null,
           entryType: body.get('entry_type') || 'power',
-          stake: Number.isFinite(stake as number) ? (stake as number) : null,
+          stake: numOrNull(body.get('stake')),
+          multiplier: numOrNull(body.get('multiplier')),
         });
         return redirect(res, id ? '/slips' : back);
       }
-      res.writeHead(404, { 'content-type': 'text/plain' }).end('not found');
+      res.writeHead(404, { 'content-type': 'text/plain' }).end('Not found');
       return;
     }
 
     // ---- reads ----
     const known = await leagues();
-    const requested = url.searchParams.get('league');
-    const league = requested && known.includes(requested) ? requested : null;
+    const wanted = url.searchParams.get('league');
+    const bookParam = url.searchParams.get('book');
+    const filters = {
+      league: wanted && known.includes(wanted) ? wanted : null,
+      book: bookParam === 'prizepicks' || bookParam === 'underdog' ? bookParam : null,
+      matched: url.searchParams.get('matched') === '1',
+      search: url.searchParams.get('q')?.trim() || null,
+    };
+
+    const propMatch = url.pathname.match(/^\/prop\/(\d+)$/);
+    if (propMatch) {
+      const id = Number(propMatch[1]);
+      const [hist, picks, h] = await Promise.all([propHistory(id), openPicks(), health(null)]);
+      if (!hist) {
+        res.writeHead(404, { 'content-type': 'text/plain' }).end('No such prop.');
+        return;
+      }
+      const siblings = await siblingProps(id);
+      return html(res, historyPage({ hist, siblings, picks, health: h }));
+    }
 
     if (url.pathname === '/board') {
-      const bookParam = url.searchParams.get('book');
-      const bookFilter = bookParam === 'prizepicks' || bookParam === 'underdog' ? bookParam : null;
-      const [rows, picks, h] = await Promise.all([board(league, bookFilter), openPicks(), health(league)]);
-      return html(res, boardPage({ league, leagues: known, book: bookFilter, rows, picks, health: h }));
+      const [rows, picks, h] = await Promise.all([markets(filters), openPicks(), health(filters.league)]);
+      return html(res, boardPage({ rows, picks, health: h, leagues: known, filters }));
     }
 
     if (url.pathname === '/slips') {
       const list = await slips();
       const byId = await slipPicks(list.map((s) => s.id));
       const [picks, h] = await Promise.all([openPicks(), health(null)]);
-      return html(res, slipsPage({ leagues: known, list, byId, picks, health: h }));
+      return html(res, slipsPage({ list, byId, picks, health: h }));
     }
 
     if (url.pathname === '/') {
-      const [dis, mov, h, picks] = await Promise.all([
-        disagreements(league), movements(league), health(league), openPicks(),
+      // Edges only ever concerns markets both apps list, so force that filter.
+      const [rows, mov, picks, h] = await Promise.all([
+        markets({ ...filters, matched: true }),
+        movements(filters.league),
+        openPicks(),
+        health(filters.league),
       ]);
-      return html(res, page({ league, leagues: known, dis, mov, health: h, picks }));
+      return html(res, edgesPage({ rows, mov, picks, health: h, leagues: known, filters }));
     }
 
-    res.writeHead(404, { 'content-type': 'text/plain' }).end('not found');
+    res.writeHead(404, { 'content-type': 'text/plain' }).end('Not found');
   } catch (err) {
     console.error('request failed:', (err as Error).message);
     res.writeHead(500, { 'content-type': 'text/plain' });
-    res.end('Dashboard failed to render. Check the logs.');
+    res.end('Something broke rendering this page. Check the server logs.');
   }
 });
 

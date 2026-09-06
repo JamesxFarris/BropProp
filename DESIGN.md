@@ -94,6 +94,36 @@ The dashboard writes as well as reads. Rules that fell out of building it:
 - **Legs read PENDING and stay there** until grading exists. Better an honest
   empty column than a fabricated result.
 
+## Visual direction, revised
+
+The first build was a "technical instrument": hairline rules, zero radius,
+tracked-out all-caps labels, mono for every small label. Run against the
+frontend-design skill's calibration, that turned out to hit two documented
+AI-design tells head-on — trait 3 (broadsheet hairlines, zero radius, dense
+columns) and trait 5 (all-caps eyebrow labels, `A · B · C` meta strings, mono
+for small data labels). It also read as flat and hard to scan, which is what
+prompted the rebuild.
+
+**The idea now:** the subject is a head-to-head between two apps, so the board
+is a *scoreboard*. One row per market with PrizePicks and Underdog paired and
+the gap between them as the thing the eye lands on — rather than one row per
+book, which duplicated every player and made you hold two numbers in your head.
+
+Rules that follow from it:
+
+- **Boldness is spent in one place**: the gap chip. Everything else is quiet.
+- **League carries colour** — CS2 amber, LOL cyan — because "which game is
+  this" is the first question when scanning a mixed board.
+- **Semantic colour is separate from league colour**, and the primary action is
+  high-contrast neutral, so no two hues ever mean the same thing.
+- **Radius by role**: controls are rounded because they're pressable, table
+  rows are square because they're a table.
+- **Mono is for figures only.** A match name set in mono reads as data, not a
+  name.
+- **Sentence case labels**, sized and coloured for hierarchy. No all-caps
+  eyebrows, no middle-dot meta strings.
+- Base type is 15px, figures 17px — the first version was too small to scan.
+
 ## Open decisions
 
 - Whether grading results live in the same view as live lines, or separately.
@@ -109,6 +139,13 @@ The dashboard writes as well as reads. Rules that fell out of building it:
   disagree* and *what has moved*. A results/hit-rate panel is deliberately
   deferred until Phase 2 grading exists rather than shipped as an empty
   placeholder.
+- **2026-09-06** — Rebuilt the UI as a scoreboard after the frontend-design
+  skill flagged the original as hitting two AI-design defaults. Added league
+  colour identity, segmented app/league filters, a sticky slip rail with live
+  payout preview, and per-prop line history.
+- **2026-09-06** — Prop history ships as *line* history only. Player hit rate
+  needs match results that aren't collected yet, and the page says so rather
+  than showing an estimate.
 - **2026-09-06** — Added Board and Slips. Wanted a Discord tracker later, once
   the core works — deferred deliberately, since the thing worth posting is
   graded results, not raw lines.

@@ -54,6 +54,7 @@ export async function disagreements(league: string | null): Promise<Disagreement
 }
 
 export type Movement = {
+  prop_id: number;
   handle: string;
   book: string;
   league: string;
@@ -80,7 +81,7 @@ export async function movements(league: string | null): Promise<Movement[]> {
               max(observed_at) AS last_at
        FROM prop_snapshot GROUP BY prop_id HAVING count(*) > 1
      )
-     SELECT pl.handle, b.code AS book, p.league, p.stat, p.map_start, p.map_end,
+     SELECT h.prop_id, pl.handle, b.code AS book, p.league, p.stat, p.map_start, p.map_end,
             h.opened, h.latest, (h.latest - h.opened) AS move,
             h.observations, h.first_at, h.last_at, m.title AS match_title
      FROM hist h
