@@ -125,11 +125,20 @@ export async function health(league: string | null): Promise<Health> {
      )
      SELECT (SELECT matched FROM m) AS matched,
             (SELECT count(DISTINCT book_code) FROM poll_run
-              WHERE ok AND started_at > now() - interval '1 hour') AS books_live,
+              WHERE ok AND finished_at IS NOT NULL
+                AND started_at > now() - interval '1 hour') AS books_live,
             (SELECT max(started_at) FROM poll_run) AS last_poll,
             (SELECT max(started_at) FROM poll_run WHERE ok) AS last_ok_poll,
+            -- ok is false until a run finishes, so a poll in flight is not a
+            -- failure — reporting it as one made the banner fire during every
+            -- single poll. A run only counts as failed once it has finished
+            -- unsuccessfully, or once it has been running long enough that the
+            -- container was clearly killed mid-poll.
             (SELECT string_agg(DISTINCT book_code, ', ') FROM poll_run
-              WHERE NOT ok AND started_at > now() - interval '1 hour') AS failing_books,
+              WHERE started_at > now() - interval '1 hour'
+                AND ((finished_at IS NOT NULL AND NOT ok)
+                  OR (finished_at IS NULL AND started_at < now() - interval '10 minutes'))
+            ) AS failing_books,
             (SELECT count(*) FROM prop) AS props_tracked,
             (SELECT count(*) FROM prop_snapshot) AS snapshots,
             (SELECT min(observed_at) FROM prop_snapshot) AS logging_since`,
