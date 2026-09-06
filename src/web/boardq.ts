@@ -32,11 +32,23 @@ export type MarketRow = {
   moved: number | null;
 };
 
+/**
+ * `best` drops markets where the selected app has no price advantage.
+ *
+ * "Better on PrizePicks" is a property of a SIDE, not of a prop: if PP posts
+ * 28.0 and UD 30.5, PP is better for the over (cheaper line) and UD is better
+ * for the under (more room). So a market where the two lines differ always
+ * favours the selected app on exactly one side, and a market where they match
+ * favours it on neither — those are the ones worth hiding, along with nothing
+ * else. Markets the other app doesn't list at all are kept: no comparison
+ * exists, so they can't be called worse.
+ */
 export async function markets(opts: {
   league: string | null;
   book: string | null;
   matched: boolean;
   search: string | null;
+  best?: boolean;
 }): Promise<MarketRow[]> {
   return q<MarketRow>(
     `WITH cl AS (
@@ -88,11 +100,14 @@ export async function markets(opts: {
        AND (NOT $3::boolean OR (m.pp_prop_id IS NOT NULL AND m.ud_prop_id IS NOT NULL))
        AND ($4::text IS NULL OR m.handle ILIKE '%' || $4 || '%'
             OR m.match_title ILIKE '%' || $4 || '%')
+       AND (NOT $5::boolean OR $2::text IS NULL
+            OR ($2 = 'prizepicks' AND (m.ud_line IS NULL OR m.pp_line <> m.ud_line))
+            OR ($2 = 'underdog'   AND (m.pp_line IS NULL OR m.pp_line <> m.ud_line)))
      ORDER BY (m.pp_line IS NOT NULL AND m.ud_line IS NOT NULL
                AND m.pp_line <> m.ud_line) DESC,
               abs(COALESCE(m.pp_line - m.ud_line, 0)) DESC,
               m.scheduled_at NULLS LAST, m.handle, m.stat`,
-    [opts.league, opts.book, opts.matched, opts.search],
+    [opts.league, opts.book, opts.matched, opts.search, opts.best ?? false],
   );
 }
 

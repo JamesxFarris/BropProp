@@ -76,7 +76,10 @@ function correlatedGroups(picks: PickRow[]): number {
 
 // ------------------------------------------------------------------ shell --
 
-type Filters = { league: string | null; book: string | null; matched: boolean; search: string | null };
+type Filters = {
+  league: string | null; book: string | null; matched: boolean;
+  search: string | null; best: boolean;
+};
 
 function qs(f: Partial<Filters>, base: Filters): string {
   const merged = { ...base, ...f };
@@ -85,6 +88,7 @@ function qs(f: Partial<Filters>, base: Filters): string {
   if (merged.book) p.set('book', merged.book);
   if (merged.matched) p.set('matched', '1');
   if (merged.search) p.set('q', merged.search);
+  if (merged.best === false) p.set('best', '0');
   return p.toString() ? `?${p}` : '';
 }
 
@@ -121,7 +125,11 @@ function filterBar(path: string, f: Filters, leagues: string[], locked: string |
       locked ? '<span class="lab">set by your slip</span>' : ''
     }</div>
     <div class="group"><nav class="seg">
-      ${a(qs({ matched: !f.matched }, f), 'On both apps', f.matched)}
+      ${
+        f.book
+          ? a(qs({ best: !f.best }, f), 'Best price only', f.best)
+          : a(qs({ matched: !f.matched }, f), 'On both apps', f.matched)
+      }
     </nav></div>
     <form class="search" method="get" action="${esc(path)}">
       ${f.league ? `<input type="hidden" name="league" value="${esc(f.league)}">` : ''}
@@ -346,27 +354,53 @@ function lockNotice(locked: string | null, blocked: string | null): string {
   }
   if (locked) {
     return `<div class="notice">
-      Showing ${esc(bookName(locked))} only, because your slip started there.
-      ${esc(bookName(otherBook(locked)))} lines still show in the gap column.
-      Clear the slip to switch apps.</div>`;
+      Showing ${esc(bookName(locked))} only, because your slip started there, and only the
+      markets where it prices better than ${esc(bookName(otherBook(locked)))}. A lower line is
+      the better over and a higher line the better under, so just one side of each market is
+      offered. Turn off <strong>Best price only</strong> to see everything, or clear the slip
+      to switch apps.</div>`;
   }
   return '';
 }
 
 // ------------------------------------------------------------------ board --
 
-function ouButtons(propId: number | null, back: string, picked: string | null): string {
+/**
+ * `offer` limits which sides are takeable. A lower line is the better over and
+ * a higher line the better under, so on any market where the two apps differ,
+ * exactly one side is the best available price on this app — offering the
+ * other one is offering a worse number than you could get.
+ */
+function ouButtons(
+  propId: number | null,
+  back: string,
+  picked: string | null,
+  offer: 'both' | 'over' | 'under' = 'both',
+): string {
   if (propId === null) {
     return `<div class="ou"><button disabled>O</button><button disabled>U</button></div>`;
   }
-  const b = (side: 'over' | 'under', label: string, cls: string) => `
-    <form method="post" action="/pick" class="inline">
+  const b = (side: 'over' | 'under', label: string, cls: string) => {
+    if (offer !== 'both' && offer !== side) {
+      return `<button class="${cls}" disabled
+        title="The ${side} is a better number on the other app">${label}</button>`;
+    }
+    return `<form method="post" action="/pick" class="inline">
       <input type="hidden" name="prop_id" value="${propId}">
       <input type="hidden" name="side" value="${side}">
       <input type="hidden" name="back" value="${esc(back)}">
       <button class="${cls}${picked === side ? ' on' : ''}" title="Take ${side}">${label}</button>
     </form>`;
+  };
   return `<div class="ou">${b('over', 'O', 'o')}${b('under', 'U', 'u')}</div>`;
+}
+
+/** Which side of a market is the better price on `book`. */
+function bestSide(book: string, delta: number | null): 'both' | 'over' | 'under' {
+  if (delta === null || delta === 0) return 'both';
+  const ppCheaper = delta < 0;
+  if (book === 'prizepicks') return ppCheaper ? 'over' : 'under';
+  return ppCheaper ? 'under' : 'over';
 }
 
 export function boardPage(o: {
@@ -387,6 +421,8 @@ export function boardPage(o: {
   const showPP = only === null || only === 'prizepicks';
   const showUD = only === null || only === 'underdog';
   const gapLabel = only ? `vs ${bookName(otherBook(only))}` : 'Gap';
+  // Restrict sides only when an app is selected and best-price filtering is on.
+  const restrict = Boolean(only) && o.filters.best;
 
   const body =
     o.rows.length === 0
@@ -396,7 +432,9 @@ export function boardPage(o: {
       : `<div class="card">
       <div class="card-head">
         <h2>Board</h2>
-        <span class="sub">${o.rows.length} markets · O and U add a leg at the line shown</span>
+        <span class="sub">${o.rows.length} markets${
+          restrict ? ' · showing only the side each app prices better' : ''
+        } · O and U add a leg at the line shown</span>
       </div>
       <div class="scroll"><table>
         <thead><tr>
@@ -444,7 +482,8 @@ export function boardPage(o: {
               showPP
                 ? `<td class="n"><div class="bookcell">
                 <span class="fig${r.pp_line === null ? ' muted' : ''}">${num(r.pp_line)}</span>
-                ${ouButtons(r.pp_prop_id, back, r.pp_side)}
+                ${ouButtons(r.pp_prop_id, back, r.pp_side,
+                  restrict ? bestSide('prizepicks', r.delta === null ? null : Number(r.delta)) : 'both')}
               </div></td>`
                 : ''
             }
@@ -453,7 +492,8 @@ export function boardPage(o: {
               showUD
                 ? `<td class="n"><div class="bookcell">
                 <span class="fig${r.ud_line === null ? ' muted' : ''}">${num(r.ud_line)}</span>
-                ${ouButtons(r.ud_prop_id, back, r.ud_side)}
+                ${ouButtons(r.ud_prop_id, back, r.ud_side,
+                  restrict ? bestSide('underdog', r.delta === null ? null : Number(r.delta)) : 'both')}
               </div></td>`
                 : ''
             }

@@ -99,6 +99,12 @@ The dashboard writes as well as reads. Rules that fell out of building it:
   button is still a submittable form. Choosing an app in the filter narrows the
   board the same way — the other book's column disappears rather than sitting
   there with live buttons that lead nowhere.
+- **"Better on an app" is a property of a side, not of a prop.** A lower line
+  is the better over; a higher line is the better under. So on any market where
+  the two apps differ, the selected app wins exactly one side — and only that
+  side is offered. Markets where the lines match are hidden, since there is
+  nothing to gain. Markets the other app doesn't list are kept: with no
+  comparison they can't be called worse.
 - **The other app's number survives as the gap.** Narrowing drops the column
   but keeps the comparison, relabelled "vs Underdog" / "vs PrizePicks", because
   knowing your number is worse elsewhere is the reason this tool exists.

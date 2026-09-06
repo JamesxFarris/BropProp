@@ -157,6 +157,9 @@ const server = createServer(async (req, res) => {
       book: bookParam === 'prizepicks' || bookParam === 'underdog' ? bookParam : null,
       matched: url.searchParams.get('matched') === '1',
       search: url.searchParams.get('q')?.trim() || null,
+      // On by default once an app is chosen — the reason to narrow to one app
+      // is to take the best number available on it. Explicit best=0 opts out.
+      best: url.searchParams.get('best') !== '0',
     };
 
     // A slip already committed to an app narrows the board to that app: props
@@ -179,7 +182,11 @@ const server = createServer(async (req, res) => {
     }
 
     if (url.pathname === '/board') {
-      const [rows, picks, h] = await Promise.all([markets(filters), openPicks(), health(filters.league)]);
+      const [rows, picks, h] = await Promise.all([
+        markets({ ...filters, best: filters.best && Boolean(filters.book) }),
+        openPicks(),
+        health(filters.league),
+      ]);
       return html(res, boardPage({ rows, picks, health: h, leagues: known, filters, lockedBook, blocked }));
     }
 
@@ -193,7 +200,7 @@ const server = createServer(async (req, res) => {
     if (url.pathname === '/') {
       // Edges only ever concerns markets both apps list, so force that filter.
       const [rows, mov, picks, h] = await Promise.all([
-        markets({ ...filters, matched: true }),
+        markets({ ...filters, matched: true, best: false }),
         movements(filters.league),
         openPicks(),
         health(filters.league),

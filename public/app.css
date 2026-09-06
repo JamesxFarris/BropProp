@@ -506,3 +506,10 @@ button.link:hover { color: var(--under); text-decoration: underline; }
   background: var(--text); color: var(--surface);
   font-size: 14px; font-weight: 600;
 }
+
+/* A side that is a worse number than the other app offers. Visible, so the
+   market still reads as a pair, but not takeable. */
+.ou button:disabled {
+  opacity: .34; cursor: not-allowed;
+  background: transparent; border-style: dashed;
+}
