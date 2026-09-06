@@ -49,9 +49,12 @@ networking doesn't use TLS; `src/db.ts` infers this but the override is there).
   can't re-fetch. A dropped volume is unrecoverable: you cannot go back and ask
   PrizePicks what a line was last Tuesday. Turn on Railway's backups, or run a
   weekly `pg_dump` somewhere else.
-- **Poll cadence vs. rate limits.** PrizePicks 429s readily. 15 minutes across
-  two leagues is comfortable; don't drop below ~5 minutes without watching
-  `poll_run.http_status`.
+- **Poll cadence vs. rate limits.** Measured: PrizePicks serves roughly **two
+  requests per minute** before refusing, and its limiter refills slowly — a 2s
+  retry just burns the next token and earns another 429. The adapter waits 10s
+  between leagues and backs off 5s/15s/45s. At a 15-minute cadence over CS2 and
+  LoL that's three requests an hour, comfortably inside the bucket. Don't drop
+  below ~5 minutes without watching `poll_run.http_status`.
 
 ## Alternatives, briefly
 

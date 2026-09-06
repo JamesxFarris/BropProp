@@ -64,10 +64,11 @@ export async function getJson(
       });
       lastStatus = res.status;
       if (res.status === 429 || res.status >= 500) {
-        // Exponential backoff: 2s, 4s, 8s. Being impatient here is what gets
-        // the endpoint to start refusing us in the first place.
+        // Backoff of 5s, 15s, 45s. Tuned to PrizePicks' limiter, which refills
+        // slowly: retrying after 2s just burns the next token and earns another
+        // 429. Being impatient here is what gets us refused in the first place.
         if (attempt < retries) {
-          await sleep(2000 * 2 ** attempt);
+          await sleep(5000 * 3 ** attempt);
           continue;
         }
         return { status: res.status, body: null };
@@ -76,7 +77,7 @@ export async function getJson(
       return { status: res.status, body: await res.json() };
     } catch (err) {
       if (attempt >= retries) throw err;
-      await sleep(2000 * 2 ** attempt);
+      await sleep(5000 * 3 ** attempt);
     } finally {
       clearTimeout(timer);
     }

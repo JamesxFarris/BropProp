@@ -18,7 +18,11 @@ export async function fetchPrizePicks(leagues: LeagueRef[]): Promise<FetchResult
   const raw: Record<string, unknown> = {};
 
   for (const [idx, lg] of leagues.entries()) {
-    if (idx > 0) await sleep(3000); // be a good citizen; 429s are easy to earn here
+    // Measured: PrizePicks allows roughly two requests a minute before it
+    // starts refusing. At a 15-minute cadence over two leagues we need three
+    // requests an hour, so waiting 10s between leagues costs nothing and keeps
+    // us comfortably inside the bucket.
+    if (idx > 0) await sleep(10_000);
     const url = `${BASE}?league_id=${encodeURIComponent(lg.externalId)}&per_page=1000`;
     const { status, body } = await getJson(url);
     statuses[lg.league] = status;

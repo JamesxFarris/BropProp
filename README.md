@@ -61,7 +61,7 @@ shaped the design.
 | Auth | none | none |
 | `api.prizepicks.com` | **403** — DataDome captcha wall | n/a |
 | Payload | 23MB unfiltered, **218KB** per league | ~15MB, whole board in one call |
-| Rate limits | **yes, aggressive** (429s easily earned) | none observed |
+| Rate limits | **~2 requests/minute**, slow refill | none observed |
 | Prices | flat multiplier; price is expressed by moving the line (goblin/demon) | explicit American odds per side (`-112`) |
 
 - The public PrizePicks API is captcha-walled; `partner-api` is not. Fetch
