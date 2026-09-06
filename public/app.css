@@ -228,3 +228,91 @@ th.num { text-align: right; }
   .wrap { padding: 0 16px 56px; }
   .hide-sm { display: none; }
 }
+
+/* ---- controls -------------------------------------------------------
+   Buttons are drawn like the tags and rules around them: hairline box,
+   small-caps mono, no fill until they mean something. A "take" button
+   that is on carries the same colour its side carries everywhere else. */
+
+.rail .div {
+  width: 1px; height: 14px; background: var(--rule-2); margin: 0 8px;
+}
+
+form.inline { display: inline; }
+
+.takes { display: flex; gap: 4px; }
+
+button.take {
+  font-family: var(--mono); font-size: 11px; font-weight: 600;
+  letter-spacing: .06em;
+  width: 26px; height: 22px; line-height: 1;
+  background: none; color: var(--ink-3);
+  border: 1px solid var(--rule-2); cursor: pointer;
+}
+button.take:hover { color: var(--ink); border-color: var(--ink-3); }
+button.take.over.on  { color: var(--pos); border-color: var(--pos); background: var(--pos-bg); }
+button.take.under.on { color: var(--neg); border-color: var(--neg); background: var(--neg-bg); }
+
+button.x {
+  font-family: var(--mono); font-size: 13px; line-height: 1;
+  width: 22px; height: 22px;
+  background: none; color: var(--ink-3);
+  border: 1px solid transparent; cursor: pointer;
+}
+button.x:hover { color: var(--neg); border-color: var(--neg); }
+
+/* A picked row is marked by a rule on its edge, not a fill — the numbers
+   have to stay as readable as every other row. */
+tr.picked td:first-child { box-shadow: inset 2px 0 0 var(--ink-3); }
+
+/* ---- open slip ------------------------------------------------------ */
+
+.panel.slip {
+  border: 1px solid var(--rule-2);
+  padding: 0 14px 12px;
+  background: var(--surface);
+}
+.panel.slip .panel-head { border-bottom-color: var(--rule); }
+
+.slipform {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  padding-top: 12px;
+}
+.slipform input, .slipform select {
+  font-family: var(--mono); font-size: 12px;
+  padding: 5px 8px;
+  background: var(--paper); color: var(--ink);
+  border: 1px solid var(--rule-2);
+}
+.slipform input::placeholder { color: var(--ink-3); }
+.slipform input:focus, .slipform select:focus {
+  outline: none; border-color: var(--ink-3);
+}
+
+button.primary, button.ghost {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .1em;
+  text-transform: uppercase; padding: 6px 14px; cursor: pointer;
+}
+button.primary {
+  color: var(--paper); background: var(--ink); border: 1px solid var(--ink);
+}
+button.primary:hover { opacity: .85; }
+button.ghost {
+  color: var(--ink-3); background: none; border: 1px solid var(--rule-2);
+  margin-top: 8px;
+}
+button.ghost:hover { color: var(--neg); border-color: var(--neg); }
+
+.strong { font-weight: 600; }
+
+.note-block {
+  margin-top: 26px; padding: 12px 14px;
+  border-left: 2px solid var(--rule-2);
+  color: var(--ink-2); font-size: 12px;
+}
+.note-block b { color: var(--ink); font-family: var(--mono); font-size: 11px; }
+
+/* A combo prop is several players' stats added together. It looks like a
+   normal row and is not one — grading it per-player is impossible, so it
+   gets marked rather than left to be misread as a single-player line. */
+.tag.combo { color: var(--neg); border-color: var(--neg); margin-left: 6px; }

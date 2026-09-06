@@ -48,6 +48,17 @@ not *last changed* — and a cross-book pair is only as fresh as its staler side
 so a book that failed its poll drags the number down honestly rather than
 letting a stale line look current.
 
+**Board** (`/board`) is the full market list with O/U buttons — taking a prop
+adds a leg to the open slip at the line currently shown. **Slips** (`/slips`)
+is the record of what was placed. Every pick stores the line it was taken at,
+which is what makes results gradeable once phase 2 lands.
+
+Combo props (`Dhokla + Inspired + Saint`) are tagged `COMBO`: they look like
+single-player lines, can't be graded per player, and are never cross-book
+matched against one.
+
+Set `DASHBOARD_PASSWORD` in production — the dashboard accepts writes.
+
 See `DESIGN.md` for the visual direction and the rules behind it.
 
 ## What the recon actually found
@@ -133,6 +144,8 @@ same stat, same map range, different number).
   Anything beating 54% here is real signal.
 - **Phase 4 — features and model.** Rolling per-map averages, opponent
   strength, series format. Logistic regression / gradient boosting, not a net.
+- **Discord tracker** — wanted, deliberately deferred until grading exists;
+  the thing worth posting is graded results, not raw lines.
 - **Phase 5 — the learning loop.** Nightly grade → retrain → log hit rate and
   calibration by segment. Track whether lines move *toward* your picks; that's
   the strongest validation there is.

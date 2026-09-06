@@ -15,5 +15,11 @@ export const config = {
   // writes ~1.4GB/day, which fills an ephemeral container disk in about a day.
   // Turn it on locally when you want replayable payloads for a backfill.
   archiveRaw: bool(process.env.ARCHIVE_RAW, false),
+
+  // The dashboard writes (it takes props), and on Railway it is reachable by
+  // anyone who has the URL. When a password is set the whole app sits behind
+  // HTTP basic auth; unset means open, which is fine locally and not in prod.
+  dashboardUser: process.env.DASHBOARD_USER ?? 'brop',
+  dashboardPassword: process.env.DASHBOARD_PASSWORD ?? null,
   rawDir: process.env.RAW_DIR ?? './raw',
 };

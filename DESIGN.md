@@ -78,6 +78,22 @@ What that means concretely:
   sign. Everything else is ink on paper.
 - **Rules and gutters do the grouping**, so density stays legible at 30+ rows.
 
+## Taking props
+
+The dashboard writes as well as reads. Rules that fell out of building it:
+
+- **A pick stores the line it was taken at**, copied, never joined to the live
+  board later. Lines move; a pick that silently re-reads the current number
+  would rewrite its own history and make every future backtest a lie.
+- **Over/under are plain forms**, not fetch calls, and every write redirects
+  (Post/Redirect/Get). Taking a prop works with scripts blocked, and a refresh
+  never double-adds a leg.
+- **Combo props are marked.** A row like `Dhokla + Inspired + Saint` looks
+  exactly like a single-player line and is not one — it can't be graded per
+  player and must never be cross-book matched against one.
+- **Legs read PENDING and stay there** until grading exists. Better an honest
+  empty column than a fabricated result.
+
 ## Open decisions
 
 - Whether grading results live in the same view as live lines, or separately.
@@ -93,6 +109,9 @@ What that means concretely:
   disagree* and *what has moved*. A results/hit-rate panel is deliberately
   deferred until Phase 2 grading exists rather than shipped as an empty
   placeholder.
+- **2026-09-06** — Added Board and Slips. Wanted a Discord tracker later, once
+  the core works — deferred deliberately, since the thing worth posting is
+  graded results, not raw lines.
 - **2026-09-06** — Stack: server-rendered HTML from the existing Node app with
   hand-written CSS. No framework and no component library, so nothing arrives
   with a default look that has to be fought. It's read-only tables over
