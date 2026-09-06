@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: bropprop-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: bropprop
+      POSTGRES_PASSWORD: bropprop
+      POSTGRES_DB: bropprop
+    ports:
+      - "5433:5432"
+    volumes:
+      - bropprop-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bropprop -d bropprop"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  bropprop-pgdata:
