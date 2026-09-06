@@ -62,6 +62,7 @@ export type PickRow = {
   scheduled_at: string | null;
   status: string;
   current_line: number | null;
+  match_id: number | null;
 };
 
 /** Open picks, each showing whether the line has moved since it was taken. */
@@ -70,8 +71,10 @@ export async function openPicks(): Promise<PickRow[]> {
     `SELECT d.id, d.prop_id, d.side, d.line_at_pick, d.price_at_pick, d.book,
             d.handle, d.league, d.stat, d.map_start, d.map_end,
             d.match_title, d.scheduled_at, d.status,
-            cl.line AS current_line
+            cl.line AS current_line,
+            pr.match_id
      FROM pick_detail d
+     JOIN prop pr ON pr.id = d.prop_id
      LEFT JOIN current_line cl ON cl.prop_id = d.prop_id
      WHERE d.slip_status = 'open'
      ORDER BY d.created_at`,
@@ -146,7 +149,8 @@ export async function slipPicks(slipIds: number[]): Promise<Record<number, PickR
   const rows = await q<PickRow & { slip_id: number }>(
     `SELECT d.id, d.slip_id, d.prop_id, d.side, d.line_at_pick, d.price_at_pick, d.book,
             d.handle, d.league, d.stat, d.map_start, d.map_end,
-            d.match_title, d.scheduled_at, d.status, NULL::numeric AS current_line
+            d.match_title, d.scheduled_at, d.status, NULL::numeric AS current_line,
+            NULL::integer AS match_id
      FROM pick_detail d WHERE d.slip_id = ANY($1) ORDER BY d.created_at`,
     [slipIds],
   );

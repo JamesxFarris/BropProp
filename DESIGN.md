@@ -93,6 +93,12 @@ The dashboard writes as well as reads. Rules that fell out of building it:
   player and must never be cross-book matched against one.
 - **Legs read PENDING and stay there** until grading exists. Better an honest
   empty column than a fabricated result.
+- **The payout multiplier is never asserted.** PrizePicks reprices correlated
+  legs and demotes individual props, so a leg-count table is a hint, not a
+  quote. The field starts empty with the standard rate as placeholder text, and
+  the slip stores whatever was actually typed. When two legs on a slip come
+  from the same match on the same app, the panel says so, because that is the
+  usual repricing trigger.
 
 ## Visual direction, revised
 

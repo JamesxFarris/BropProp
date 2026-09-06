@@ -42,16 +42,34 @@ const clock = (iso: string) =>
   new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
 /**
- * Published standard payout multipliers, used to prefill the field.
- * The books change these and run promos, so it is an estimate the user can
- * overwrite, and whatever they set is what gets stored on the slip.
+ * Leg-count payouts are a starting point, not a quote.
+ *
+ * PrizePicks pays correlated legs differently and demotes individual props, so
+ * a flat rate per leg count is wrong often enough that prefilling it as fact
+ * would be misleading. The field is left empty and these are offered as a hint
+ * only; whatever gets typed is what is stored on the slip.
  */
-const PAYOUTS: Record<string, Record<number, number>> = {
+const BASE_PAYOUTS: Record<string, Record<number, number>> = {
   power:  { 2: 3, 3: 5, 4: 10, 5: 20, 6: 37.5 },
   flex:   { 3: 2.25, 4: 5, 5: 10, 6: 25 },
   single: { 1: 1.9 },
 };
-const defaultMultiplier = (type: string, legs: number) => PAYOUTS[type]?.[legs] ?? null;
+const basePayout = (type: string, legs: number) => BASE_PAYOUTS[type]?.[legs] ?? null;
+
+/**
+ * Legs from the same match on the same app. PrizePicks reprices these rather
+ * than paying the standard rate, which is the most common reason the real
+ * payout differs from the leg-count table.
+ */
+function correlatedGroups(picks: PickRow[]): number {
+  const seen = new Map<string, number>();
+  for (const p of picks) {
+    if (p.match_id === null) continue;
+    const key = `${p.book}:${p.match_id}`;
+    seen.set(key, (seen.get(key) ?? 0) + 1);
+  }
+  return [...seen.values()].filter((n) => n > 1).length;
+}
 
 // ------------------------------------------------------------------ shell --
 
@@ -248,7 +266,8 @@ function slipRail(picks: PickRow[], back: string): string {
     .join('');
 
   const n = picks.length;
-  const mult = defaultMultiplier('power', n);
+  const base = basePayout('power', n);
+  const correlated = correlatedGroups(picks);
 
   return `<div class="card">
     <div class="card-head">
@@ -274,7 +293,8 @@ function slipRail(picks: PickRow[], back: string): string {
         </div>
         <div class="field">
           <label for="multiplier">Multiplier</label>
-          <input name="multiplier" id="multiplier" inputmode="decimal" value="${mult ?? ''}">
+          <input name="multiplier" id="multiplier" inputmode="decimal"
+                 placeholder="${base ?? ''}" aria-describedby="multhint">
         </div>
       </div>
       <div class="row">
@@ -283,10 +303,12 @@ function slipRail(picks: PickRow[], back: string): string {
           <input name="name" id="slipname" maxlength="80" placeholder="Optional">
         </div>
       </div>
-      <p class="hint">${
-        mult === null
-          ? `No standard rate published for ${n} legs on a power play — enter the multiplier your app shows.`
-          : `${mult}× is the published rate for ${n} legs. Edit it if your app shows something else.`
+      <p class="hint" id="multhint">${
+        correlated > 0
+          ? `Legs from the same match are on this slip, so PrizePicks will likely reprice it. Copy the multiplier from your app.`
+          : base === null
+            ? `Copy the multiplier from your app.`
+            : `Standard is ${base}× for ${n} legs, but demoted or correlated props pay differently — copy what your app shows.`
       }</p>
       <div class="towin">
         <span class="k">To win</span>
