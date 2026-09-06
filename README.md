@@ -19,7 +19,36 @@ npm run report       # human-readable view of what's been logged
 npm start            # run continuously on the POLL_CRON schedule
 ```
 
+```bash
+npm run web          # dashboard on http://localhost:3000
+```
+
 `npm test` runs the normalisation tests. `npm run db:reset` wipes and rebuilds.
+
+## The dashboard
+
+Answers two questions and deliberately nothing else:
+
+- **Disagreements** — same player, same stat, same map range, priced differently
+  by the two books, sorted by gap. Each row names the actionable side (the
+  lower line is the cheaper over), so you aren't deriving it in your head.
+  Compared against PrizePicks' `standard` variant only: goblin and demon lines
+  are deliberately shifted, so including them would report a "disagreement"
+  that's really just a different product.
+- **Movement** — lines that aren't where they opened, largest move first. This
+  fills in as the logger runs.
+
+A results/hit-rate panel is *not* here yet. It would be an empty placeholder
+until Phase 2 grading exists, and an empty panel that implies a working model
+is worse than no panel.
+
+The header shows how long ago the last successful poll was, and the page warns
+when that exceeds two intervals. **Seen** means *last confirmed on the board*,
+not *last changed* — and a cross-book pair is only as fresh as its staler side,
+so a book that failed its poll drags the number down honestly rather than
+letting a stale line look current.
+
+See `DESIGN.md` for the visual direction and the rules behind it.
 
 ## What the recon actually found
 

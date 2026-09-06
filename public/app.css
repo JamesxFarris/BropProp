@@ -1,0 +1,230 @@
+/* BropProp — "technical instrument".
+   Structure comes from hairline rules and alignment, never shadows or cards.
+   Colour is reserved for encoding the sign of a number; everything else is
+   ink on paper. See DESIGN.md. */
+
+:root {
+  --paper:   #f5f4ef;   /* warm paper, not a cold grey */
+  --surface: #fcfbf8;
+  --ink:     #17181a;
+  --ink-2:   #55565a;
+  --ink-3:   #8a8b87;
+  --rule:    #deddd4;
+  --rule-2:  #c5c2b7;
+  --neg:     #8a3324;   /* oxide */
+  --neg-bg:  #8a332412;
+  --pos:     #1f5d50;   /* deep green-teal */
+  --pos-bg:  #1f5d5012;
+  --live:    #2f7d32;
+
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* System-dark, unless the reader has explicitly chosen light. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper:   #131417;
+    --surface: #17191c;
+    --ink:     #e9e8e3;
+    --ink-2:   #9a9b98;
+    --ink-3:   #6e706e;
+    --rule:    #26282c;
+    --rule-2:  #3a3d43;
+    --neg:     #d2856c;
+    --neg-bg:  #d2856c1a;
+    --pos:     #6fb3a0;
+    --pos-bg:  #6fb3a01a;
+    --live:    #6fb37a;
+  }
+}
+
+/* Explicit choice wins in both directions. */
+[data-theme="dark"] {
+  --paper:   #131417;
+  --surface: #17191c;
+  --ink:     #e9e8e3;
+  --ink-2:   #9a9b98;
+  --ink-3:   #6e706e;
+  --rule:    #26282c;
+  --rule-2:  #3a3d43;
+  --neg:     #d2856c;
+  --neg-bg:  #d2856c1a;
+  --pos:     #6fb3a0;
+  --pos-bg:  #6fb3a01a;
+  --live:    #6fb37a;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 28px 72px; }
+
+/* ---- masthead ------------------------------------------------------- */
+
+.masthead {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 24px; flex-wrap: wrap;
+  padding: 26px 0 10px;
+  border-bottom: 1px solid var(--rule-2);
+}
+.wordmark {
+  font-family: var(--mono);
+  font-size: 13px; letter-spacing: .16em; text-transform: uppercase;
+  font-weight: 600; color: var(--ink); margin: 0;
+}
+.wordmark span { color: var(--ink-3); font-weight: 400; }
+
+.clock {
+  font-family: var(--mono); font-size: 12px; color: var(--ink-2);
+  font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 14px;
+}
+.pulse {
+  display: inline-flex; align-items: center; gap: 6px;
+  text-transform: uppercase; letter-spacing: .1em; font-size: 11px;
+}
+.pulse::before {
+  content: ""; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--live);
+}
+.pulse.stale { color: var(--neg); }
+.pulse.stale::before { background: var(--neg); }
+
+/* ---- filter rail ---------------------------------------------------- */
+
+.rail {
+  display: flex; gap: 2px; align-items: center;
+  padding: 10px 0; border-bottom: 1px solid var(--rule);
+  flex-wrap: wrap;
+}
+.rail a {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .1em;
+  text-transform: uppercase; text-decoration: none;
+  color: var(--ink-3); padding: 4px 10px; border: 1px solid transparent;
+}
+.rail a:hover { color: var(--ink); }
+.rail a[aria-current="page"] {
+  color: var(--ink); border-color: var(--rule-2); background: var(--surface);
+}
+.rail .spacer { flex: 1; }
+.rail button {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--ink-3);
+  background: none; border: 1px solid transparent; padding: 4px 10px; cursor: pointer;
+}
+.rail button:hover { color: var(--ink); border-color: var(--rule); }
+
+/* ---- panels --------------------------------------------------------- */
+
+.panel { margin-top: 34px; }
+
+.panel-head {
+  display: flex; align-items: baseline; gap: 14px;
+  border-bottom: 1px solid var(--rule-2);
+  padding-bottom: 6px;
+}
+.panel-head h2 {
+  margin: 0; font-family: var(--mono); font-weight: 600;
+  font-size: 12px; letter-spacing: .14em; text-transform: uppercase;
+}
+.panel-head .note {
+  font-size: 11px; color: var(--ink-3); letter-spacing: .04em;
+  margin-left: auto; font-family: var(--mono);
+}
+
+.scroll { overflow-x: auto; }
+
+/* ---- tables --------------------------------------------------------- */
+
+table { width: 100%; border-collapse: collapse; }
+
+thead th {
+  font-family: var(--mono); font-weight: 500;
+  font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--ink-3); text-align: left;
+  padding: 9px 12px 8px; white-space: nowrap;
+  border-bottom: 1px solid var(--rule);
+}
+tbody td {
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--rule);
+  white-space: nowrap;
+}
+tbody tr:hover td { background: var(--surface); }
+
+/* Figures are the subject of the page: mono, tabular, right-aligned. */
+.num {
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+  text-align: right; font-size: 14px;
+}
+th.num { text-align: right; }
+.player { font-weight: 600; letter-spacing: -.005em; }
+.muted  { color: var(--ink-3); }
+.dim    { color: var(--ink-2); }
+
+.tag {
+  font-family: var(--mono); font-size: 10px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--ink-2);
+  border: 1px solid var(--rule-2); padding: 1px 5px;
+}
+
+/* Sign carries meaning, so it gets the only colour on the page. */
+.delta { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; font-weight: 600; }
+.delta.pos { color: var(--pos); }
+.delta.neg { color: var(--neg); }
+
+/* Magnitude bar: reads the size of a gap without parsing the digits. */
+.bar { width: 84px; padding-left: 0 !important; }
+.bar span {
+  display: block; height: 3px; background: var(--ink-3); opacity: .5;
+  min-width: 2px;
+}
+.bar span.pos { background: var(--pos); opacity: .75; }
+.bar span.neg { background: var(--neg); opacity: .75; }
+
+.side {
+  font-family: var(--mono); font-size: 10px; letter-spacing: .08em;
+  text-transform: uppercase; padding: 1px 6px; border: 1px solid;
+}
+.side.pos { color: var(--pos); border-color: var(--pos); background: var(--pos-bg); }
+.side.neg { color: var(--neg); border-color: var(--neg); background: var(--neg-bg); }
+
+/* ---- footer readout ------------------------------------------------- */
+
+.readout {
+  margin-top: 40px; padding-top: 10px;
+  border-top: 1px solid var(--rule-2);
+  display: flex; flex-wrap: wrap; gap: 26px;
+  font-family: var(--mono); font-size: 11px; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+.readout b {
+  color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+.empty {
+  padding: 30px 12px; color: var(--ink-3); font-size: 13px;
+  border-bottom: 1px solid var(--rule);
+}
+.empty b { color: var(--ink-2); font-weight: 500; }
+
+.warn {
+  margin-top: 14px; padding: 9px 12px;
+  border: 1px solid var(--neg); background: var(--neg-bg); color: var(--neg);
+  font-family: var(--mono); font-size: 11px; letter-spacing: .06em;
+}
+
+@media (max-width: 700px) {
+  .wrap { padding: 0 16px 56px; }
+  .hide-sm { display: none; }
+}

@@ -59,13 +59,41 @@ be wrong sometimes; the design shouldn't project false confidence.
 - Empty states say what's missing and when it'll fill, since much of this data
   only accrues over time.
 
+## Visual direction: technical instrument
+
+Chosen 2026-09-06. The dashboard reads like a measuring instrument or an
+engineering drawing, not an app: hairline rules, small-caps letterspaced
+headers, precise alignment, a light paper ground, and figures set in mono with
+tabular numerals. Restrained, and unusual without trying to be.
+
+What that means concretely:
+
+- **Hairlines, not shadows.** Structure comes from 1px rules at low contrast.
+  Nothing floats; nothing has a drop shadow or a rounded card border.
+- **Labels are small-caps and quiet.** `PRIZEPICKS`, `DELTA`, `MOVEMENT` —
+  letterspaced, small, low-contrast. They frame the numbers without competing.
+- **Figures are the subject.** Mono, tabular, right-aligned, the largest and
+  darkest type on the page.
+- **Two signal colours only**, one per direction, used exclusively to encode
+  sign. Everything else is ink on paper.
+- **Rules and gutters do the grouping**, so density stays legible at 30+ rows.
+
 ## Open decisions
 
-- Visual direction: terminal-dense vs. editorial-print. *(pending)*
-- Stack for the dashboard — likely Next.js reading the same Postgres.
 - Whether grading results live in the same view as live lines, or separately.
+- Auth, if this is ever shared beyond one user.
 
 ## Log
 
 - **2026-09-06** — Constraints above set at project start. Scope narrowed to
   CS2 and LoL only; Apex and Valorant dropped from the default poll.
+- **2026-09-06** — Direction chosen: *technical instrument*, over a
+  terminal-dense and an editorial-print alternative.
+- **2026-09-06** — First screen answers two questions only: *where do the books
+  disagree* and *what has moved*. A results/hit-rate panel is deliberately
+  deferred until Phase 2 grading exists rather than shipped as an empty
+  placeholder.
+- **2026-09-06** — Stack: server-rendered HTML from the existing Node app with
+  hand-written CSS. No framework and no component library, so nothing arrives
+  with a default look that has to be fought. It's read-only tables over
+  Postgres; a SPA would be machinery without a payoff.
