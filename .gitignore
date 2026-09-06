@@ -5,3 +5,6 @@ dist/
 *.log
 raw/
 .DS_Store
+
+# Local screenshots / scratch images — never committed
+public/photos/
