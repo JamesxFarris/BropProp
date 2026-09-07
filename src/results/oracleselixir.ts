@@ -75,6 +75,9 @@ async function storeBatch(batch: unknown[][]): Promise<number> {
   if (batch.length === 0) return 0;
   for (const p of batch) {
     await q(
+      // League of Legends has no rounds; `rounds` is left out of both the
+      // column list and the VALUES so it takes its NULL default rather than
+      // ever being asserted.
       `INSERT INTO map_stat (source, league, series_key, map_number, handle_raw,
                              canon_handle, team, kills, deaths, assists, headshots,
                              played_at, raw, fetched_at)

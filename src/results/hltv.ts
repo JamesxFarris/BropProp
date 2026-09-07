@@ -138,6 +138,7 @@ export async function fetchHltv(opts: HltvOptions = {}): Promise<FetchStatsResul
             deaths: d !== undefined && Number.isFinite(d) ? d : null,
             assists: null,
             headshots: null, // only under /stats/, which is 403 even in a browser
+            rounds: null, // HLTV's map page doesn't report a round count either
             playedAt,
             raw: { mapStatsId: m.id, kd: row.kd },
           });
