@@ -183,6 +183,7 @@ const server = createServer(async (req, res) => {
       // On by default once an app is chosen — the reason to narrow to one app
       // is to take the best number available on it. Explicit best=0 opts out.
       best: url.searchParams.get('best') !== '0',
+      callsOnly: url.searchParams.get('calls') === '1',
     };
 
     // A slip already committed to an app narrows the board to that app: props

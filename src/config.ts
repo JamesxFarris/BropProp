@@ -10,6 +10,10 @@ export const config = {
   // Results arrive well after lines settle, and the stat sources rate-limit
   // much harder than the books, so this runs far less often than polling.
   resultsCron: process.env.RESULTS_CRON ?? '17,47 * * * *',
+  // CS2 history accrues rather than backfills: HLTV only publishes stats for
+  // matches whose demos it parsed, and only its current results page is
+  // reachable. Running once a day picks up whatever appeared since yesterday.
+  accumulateCron: process.env.ACCUMULATE_CRON ?? '23 5 * * *',
   leagues: (process.env.LEAGUES ?? 'CS2,LOL')
     .split(',')
     .map((s) => s.trim().toUpperCase())

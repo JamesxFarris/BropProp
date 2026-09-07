@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import { config } from './config.js';
 import { pollOnce } from './poll.js';
 import { runResults } from './results/run.js';
+import { backfillCs2 } from './results/hltv_backfill.js';
 
 console.log(`BropProp logger up — schedule "${config.pollCron}", leagues ${config.leagues.join(',')}`);
 
@@ -45,9 +46,34 @@ async function gradeTick() {
   }
 }
 
+let accumulating = false;
+
+/**
+ * Collect CS2 stat lines that appeared since yesterday.
+ *
+ * Deliberately daily and unattended. It cannot build history — HLTV publishes
+ * stats for maybe one match in thirty and its archive can't be paged — but run
+ * every day it accumulates the matches that do get parsed, for the players we
+ * price. That is the only free path to CS2 form.
+ */
+async function accumulateTick() {
+  if (accumulating) return;
+  accumulating = true;
+  try {
+    await backfillCs2(1);
+  } catch (err) {
+    // No browser in the image, HLTV reshaped, Cloudflare in a mood — none of
+    // it should touch the poller.
+    console.warn('cs2 accumulate skipped:', (err as Error).message.slice(0, 120));
+  } finally {
+    accumulating = false;
+  }
+}
+
 cron.schedule(config.pollCron, tick);
 cron.schedule(config.resultsCron, gradeTick);
-console.log(`results schedule "${config.resultsCron}"`);
+cron.schedule(config.accumulateCron, accumulateTick);
+console.log(`results schedule "${config.resultsCron}", cs2 accumulate "${config.accumulateCron}"`);
 
 await tick();       // don't wait a full interval for the first datapoint
 await gradeTick();  // and grade anything already waiting

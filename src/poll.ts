@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { pool } from './db.js';
+import { pool, q } from './db.js';
 import { config } from './config.js';
 import { fetchPrizePicks } from './adapters/prizepicks.js';
 import { fetchUnderdog } from './adapters/underdog.js';
@@ -64,8 +64,27 @@ async function runBook(bookCode: string, fetcher: () => Promise<FetchResult>) {
   }
 }
 
+/**
+ * Close out runs a previous container left open.
+ *
+ * A redeploy kills the worker mid-poll, and the row it was writing stays
+ * unfinished forever. Left alone those look identical to a live failure.
+ */
+async function closeOrphanedRuns(): Promise<void> {
+  const orphans = await q(
+    `UPDATE poll_run SET finished_at = now(), ok = false,
+            error = 'interrupted — worker restarted mid-poll'
+      WHERE finished_at IS NULL AND started_at < now() - interval '10 minutes'
+      RETURNING id`,
+  );
+  if (orphans.length > 0) {
+    console.log(`  closed ${orphans.length} poll run(s) orphaned by a restart`);
+  }
+}
+
 export async function pollOnce() {
   console.log(`[${new Date().toISOString()}] poll start — leagues: ${config.leagues.join(',')}`);
+  await closeOrphanedRuns();
 
   const client = await pool.connect();
   let ppLeagues;

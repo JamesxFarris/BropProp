@@ -130,16 +130,27 @@ export async function health(league: string | null): Promise<Health> {
                 AND started_at > now() - interval '1 hour') AS books_live,
             (SELECT max(started_at) FROM poll_run) AS last_poll,
             (SELECT max(started_at) FROM poll_run WHERE ok) AS last_ok_poll,
-            -- ok is false until a run finishes, so a poll in flight is not a
-            -- failure — reporting it as one made the banner fire during every
-            -- single poll. A run only counts as failed once it has finished
-            -- unsuccessfully, or once it has been running long enough that the
-            -- container was clearly killed mid-poll.
-            (SELECT string_agg(DISTINCT book_code, ', ') FROM poll_run
-              WHERE started_at > now() - interval '1 hour'
-                AND ((finished_at IS NOT NULL AND NOT ok)
-                  OR (finished_at IS NULL AND started_at < now() - interval '10 minutes'))
-            ) AS failing_books,
+            -- A book is "failing" only if it is failing NOW: its most recent
+            -- finished run failed, or it has produced no successful run in an
+            -- hour. Counting any failure in the window meant one run orphaned
+            -- by a container restart poisoned the banner for the next hour
+            -- while every poll since had succeeded — which trains you to
+            -- ignore the one warning that should always be trusted.
+            (SELECT string_agg(book_code, ', ') FROM (
+               SELECT r.book_code
+               FROM (SELECT DISTINCT book_code FROM poll_run
+                      WHERE started_at > now() - interval '6 hours') r
+               LEFT JOIN LATERAL (
+                 SELECT ok FROM poll_run
+                  WHERE book_code = r.book_code AND finished_at IS NOT NULL
+                  ORDER BY started_at DESC LIMIT 1
+               ) last ON true
+               WHERE COALESCE(last.ok, false) = false
+                  OR NOT EXISTS (
+                       SELECT 1 FROM poll_run
+                        WHERE book_code = r.book_code AND ok
+                          AND started_at > now() - interval '1 hour')
+             ) bad) AS failing_books,
             (SELECT count(*) FROM prop) AS props_tracked,
             (SELECT count(*) FROM prop_snapshot) AS snapshots,
             (SELECT min(observed_at) FROM prop_snapshot) AS logging_since`,

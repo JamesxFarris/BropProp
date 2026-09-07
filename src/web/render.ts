@@ -98,7 +98,7 @@ function correlatedGroups(picks: PickRow[]): number {
 
 type Filters = {
   league: string | null; book: string | null; matched: boolean;
-  search: string | null; best: boolean;
+  search: string | null; best: boolean; callsOnly: boolean;
 };
 
 function qs(f: Partial<Filters>, base: Filters): string {
@@ -109,6 +109,7 @@ function qs(f: Partial<Filters>, base: Filters): string {
   if (merged.matched) p.set('matched', '1');
   if (merged.search) p.set('q', merged.search);
   if (merged.best === false) p.set('best', '0');
+  if (merged.callsOnly) p.set('calls', '1');
   return p.toString() ? `?${p}` : '';
 }
 
@@ -145,6 +146,7 @@ function filterBar(path: string, f: Filters, leagues: string[], locked: string |
       locked ? '<span class="lab">set by your slip</span>' : ''
     }</div>
     <div class="group"><nav class="seg">
+      ${a(qs({ callsOnly: !f.callsOnly }, f), 'With a call', f.callsOnly)}
       ${
         f.book
           ? a(qs({ best: !f.best }, f), 'Best price only', f.best)
@@ -608,7 +610,12 @@ export function boardPage(o: {
   // top of the board is worse than no call at all.
   const started = (r: MarketRow) =>
     r.scheduled_at !== null && new Date(r.scheduled_at).getTime() < Date.now();
-  const ranked = [...o.rows].sort((a, b) => {
+  // Most of the board is CS2 with no player history, so a board of 517 rows
+  // where 35 say anything buries the useful part. Filtering happens here
+  // rather than in SQL because whether a market has a call is decided by the
+  // projection, not by anything the query can see.
+  const visible = o.filters.callsOnly ? o.rows.filter((r) => playOf(r) !== null) : o.rows;
+  const ranked = [...visible].sort((a, b) => {
     const sa = started(a);
     const sb = started(b);
     if (sa !== sb) return sa ? 1 : -1;
@@ -630,14 +637,16 @@ export function boardPage(o: {
   const restrict = Boolean(only) && o.filters.best;
 
   const body =
-    o.rows.length === 0
+    ranked.length === 0
       ? `<div class="card"><div class="empty">Nothing matches these filters.
          Try clearing the search, or switching back to <strong>Both</strong> apps — many
          markets are only listed on one of them.</div></div>`
       : `<div class="card">
       <div class="card-head">
         <h2>Board</h2>
-        <span class="sub">${o.rows.length} markets · strongest calls first${
+        <span class="sub">${ranked.length}${
+          o.filters.callsOnly ? ` of ${o.rows.length}` : ''
+        } markets · strongest calls first${
           restrict ? ' · showing only the side each app prices better' : ''
         }</span>
       </div>
