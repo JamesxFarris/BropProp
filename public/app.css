@@ -513,3 +513,12 @@ button.link:hover { color: var(--under); text-decoration: underline; }
   opacity: .34; cursor: not-allowed;
   background: transparent; border-style: dashed;
 }
+
+/* The side this app prices better than the other. Outlined, never filled:
+   "this is the better number here" and "you have taken this" are different
+   statements and must not look alike. */
+.ou button.best.o { border-color: var(--over); color: var(--over); }
+.ou button.best.u { border-color: var(--under); color: var(--under); }
+.ou button.best { border-width: 2px; font-weight: 700; }
+.ou button.best.o.on { background: var(--over-bg); }
+.ou button.best.u.on { background: var(--under-bg); }

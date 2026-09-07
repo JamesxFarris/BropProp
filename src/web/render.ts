@@ -376,6 +376,7 @@ function ouButtons(
   back: string,
   picked: string | null,
   offer: 'both' | 'over' | 'under' = 'both',
+  better: 'both' | 'over' | 'under' = 'both',
 ): string {
   if (propId === null) {
     return `<div class="ou"><button disabled>O</button><button disabled>U</button></div>`;
@@ -385,11 +386,16 @@ function ouButtons(
       return `<button class="${cls}" disabled
         title="The ${side} is a better number on the other app">${label}</button>`;
     }
+    // Marked, not filled: "this is the side this app prices better" is a
+    // different statement from "you have taken this", so they can't look alike.
+    const mark = better === side ? ' best' : '';
+    const why = better === side ? ` (better price than the other app)` : '';
     return `<form method="post" action="/pick" class="inline">
       <input type="hidden" name="prop_id" value="${propId}">
       <input type="hidden" name="side" value="${side}">
       <input type="hidden" name="back" value="${esc(back)}">
-      <button class="${cls}${picked === side ? ' on' : ''}" title="Take ${side}">${label}</button>
+      <button class="${cls}${mark}${picked === side ? ' on' : ''}"
+        title="Take ${side}${why}">${label}</button>
     </form>`;
   };
   return `<div class="ou">${b('over', 'O', 'o')}${b('under', 'U', 'u')}</div>`;
@@ -433,8 +439,10 @@ export function boardPage(o: {
       <div class="card-head">
         <h2>Board</h2>
         <span class="sub">${o.rows.length} markets${
-          restrict ? ' · showing only the side each app prices better' : ''
-        } · O and U add a leg at the line shown</span>
+          restrict
+            ? ' · showing only the side each app prices better'
+            : ' · the outlined side is the better price on that app'
+        }</span>
       </div>
       <div class="scroll"><table>
         <thead><tr>
@@ -483,7 +491,8 @@ export function boardPage(o: {
                 ? `<td class="n"><div class="bookcell">
                 <span class="fig${r.pp_line === null ? ' muted' : ''}">${num(r.pp_line)}</span>
                 ${ouButtons(r.pp_prop_id, back, r.pp_side,
-                  restrict ? bestSide('prizepicks', r.delta === null ? null : Number(r.delta)) : 'both')}
+                  restrict ? bestSide('prizepicks', r.delta === null ? null : Number(r.delta)) : 'both',
+                  bestSide('prizepicks', r.delta === null ? null : Number(r.delta)))}
               </div></td>`
                 : ''
             }
@@ -493,7 +502,8 @@ export function boardPage(o: {
                 ? `<td class="n"><div class="bookcell">
                 <span class="fig${r.ud_line === null ? ' muted' : ''}">${num(r.ud_line)}</span>
                 ${ouButtons(r.ud_prop_id, back, r.ud_side,
-                  restrict ? bestSide('underdog', r.delta === null ? null : Number(r.delta)) : 'both')}
+                  restrict ? bestSide('underdog', r.delta === null ? null : Number(r.delta)) : 'both',
+                  bestSide('underdog', r.delta === null ? null : Number(r.delta)))}
               </div></td>`
                 : ''
             }
@@ -564,14 +574,16 @@ export function edgesPage(o: {
               ${
                 o.lockedBook === 'underdog'
                   ? ''
-                  : ouButtons(r.pp_prop_id, back, r.pp_side)
+                  : ouButtons(r.pp_prop_id, back, r.pp_side, 'both',
+                      bestSide('prizepicks', r.delta === null ? null : Number(r.delta)))
               }</div></td>
             <td class="c"><span class="gap-chip ${d > 0 ? 'up' : 'down'}">${signed(d)}</span></td>
             <td class="n"><div class="bookcell"><span class="fig">${num(r.ud_line)}</span>
               ${
                 o.lockedBook === 'prizepicks'
                   ? ''
-                  : ouButtons(r.ud_prop_id, back, r.ud_side)
+                  : ouButtons(r.ud_prop_id, back, r.ud_side, 'both',
+                      bestSide('underdog', r.delta === null ? null : Number(r.delta)))
               }</div></td>
             <td><span class="pickside ${cls}" style="padding:4px 9px;border-radius:4px;font-size:13px;font-weight:600">${cheaper}</span></td>
             <td class="match hide-sm"><span class="sub2" title="${esc(r.match_title ?? '')}">${esc(r.match_title ?? '—')}</span></td>
