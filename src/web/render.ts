@@ -658,8 +658,13 @@ export function boardPage(o: {
           ${showUD ? '<th class="n">Underdog</th>' : ''}
         </tr></thead>
         <tbody>${ranked
-          .map((r) => {
+          .map((r, i) => {
             const play = playOf(r);
+            // Three markets on one player are three different bets, but
+            // repeating the name, match and kick-off in full for each made them
+            // read as duplicates. A continuation row keeps the identity quiet
+            // and lets the market be the thing that differs.
+            const sameAsPrev = i > 0 && ranked[i - 1]!.canon_handle === r.canon_handle;
             const d = r.delta === null ? null : Number(r.delta);
             const gap =
               d === null
@@ -672,25 +677,29 @@ export function boardPage(o: {
             return `<tr>
             <td class="c">${scoreCell(play)}</td>
             <td>
-              <div class="who">
-                ${leagueBadge(r.league)}
+              <div class="who${sameAsPrev ? ' cont' : ''}">
+                ${sameAsPrev ? '<span class="tick"></span>' : leagueBadge(r.league)}
                 <div class="whobody">
                   <div class="name">${
                     histId ? `<a href="/prop/${histId}">${esc(r.handle)}</a>` : esc(r.handle)
                   }${r.is_combo ? ' <span class="chip warn">Combo</span>' : ''}</div>
-                  <div class="meta matchline" title="${esc(r.match_title ?? '')}">${esc(
-                    r.match_title ?? '—',
-                  )}</div>
+                  ${
+                    sameAsPrev
+                      ? ''
+                      : `<div class="meta matchline" title="${esc(r.match_title ?? '')}">${esc(
+                          r.match_title ?? '—',
+                        )}</div>
                   <div class="meta whenline">${whenCell(r.scheduled_at)}${
-                    moved !== null && moved !== 0
-                      ? ` · moved <span class="move ${moved > 0 ? 'up' : 'down'}">${signed(moved)}</span>`
-                      : ''
-                  }</div>
+                          moved !== null && moved !== 0
+                            ? ` · moved <span class="move ${moved > 0 ? 'up' : 'down'}">${signed(moved)}</span>`
+                            : ''
+                        }</div>`
+                  }
                 </div>
               </div>
             </td>
             <td>
-              <div class="sub2">${esc(statLabel(r.stat))}</div>
+              <div class="statname">${esc(statLabel(r.stat))}</div>
               <div class="meta">${esc(maps(r.map_start, r.map_end))}</div>
             </td>
             <td class="n formcol">${formCell(formOf(r), play)}</td>

@@ -652,3 +652,14 @@ button.link:hover { color: var(--under); text-decoration: underline; }
   .banner { font-size: 13px; padding: 9px 12px; }
   .card-head { padding: 12px 14px; }
 }
+
+/* Several markets on one player are several different bets. Repeating the
+   name, match and kick-off at full weight for each made them read as copies,
+   so a continuation row keeps the identity quiet and lets the market lead. */
+.who.cont .name { font-weight: 500; color: var(--text-3); font-size: 15px; }
+.who.cont { align-items: center; }
+.tick {
+  display: inline-block; width: 34px; flex: none;
+  border-left: 2px solid var(--line-2); height: 18px; margin-left: 8px;
+}
+.statname { font-size: 16px; font-weight: 600; letter-spacing: -.005em; }
