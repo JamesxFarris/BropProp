@@ -222,6 +222,21 @@ export type Bo3Options = {
   allPlayers?: boolean;
   /** Re-fetch maps already stored. Off by default; on to repair bad rows. */
   refetch?: boolean;
+  /**
+   * Write rows as they arrive instead of at the end.
+   *
+   * A year is around 40,000 map requests and the better part of an hour. Held
+   * in memory and written once at the end, an error in minute 55 throws away
+   * everything, and there is nothing to watch while it runs. With a sink the
+   * work is durable as it goes and the caller can report progress. Rows are
+   * not accumulated when one is supplied, so memory stays flat.
+   */
+  sink?: (stats: MapStat[]) => Promise<number>;
+  /** Called after each match, for progress reporting on long runs. */
+  onProgress?: (p: {
+    matchesDone: number; matchesTotal: number;
+    maps: number; skipped: number; written: number; playedAt: string | null;
+  }) => void;
 };
 
 export async function fetchBo3(opts: Bo3Options = {}): Promise<FetchStatsResult> {
@@ -246,7 +261,10 @@ export async function fetchBo3(opts: Bo3Options = {}): Promise<FetchStatsResult>
   let maps = 0;
   let empty = 0;
   let skipped = 0;
+  let written = 0;
+  let matchesDone = 0;
   for (const m of parsed) {
+    const forMatch: MapStat[] = [];
     for (const g of m.games ?? []) {
       // A map we already have. Note this only recognises maps that produced a
       // row, so a match where nobody was on our board is re-checked each run —
@@ -268,9 +286,22 @@ export async function fetchBo3(opts: Bo3Options = {}): Promise<FetchStatsResult>
         await sleep(GAP_MS);
         continue;
       }
-      stats.push(...toMapStats(m, g, rows, tracked));
+      forMatch.push(...toMapStats(m, g, rows, tracked));
       await sleep(GAP_MS);
     }
+
+    // Durable as we go when a sink is supplied, buffered otherwise.
+    if (opts.sink) {
+      if (forMatch.length) written += await opts.sink(forMatch);
+    } else {
+      stats.push(...forMatch);
+      written = stats.length;
+    }
+    matchesDone++;
+    opts.onProgress?.({
+      matchesDone, matchesTotal: parsed.length,
+      maps, skipped, written, playedAt: m.end_date,
+    });
     await sleep(GAP_MS);
   }
 
@@ -293,8 +324,26 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const days = Number(process.argv[2] ?? 30);
   const all = process.argv.includes('--all-players');
   const refetch = process.argv.includes('--refetch');
-  const { stats } = await fetchBo3({ days, allPlayers: all, refetch, maxMatches: 5000 });
-  const written = await storeStats(stats);
-  console.log(`done: ${written} stat lines stored`);
+
+  const started = Date.now();
+  let last = 0;
+  await fetchBo3({
+    days, allPlayers: all, refetch, maxMatches: 20000,
+    sink: storeStats,
+    onProgress: (p) => {
+      // Every 25 matches, or the last one. Enough to watch an hour-long run
+      // without turning the log into a scrollback problem.
+      if (p.matchesDone - last < 25 && p.matchesDone !== p.matchesTotal) return;
+      last = p.matchesDone;
+      const mins = (Date.now() - started) / 60000;
+      const pct = Math.round((100 * p.matchesDone) / p.matchesTotal);
+      const eta = p.matchesDone ? (mins / p.matchesDone) * (p.matchesTotal - p.matchesDone) : 0;
+      console.log(
+        `  ${String(pct).padStart(3)}%  ${p.matchesDone}/${p.matchesTotal} matches  ` +
+        `${p.maps} maps  ${p.written} rows  ${mins.toFixed(1)}m elapsed  ` +
+        `~${eta.toFixed(0)}m left  at ${(p.playedAt ?? '').slice(0, 10)}`,
+      );
+    },
+  });
   await pool.end();
 }
