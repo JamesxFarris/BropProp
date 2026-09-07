@@ -1,9 +1,10 @@
 import type { Movement, Health } from './queries.js';
 import type { PickRow, SlipSummary } from './picks.js';
 import type { MarketRow, PropHistory, PlayerGame } from './boardq.js';
-import type { FormStats, Play } from './projection.js';
-import { recommend, type LineOption } from './projection.js';
+import type { FormStats, Play, CallStatus, NoCall } from './projection.js';
+import { evaluate, edgeProgress, type LineOption } from './projection.js';
 import type { Entry } from './optimize.js';
+import { isComboHandle } from '../normalize.js';
 
 export const esc = (s: unknown) =>
   String(s ?? '').replace(/[&<>"']/g, (c) =>
@@ -25,6 +26,16 @@ const otherBook = (b: string) => (b === 'prizepicks' ? 'underdog' : 'prizepicks'
 /** Stats a projection can be built from. Fantasy points use a scoring formula
  *  the books don't publish, so deriving one would be a guess. */
 const PROJECTABLE = new Set(['kills', 'headshots', 'assists', 'deaths']);
+
+/**
+ * The Combo mark, driven by the handle rather than by the book's flag.
+ *
+ * PrizePicks sets `combo` on single players too, and a row reading `eraa`
+ * beside a chip saying Combo is a plain lie about what the market is. The
+ * handle is what actually names the players, so it is what the chip follows.
+ */
+const comboChip = (r: { handle: string }) =>
+  isComboHandle(r.handle) ? ' <span class="chip warn">Combo</span>' : '';
 
 const LEAGUE_CLASS: Record<string, string> = { CS2: 'cs2', LOL: 'lol' };
 const leagueBadge = (l: string) =>
@@ -96,9 +107,26 @@ function correlatedGroups(picks: PickRow[]): number {
 
 // ------------------------------------------------------------------ shell --
 
+/**
+ * `show` is the answer to "half this board isn't doing anything".
+ *
+ * A market the model priced as FAIR and a market it could not price at all are
+ * not the same row, and one toggle could not say both. Measured on 2026-09-07:
+ * of 465 markets, 22 carried a call, 27 were priced fair, and 386 were waiting
+ * on stat history. Fifty-five minutes later, after a CS2 backfill, the same
+ * board carried 278 calls and 89 waiting. Nothing about the markets changed —
+ * so a filter that hid "no call" would have hidden the backfill too.
+ *
+ *   all    everything, dead rows sunk to the bottom (default)
+ *   live   markets the model could actually evaluate — hides the ones waiting
+ *          on data, keeps the ones it priced as fair
+ *   calls  only markets with a call
+ */
+type ShowMode = 'all' | 'live' | 'calls';
+
 type Filters = {
   league: string | null; book: string | null; matched: boolean;
-  search: string | null; best: boolean; callsOnly: boolean;
+  search: string | null; best: boolean; show: ShowMode;
 };
 
 function qs(f: Partial<Filters>, base: Filters): string {
@@ -109,7 +137,7 @@ function qs(f: Partial<Filters>, base: Filters): string {
   if (merged.matched) p.set('matched', '1');
   if (merged.search) p.set('q', merged.search);
   if (merged.best === false) p.set('best', '0');
-  if (merged.callsOnly) p.set('calls', '1');
+  if (merged.show !== 'all') p.set('show', merged.show);
   return p.toString() ? `?${p}` : '';
 }
 
@@ -140,8 +168,12 @@ function filterBar(path: string, f: Filters, leagues: string[], locked: string |
     <div class="group"><span class="lab">App</span><nav class="seg">${bookBtns}</nav>${
       locked ? '<span class="lab">set by your slip</span>' : ''
     }</div>
+    <div class="group"><span class="lab">Show</span><nav class="seg">
+      ${a(qs({ show: 'all' }, f), 'All', f.show === 'all')}
+      ${a(qs({ show: 'live' }, f), 'Priced', f.show === 'live')}
+      ${a(qs({ show: 'calls' }, f), 'With a call', f.show === 'calls')}
+    </nav></div>
     <div class="group"><nav class="seg">
-      ${a(qs({ callsOnly: !f.callsOnly }, f), 'With a call', f.callsOnly)}
       ${
         f.book
           ? a(qs({ best: !f.best }, f), 'Best price only', f.best)
@@ -152,6 +184,7 @@ function filterBar(path: string, f: Filters, leagues: string[], locked: string |
       ${f.league ? `<input type="hidden" name="league" value="${esc(f.league)}">` : ''}
       ${f.book ? `<input type="hidden" name="book" value="${esc(f.book)}">` : ''}
       ${f.matched ? '<input type="hidden" name="matched" value="1">' : ''}
+      ${f.show !== 'all' ? `<input type="hidden" name="show" value="${esc(f.show)}">` : ''}
       <input name="q" value="${esc(f.search ?? '')}" placeholder="Player or match" aria-label="Search players or matches">
     </form>
   </div>`;
@@ -469,21 +502,43 @@ function scoreCell(play: Play | null): string {
   return `<span class="score ${tier}" title="How good this line looks, 1-99. A ranking, not a win probability.">${play.score}</span>`;
 }
 
+/**
+ * The words for each kind of "no call".
+ *
+ * These used to be guessed at from the form object, which conflated a market
+ * priced honestly with one the model could not evaluate at all — and told
+ * every combo it had "no single-player line" long after combos gained one.
+ * They come from the engine's own verdict now, so the page cannot disagree
+ * with the thing that made the decision.
+ */
+function noCallText(why: NoCall, r: { stat: string; handle: string }): string {
+  switch (why.kind) {
+    case 'unsupported':
+      return `${statLabel(r.stat)} — no scoring formula`;
+    case 'unreadable':
+      return `combo — can't read the players in "${r.handle}"`;
+    case 'unavailable':
+      return 'neither side offered';
+    case 'none':
+      return 'no history yet';
+    case 'thin':
+      return why.maps === 0
+        ? `only ${why.series} full ${why.series === 1 ? 'series' : 'series'}`
+        : `only ${why.maps} ${why.maps === 1 ? 'map' : 'maps'}`;
+    case 'fair':
+      // The number matters: 0.4 off is one line move from a call and 2.0 off
+      // is not, and a single flat "no edge" hid that difference on every row.
+      return `no edge · ${signed(why.edge)}`;
+  }
+}
+
 function playCell(
   play: Play | null,
-  f: FormStats | undefined,
-  r: { is_combo: boolean; stat: string },
+  why: NoCall | null,
+  r: { is_combo: boolean; stat: string; handle: string },
 ): string {
   if (!play) {
-    // Say which kind of "no" this is. "No history" on a market that can never
-    // have a projection reads as a data gap someone could go and fix.
-    let why: string;
-    if (r.is_combo) why = 'combo — no single-player line';
-    else if (!PROJECTABLE.has(r.stat)) why = `${statLabel(r.stat)} — no scoring formula`;
-    else if (!f) why = 'no history';
-    else if (f.series >= 6 || f.mapValues.length >= 12) why = 'no edge';
-    else why = `only ${f.mapValues.length} maps`;
-    return `<span class="meta">${esc(why)}</span>`;
+    return `<span class="meta">${esc(why ? noCallText(why, r) : 'no call')}</span>`;
   }
   const dir = play.side === 'over' ? 'Over' : 'Under';
   const cls = play.side === 'over' ? 'o' : 'u';
@@ -589,39 +644,103 @@ export function boardPage(o: {
     }
     return opts;
   };
-  const playOf = (r: MarketRow) =>
-    recommend(
-      formOf(r),
-      optionsFor(r),
-      r.map_end - r.map_start + 1,
-      `${r.canon_handle}|${r.stat}|${r.map_start}|${r.map_end}`,
-    );
+  // Evaluated once per row and kept. The modelled path resamples 4000 draws,
+  // and the sort alone asks for each row's verdict a dozen times.
+  const cache = new Map<MarketRow, CallStatus>();
+  const statusOf = (r: MarketRow): CallStatus => {
+    let s = cache.get(r);
+    if (!s) {
+      s = evaluate({
+        form: formOf(r),
+        options: optionsFor(r),
+        maps: r.map_end - r.map_start + 1,
+        seed: `${r.canon_handle}|${r.stat}|${r.map_start}|${r.map_end}`,
+        stat: r.stat,
+        handle: r.handle,
+      });
+      cache.set(r, s);
+    }
+    return s;
+  };
+  const playOf = (r: MarketRow) => statusOf(r).play;
 
   // Strongest calls first. The point of the board is to find the few markets
-  // worth acting on, so making them the first thing on screen is the feature —
-  // markets with no call keep their existing order underneath.
+  // worth acting on, so making them the first thing on screen is the feature.
+  //
+  // Underneath them the order is by how close a row is to becoming one, which
+  // is not the same as "no call" being one bucket. A market the model priced
+  // as FAIR is live: it has the history behind it, and one line move puts it
+  // in play. A market with no history is inert — no amount of line movement
+  // will make it say anything until the stat feed catches up. So fair rows
+  // sort above waiting rows, nearest-to-the-threshold first, and the rows that
+  // can never speak sink to the bottom rather than being interleaved with the
+  // ones that nearly do.
   //
   // Matches already under way sink below the rest whatever their score: the
   // line can't be taken any more, and a strong call you cannot act on at the
   // top of the board is worse than no call at all.
   const started = (r: MarketRow) =>
     r.scheduled_at !== null && new Date(r.scheduled_at).getTime() < Date.now();
-  // Most of the board is CS2 with no player history, so a board of 517 rows
-  // where 35 say anything buries the useful part. Filtering happens here
-  // rather than in SQL because whether a market has a call is decided by the
-  // projection, not by anything the query can see.
-  const visible = o.filters.callsOnly ? o.rows.filter((r) => playOf(r) !== null) : o.rows;
+
+  const TIER: Record<NoCall['kind'], number> = {
+    fair: 1, unavailable: 2, thin: 3, none: 4, unreadable: 4, unsupported: 5,
+  };
+  const tier = (r: MarketRow) => {
+    const s = statusOf(r);
+    return s.play ? 0 : TIER[s.why.kind];
+  };
+  // Within the fair tier: closest to MIN_EDGE first, since that is the row a
+  // half-point line move turns into a call.
+  const nearness = (r: MarketRow) => {
+    const s = statusOf(r);
+    return s.play === null && s.why.kind === 'fair' ? edgeProgress(s.why.edge) : -1;
+  };
+
+  // A model that can't see a market is not the same as a market with no edge,
+  // so hiding is offered at two strengths rather than one. Filtering happens
+  // here rather than in SQL because whether a market has a call is decided by
+  // the projection, not by anything the query can see.
+  const visible =
+    o.filters.show === 'calls'
+      ? o.rows.filter((r) => playOf(r) !== null)
+      : o.filters.show === 'live'
+        ? o.rows.filter((r) => tier(r) <= 1)
+        : o.rows;
+
   const ranked = [...visible].sort((a, b) => {
     const sa = started(a);
     const sb = started(b);
     if (sa !== sb) return sa ? 1 : -1;
+    const ta = tier(a);
+    const tb = tier(b);
+    if (ta !== tb) return ta - tb;
     const pa = playOf(a);
     const pb = playOf(b);
     if (pa && pb) return pb.strength - pa.strength;
-    if (pa) return -1;
-    if (pb) return 1;
-    return 0;
+    return nearness(b) - nearness(a);
   });
+
+  // Why the board is as quiet as it is, in numbers. "No call" is a real answer
+  // and this says which of the several answers it is, so a quiet board reads as
+  // a state of the data rather than as a broken page — and so a stat feed
+  // filling in is visible as it happens instead of a week later.
+  const counts = { call: 0, fair: 0, unavailable: 0, waiting: 0, unsupported: 0 };
+  for (const r of o.rows) {
+    const s = statusOf(r);
+    if (s.play) counts.call++;
+    else if (s.why.kind === 'fair') counts.fair++;
+    else if (s.why.kind === 'unavailable') counts.unavailable++;
+    else if (s.why.kind === 'unsupported') counts.unsupported++;
+    else counts.waiting++;
+  }
+  const summary = [
+    `${counts.call} with a call`,
+    counts.fair ? `${counts.fair} priced fair` : null,
+    counts.waiting ? `${counts.waiting} waiting on history` : null,
+    counts.unavailable ? `${counts.unavailable} with no takeable side` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   // One app selected (by filter or by an open slip) means one column. Showing
   // the other app's line with live take buttons offered a pick that cannot
@@ -634,15 +753,25 @@ export function boardPage(o: {
 
   const body =
     ranked.length === 0
-      ? `<div class="card"><div class="empty">Nothing matches these filters.
+      ? o.filters.show !== 'all' && o.rows.length > 0
+        ? // The rows exist; this filter hid them. Say which of them it hid and
+          // why, so an empty screen reads as a state of the data rather than
+          // as a broken page.
+          `<div class="card"><div class="empty">
+           None of these ${o.rows.length} markets ${
+             o.filters.show === 'calls' ? 'carries a call' : 'could be priced'
+           } right now — ${esc(summary)}. Switch <strong>Show</strong> back to
+           <strong>All</strong> to see them anyway; a market with no edge on our numbers
+           is still a market you may have a reason to take.</div></div>`
+        : `<div class="card"><div class="empty">Nothing matches these filters.
          Try clearing the search, or switching back to <strong>Both</strong> apps — many
          markets are only listed on one of them.</div></div>`
       : `<div class="card">
       <div class="card-head">
         <h2>Board</h2>
         <span class="sub">${ranked.length}${
-          o.filters.callsOnly ? ` of ${o.rows.length}` : ''
-        } markets · strongest calls first${
+          o.filters.show !== 'all' ? ` of ${o.rows.length}` : ''
+        } markets · ${summary}${
           restrict ? ' · showing only the side each app prices better' : ''
         }</span>
       </div>
@@ -682,7 +811,7 @@ export function boardPage(o: {
                 <div class="whobody">
                   <div class="name">${
                     histId ? `<a href="/prop/${histId}">${esc(r.handle)}</a>` : esc(r.handle)
-                  }${r.is_combo ? ' <span class="chip warn">Combo</span>' : ''}</div>
+                  }${comboChip(r)}</div>
                   ${
                     sameAsPrev
                       ? ''
@@ -703,7 +832,7 @@ export function boardPage(o: {
               <div class="meta">${esc(maps(r.map_start, r.map_end))}</div>
             </td>
             <td class="n formcol">${formCell(formOf(r), play)}</td>
-            <td>${playCell(play, formOf(r), r)}</td>
+            <td>${playCell(play, statusOf(r).why, r)}</td>
             ${
               showPP
                 ? `<td class="n bookcol" data-book="PrizePicks"><div class="bookcell">
@@ -785,7 +914,7 @@ export function edgesPage(o: {
             return `<tr>
             <td><div class="who">${leagueBadge(r.league)}
               <div class="name">${histId ? `<a href="/prop/${histId}">${esc(r.handle)}</a>` : esc(r.handle)}</div>
-              ${r.is_combo ? '<span class="chip warn">Combo</span>' : ''}</div></td>
+              ${comboChip(r).trim()}</div></td>
             <td><div class="sub2">${esc(statLabel(r.stat))}</div>
                 <div class="meta">${esc(maps(r.map_start, r.map_end))}</div></td>
             <td class="n"><div class="bookcell"><span class="fig">${num(r.pp_line)}</span>

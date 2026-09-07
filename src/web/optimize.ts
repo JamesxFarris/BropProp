@@ -1,6 +1,7 @@
 import type { MarketRow } from './boardq.js';
 import type { FormStats, Play } from './projection.js';
 import { recommend, type LineOption } from './projection.js';
+import { comboParts } from '../normalize.js';
 
 /**
  * Building the best entry of a given size.
@@ -34,6 +35,8 @@ export type Candidate = {
   /** p x mult — the whole objective, per leg. */
   value: number;
   matchKey: string;
+  /** Every player this leg's outcome depends on — a combo depends on all of its members. */
+  players: string[];
 };
 
 export type Entry = {
@@ -90,8 +93,12 @@ export function candidatesFor(
   for (const r of rows) {
     // A market already under way cannot be entered.
     if (r.scheduled_at && new Date(r.scheduled_at).getTime() < now) continue;
-    // Combos have no per-player projection to reason about.
-    if (r.is_combo) continue;
+    // Combos used to be skipped for want of a projection. They have one now,
+    // built from the members' joint history, so they compete on the same terms
+    // as everything else — but see `players` below: a combo leg occupies every
+    // player in it, or the one-leg-per-player rule stops seeing through them.
+    const parts = comboParts(r.handle);
+    if (r.is_combo && parts.length < 2) continue;
 
     const line = book === 'prizepicks' ? r.pp_line : r.ud_line;
     const propId = book === 'prizepicks' ? r.pp_prop_id : r.ud_prop_id;
@@ -120,6 +127,7 @@ export function candidatesFor(
       row: r, play, propId, p, mult,
       value: p * mult,
       matchKey: r.match_title ?? `?${r.canon_handle}`,
+      players: parts.length >= 2 ? parts : [r.canon_handle],
     });
   }
 
@@ -131,7 +139,10 @@ export function candidatesFor(
  * being an obviously bad one.
  *
  * - **One leg per player.** Two markets on the same player are close to the
- *   same bet twice; the entry looks diversified and isn't.
+ *   same bet twice; the entry looks diversified and isn't. A combo counts as a
+ *   leg on every player in it: `knight + Viper` alongside `knight` is the same
+ *   bet twice with a different name on it, and comparing canon handles alone
+ *   would not notice — a combo's handle is the members run together.
  * - **At most two legs per match.** Legs from one match move together — a long
  *   game lifts everyone's kills. Both books also reprice correlated legs, so
  *   the payout we are calculating from would no longer be the payout offered.
@@ -154,10 +165,10 @@ export function bestEntry(
 
   for (const c of candidates) {
     if (legs.length === size) break;
-    if (players.has(c.row.canon_handle)) continue;
+    if (c.players.some((h) => players.has(h))) continue;
     if ((perMatch.get(c.matchKey) ?? 0) >= maxPerMatch) continue;
     legs.push(c);
-    players.add(c.row.canon_handle);
+    for (const h of c.players) players.add(h);
     perMatch.set(c.matchKey, (perMatch.get(c.matchKey) ?? 0) + 1);
   }
 

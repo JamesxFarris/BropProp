@@ -1,5 +1,7 @@
 import { q, one } from '../db.js';
 import { SUPPORTED_STATS } from './types.js';
+import { comboParts } from '../normalize.js';
+import { comboRangeTotal, type ComboStatRow } from '../combo.js';
 
 /**
  * Grading, and the rules it refuses to bend.
@@ -14,8 +16,12 @@ import { SUPPORTED_STATS } from './types.js';
  *  2. The source must actually produce that stat. Leaguepedia has no headshots
  *     and no published fantasy-point formula, so those are `ungradeable` with
  *     a reason rather than scored from a guess.
- *  3. Combo props (several players added together) are not per-player lines
- *     and are left alone.
+ *  3. Combo props are several players added together, so their result is the
+ *     sum of their members' totals over the range. That used to be refused
+ *     outright for want of per-map stats; both games now have them, so a combo
+ *     grades from the same rows as everything else — with rules 1 and 2
+ *     applied member by member. See `src/combo.ts`. A combo whose handle can't
+ *     be split into players is still refused rather than guessed at.
  */
 
 export type GradeOutcome = {
@@ -93,15 +99,108 @@ async function findSeries(p: PendingPick): Promise<string | null> {
   return row?.series_key ?? null;
 }
 
-export async function gradePick(p: PendingPick): Promise<GradeOutcome> {
-  if (p.is_combo) {
+/**
+ * The series a combo belongs to: the one where EVERY member has a stat line,
+ * inside the same window a single-player pick uses.
+ *
+ * `HAVING count(DISTINCT canon_handle) = $n` is the weakest-link rule stated
+ * once. A series where two of three members are recorded is not a combo
+ * series, and picking it would send `comboRangeTotal` a set of rows it would
+ * have to refuse anyway — better to say "no stat line found" than to void a
+ * prop whose maps were all played.
+ */
+async function findComboSeries(p: PendingPick, parts: string[]): Promise<string | null> {
+  const anchor = p.scheduled_at;
+  const row = await one<{ series_key: string }>(
+    `SELECT series_key
+     FROM map_stat
+     WHERE canon_handle = ANY($1::text[]) AND league = $2
+       AND ($3::timestamptz IS NULL
+            OR played_at BETWEEN $3::timestamptz - interval '3 hours'
+                             AND $3::timestamptz + interval '12 hours')
+     GROUP BY series_key
+     HAVING count(DISTINCT canon_handle) = $4
+     ORDER BY min(abs(extract(epoch from (played_at - COALESCE($3::timestamptz, played_at)))))
+     LIMIT 1`,
+    [parts, p.league, anchor, parts.length],
+  );
+  return row?.series_key ?? null;
+}
+
+async function gradeCombo(
+  p: PendingPick,
+  parts: string[],
+  column: string,
+): Promise<GradeOutcome> {
+  const seriesKey = await findComboSeries(p, parts);
+  if (!seriesKey) {
     return {
       pickId: p.id, status: 'ungradeable', actual: null, source: null, seriesKey: null,
-      note: 'Combo props add several players together and have no per-player stat line.',
+      note: `No series found where all ${parts.length} players of ${p.handle} have stat lines.`,
     };
   }
 
+  // Scoped to one series_key, which is a single source's own identifier, so
+  // this can read map_stat directly without a second source's copy of the same
+  // map doubling a member into the total.
+  const rows = await q<ComboStatRow & { source: string }>(
+    `SELECT series_key, map_number, canon_handle, played_at, source,
+            ${column} AS value
+     FROM map_stat
+     WHERE series_key = $1 AND canon_handle = ANY($2::text[])
+     ORDER BY map_number`,
+    [seriesKey, parts],
+  );
+  const source = rows[0]?.source ?? null;
+
+  const g = comboRangeTotal(parts, rows, p.map_start, p.map_end);
+  if (g.kind === 'void') {
+    return { pickId: p.id, status: 'void', actual: null, source, seriesKey, note: g.note };
+  }
+  if (g.kind === 'ungradeable') {
+    return { pickId: p.id, status: 'ungradeable', actual: null, source, seriesKey, note: g.note };
+  }
+
+  const line = Number(p.line_at_pick);
+  if (g.total === line) {
+    return {
+      pickId: p.id, status: 'push', actual: g.total, source, seriesKey,
+      note: `Landed exactly on ${line}.`,
+    };
+  }
+  const wentOver = g.total > line;
+  const won = p.side === 'over' ? wentOver : !wentOver;
+  return {
+    pickId: p.id, status: won ? 'won' : 'lost', actual: g.total, source, seriesKey,
+    note: `${parts.length} players totalled ${g.total} ${wentOver ? '>' : '<'} ${line} on maps ${p.map_start}-${p.map_end}.`,
+  };
+}
+
+export async function gradePick(p: PendingPick): Promise<GradeOutcome> {
   const column = STAT_COLUMN[p.stat];
+
+  // The handle decides, not the book's flag: PrizePicks sets `combo` on
+  // single players too, and refusing those cost real markets a grade.
+  const parts = comboParts(p.handle);
+  if (parts.length > 1) {
+    if (!column) {
+      return {
+        pickId: p.id, status: 'ungradeable', actual: null, source: null, seriesKey: null,
+        note: `No result data maps to "${p.stat}". Fantasy points use a scoring formula the book doesn't publish.`,
+      };
+    }
+    return gradeCombo(p, parts, column);
+  }
+  if (p.is_combo && /\+/.test(p.handle)) {
+    // Flagged a combo, and the name has a separator we could not resolve into
+    // distinct players. Guessing which players it means would grade money
+    // against the wrong stat lines.
+    return {
+      pickId: p.id, status: 'ungradeable', actual: null, source: null, seriesKey: null,
+      note: `Can't split "${p.handle}" into players, so there is nothing to add up.`,
+    };
+  }
+
   if (!column) {
     return {
       pickId: p.id, status: 'ungradeable', actual: null, source: null, seriesKey: null,

@@ -109,6 +109,47 @@ export function parseUnderdogStat(stat: string): Canon | null {
   return { stat: name, mapStart: range[0], mapEnd: range[1], isCombo: false };
 }
 
+/**
+ * Split a combo handle into the canon handles of the players it sums.
+ *
+ * PrizePicks publishes a combo as one "player" whose display name is the
+ * members joined by " + " (`Bin + Xun + knight`), with the stat and map range
+ * written exactly as on a single-player line. The handle is therefore the only
+ * place the membership is recorded, and splitting it is the only route to the
+ * per-player stat lines a combo is built from.
+ *
+ * The handle is also the AUTHORITY on whether a prop is a combo at all.
+ * PrizePicks additionally sets `combo: true` on the player node, and that flag
+ * over-fires: on 2026-09-07 it was set on `eraa`, a single CS2 player whose
+ * "MAPS 1-2 Kills" line of 30.5 is single-player sized and whom Underdog lists
+ * as an ordinary player on the very same market. Believing the flag cost that
+ * market its cross-book comparison and made it ungradeable for no reason. A
+ * name with one player in it is one player, whatever the metadata says.
+ *
+ * Returns [] for anything that isn't a splittable multi-player handle, so
+ * "not a combo" and "a combo we can't read" reach the same answer downstream:
+ * no projection, no grade, no guess.
+ */
+export function comboParts(handle: string | null | undefined): string[] {
+  const raw = String(handle ?? '');
+  if (!raw.includes('+')) return [];
+  const parts = raw
+    .split('+')
+    .map((s) => canonHandle(s))
+    .filter((s) => s.length > 0);
+  if (parts.length < 2) return [];
+  // A repeated name means the split is wrong, not that a player counts twice.
+  // Deduping would understate the total by a whole player and keeping both
+  // would overstate it, so neither is guessed at: refusing yields no call.
+  if (new Set(parts).size !== parts.length) return [];
+  return parts;
+}
+
+/** Whether a market is several players summed into one line. */
+export function isComboHandle(handle: string | null | undefined): boolean {
+  return comboParts(handle).length > 1;
+}
+
 /** American odds from Underdog arrive as strings like "-112" / "+140". */
 export function parseAmerican(v: unknown): number | null {
   if (v === null || v === undefined) return null;

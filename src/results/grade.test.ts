@@ -86,10 +86,37 @@ test('a stat the source cannot produce is ungradeable, not zero', async () => {
   assert.equal(g.actual, null);
 });
 
-test('combo props are refused', async () => {
+/**
+ * Combos used to be refused outright. They are graded now — the arithmetic and
+ * its refusals are pinned without a database in `src/combo.test.ts`. What is
+ * left to check here is which props take that path, because the book's own
+ * flag turned out not to be the answer.
+ */
+test("the book's combo flag does not make a single player ungradeable", async () => {
+  // PrizePicks set combo:true on `eraa`, one CS2 player, on 2026-09-07, while
+  // Underdog listed the same kills market as an ordinary player. Believing the
+  // flag made that market ungradeable for no reason. The handle names one
+  // player, so it grades as one player.
   const g = await gradePick({ ...base, is_combo: true });
+  assert.equal(g.actual, 45);
+  assert.equal(g.status, 'won');
+});
+
+test('a combo handle that cannot be split into players is refused, not guessed', async () => {
+  // Two members with the same name means the split is wrong. Grading it as one
+  // player, or as that player twice, are both guesses worth a whole player.
+  const g = await gradePick({
+    ...base, is_combo: true, handle: 'GradeTestPlayer + GradeTestPlayer',
+  });
   assert.equal(g.status, 'ungradeable');
-  assert.match(g.note, /Combo/);
+  assert.match(g.note, /split/);
+});
+
+test('a combo with a member we have no stat line for is ungradeable, never short', async () => {
+  // Only GradeTestPlayer is in the fixture, so no series has both members.
+  const g = await gradePick({ ...base, is_combo: true, handle: 'GradeTestPlayer + Nobody' });
+  assert.equal(g.status, 'ungradeable');
+  assert.equal(g.actual, null);
 });
 
 test('a player with no stat line is ungradeable', async () => {

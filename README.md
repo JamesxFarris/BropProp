@@ -54,8 +54,16 @@ is the record of what was placed. Every pick stores the line it was taken at,
 which is what makes results gradeable once phase 2 lands.
 
 Combo props (`Dhokla + Inspired + Saint`) are tagged `COMBO`: they look like
-single-player lines, can't be graded per player, and are never cross-book
-matched against one.
+single-player lines and are never cross-book matched against one. They are
+projected and graded, though — from the series their members actually played
+*together*, so whatever correlation exists between teammates is inside the
+sample rather than assumed away. See `src/combo.ts` for why summing per-player
+distributions was rejected and what was measured to decide it.
+
+A prop is a combo when its *handle* names more than one player. PrizePicks also
+publishes a `combo` flag and it over-fires — it was set on a single CS2 player
+whom Underdog listed normally on the same market, which split that market in
+two and hid a 4.0 gap between the books.
 
 Set `DASHBOARD_PASSWORD` in production — the dashboard accepts writes.
 
@@ -162,8 +170,10 @@ same stat, same map range, different number).
 
   The rules that decide money are tested directly: an unplayed map in the range
   voids the prop rather than grading it short, a stat the source can't produce
-  is `ungradeable` rather than zero, combos are refused, and a pick with no
-  stat line yet stays pending so a late result still grades it.
+  is `ungradeable` rather than zero, and a pick with no stat line yet stays
+  pending so a late result still grades it. Combos apply those same two rules
+  member by member — a map missing one member is a hole, not a smaller total —
+  and are refused only when the handle can't be split into players.
 - **Phase 3 — dumb baselines.** Score naive strategies (always under, fade the
   move, take the Underdog side on disagreement) before modelling anything.
   Anything beating 54% here is real signal.
