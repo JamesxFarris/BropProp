@@ -10,7 +10,8 @@ import {
   openPicks, addPick, removePick, placeSlip, clearOpenSlip, slips, slipPicks,
   openSlipBook, WrongBookError, SideUnavailableError,
 } from './picks.js';
-import { boardPage, edgesPage, slipsPage, historyPage } from './render.js';
+import { boardPage, edgesPage, slipsPage, historyPage, buildPage } from './render.js';
+import { buildEntries } from './optimize.js';
 import { projectBoard } from './projection.js';
 
 const PORT = Number(process.env.PORT ?? 3000);
@@ -136,6 +137,23 @@ const server = createServer(async (req, res) => {
         if (Number.isFinite(id)) await removePick(id);
         return redirect(res, back);
       }
+      // Stage a suggested entry as the open slip, in order, stopping at the
+      // first leg the rules refuse rather than silently building a partial one.
+      if (url.pathname === '/build/stage') {
+        const ids = (body.get('prop_ids') ?? '').split(',').map(Number).filter(Number.isFinite);
+        const sides = (body.get('sides') ?? '').split(',');
+        await clearOpenSlip();
+        for (const [i, id] of ids.entries()) {
+          const side = sides[i];
+          if (side !== 'over' && side !== 'under') continue;
+          try {
+            await addPick(id, side);
+          } catch {
+            break;
+          }
+        }
+        return redirect(res, '/board');
+      }
       if (url.pathname === '/slip/clear') {
         await clearOpenSlip();
         return redirect(res, back);
@@ -200,6 +218,23 @@ const server = createServer(async (req, res) => {
         })),
       );
       return html(res, boardPage({ rows, picks, health: h, leagues: known, filters, lockedBook, blocked, form }));
+    }
+
+    if (url.pathname === '/build') {
+      const bookParam = url.searchParams.get('book');
+      const book: 'prizepicks' | 'underdog' =
+        (lockedBook as 'prizepicks' | 'underdog' | null) ??
+        (bookParam === 'underdog' ? 'underdog' : 'prizepicks');
+      const rows = await markets({ league: filters.league, book, matched: false, search: null });
+      const form = await projectBoard(
+        rows.map((r) => ({
+          canon_handle: r.canon_handle, league: r.league, stat: r.stat,
+          map_start: r.map_start, map_end: r.map_end,
+        })),
+      );
+      const [picks, h] = await Promise.all([openPicks(), health(filters.league)]);
+      const entries = buildEntries(rows, form, book);
+      return html(res, buildPage({ entries, book, lockedBook, picks, health: h }));
     }
 
     if (url.pathname === '/slips') {

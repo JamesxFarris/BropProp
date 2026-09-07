@@ -585,3 +585,19 @@ button.link:hover { color: var(--under); text-decoration: underline; }
   padding: 1px 4px; border-radius: 3px;
   color: var(--text-2); border: 1px solid var(--line-2);
 }
+
+/* ---- build --------------------------------------------------------- */
+
+.evbar {
+  display: flex; align-items: baseline; gap: 12px;
+  padding: 14px 18px; border-bottom: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.evnum {
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+  font-size: 28px; font-weight: 700;
+}
+.evnum.up   { color: var(--over); }
+.evnum.flat { color: var(--text); }
+.evnum.down { color: var(--under); }
+.evlab { font-size: 13px; color: var(--text-2); }

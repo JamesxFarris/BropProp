@@ -3,6 +3,7 @@ import type { PickRow, SlipSummary } from './picks.js';
 import type { MarketRow, PropHistory } from './boardq.js';
 import type { FormStats, Play } from './projection.js';
 import { recommend, type LineOption } from './projection.js';
+import type { Entry } from './optimize.js';
 
 export const esc = (s: unknown) =>
   String(s ?? '').replace(/[&<>"']/g, (c) =>
@@ -161,7 +162,7 @@ function filterBar(path: string, f: Filters, leagues: string[], locked: string |
 
 function shell(o: {
   title: string;
-  active: 'board' | 'signal' | 'slips' | 'none';
+  active: 'board' | 'signal' | 'slips' | 'build' | 'none';
   health: Health;
   filters?: string;
   rail?: string;
@@ -192,6 +193,7 @@ function shell(o: {
     <h1 class="brand">BropProp <em>${esc(o.title)}</em></h1>
     <nav class="tabs">
       ${tab('/board', 'Board', o.active === 'board')}
+      ${tab('/build', 'Build', o.active === 'build')}
       ${tab('/', 'Edges', o.active === 'signal')}
       ${tab('/slips', 'Slips', o.active === 'slips')}
     </nav>
@@ -1034,5 +1036,102 @@ export function slipsPage(o: {
     health: o.health,
     rail: slipRail(o.picks, '/slips'),
     body,
+  });
+}
+
+
+// ------------------------------------------------------------------ build --
+
+/**
+ * Suggested entries.
+ *
+ * The honest framing matters more than the arithmetic here: every number below
+ * rests on win probabilities this tool estimated and has never yet been graded
+ * against. An EV above 1.0 means "worth it if the probabilities are right",
+ * which is a claim the results page will eventually settle and cannot settle
+ * today.
+ */
+export function buildPage(o: {
+  entries: Entry[];
+  book: 'prizepicks' | 'underdog';
+  lockedBook: string | null;
+  picks: PickRow[];
+  health: Health;
+}): string {
+  const tab = (b: string, label: string) =>
+    `<a href="/build?book=${b}"${o.book === b ? ' aria-current="page"' : ''}>${label}</a>`;
+
+  const filters = `<div class="filters">
+    <div class="group"><span class="lab">App</span><nav class="seg">
+      ${o.lockedBook
+        ? `<span class="seg-locked">${bookName(o.lockedBook)}</span>`
+        : tab('prizepicks', 'PrizePicks') + tab('underdog', 'Underdog')}
+    </nav>${o.lockedBook ? '<span class="lab">set by your slip</span>' : ''}</div>
+  </div>`;
+
+  const body = o.entries.length === 0
+    ? `<div class="card"><div class="empty">Not enough qualifying markets to build an entry on
+       ${esc(bookName(o.book))} right now. Legs need a projection, a playable side, and a match
+       that hasn't started.</div></div>`
+    : o.entries.map((e) => {
+        const ev = e.evMultiple;
+        const cls = ev >= 1.15 ? 'up' : ev >= 1 ? 'flat' : 'down';
+        return `<div class="card">
+      <div class="card-head">
+        <h2>${e.size}-pick</h2>
+        <span class="sub">${e.payout.toFixed(2)}× payout · ${(e.winProb * 100).toFixed(1)}% to hit all${
+          e.discounted ? ` · ${e.discounted} discounted leg${e.discounted === 1 ? '' : 's'}` : ''
+        }</span>
+      </div>
+      <div class="evbar">
+        <span class="evnum ${cls}">${ev.toFixed(2)}×</span>
+        <span class="evlab">expected return per unit staked${
+          ev < 1 ? ' — below break-even' : ''
+        }</span>
+        <span class="grow"></span>
+        <form method="post" action="/build/stage" class="inline">
+          <input type="hidden" name="prop_ids" value="${e.legs.map((l) => l.propId).join(',')}">
+          <input type="hidden" name="sides" value="${e.legs.map((l) => l.play.side).join(',')}">
+          <button class="go" style="width:auto;padding:9px 18px">Build this slip</button>
+        </form>
+      </div>
+      <div class="scroll"><table><tbody>${e.legs.map((l) => `<tr>
+        <td><div class="who">${leagueBadge(l.row.league)}
+          <div class="whobody">
+            <div class="name">${esc(l.row.handle)}</div>
+            <div class="meta matchline">${esc(l.row.match_title ?? '—')}</div>
+          </div></div></td>
+        <td><div class="sub2">${esc(statLabel(l.row.stat))}</div>
+            <div class="meta">${esc(maps(l.row.map_start, l.row.map_end))}</div></td>
+        <td><div class="play ${l.play.side === 'over' ? 'o' : 'u'}">
+              <span class="dir">${l.play.side === 'over' ? 'Over' : 'Under'}</span>
+              <span class="at">${l.play.line.toFixed(1)}</span>
+            </div></td>
+        <td class="n"><span class="fig sm">${(l.p * 100).toFixed(0)}%</span>
+            <div class="meta">${l.play.method === 'series' ? `${l.play.series} series` : 'modelled'}</div></td>
+        <td class="n">${
+          Math.abs(l.mult - 1) > 0.005
+            ? `<span class="est">${l.mult.toFixed(2)}×</span>`
+            : '<span class="meta">standard</span>'
+        }</td>
+      </tr>`).join('')}</tbody></table></div>
+    </div>`;
+      }).join('');
+
+  return shell({
+    title: 'Build',
+    active: 'build',
+    health: o.health,
+    filters,
+    rail: slipRail(o.picks, `/build?book=${o.book}`),
+    body: `<div class="notice">Each entry takes the highest-value legs available, where value is
+      win probability times what the leg pays. One leg per player, at most two per match — legs
+      from one match move together, and both books reprice correlated entries.</div>
+      <div class="notice warn-notice">Treat the expected return as an upper bound, not a
+      forecast. Picking the best few legs out of a hundred estimates selects for the ones that
+      got lucky, so the number shown is optimistic even after probabilities are shrunk toward a
+      coin flip. Nothing here has been checked against a graded result yet — that is what the
+      Slips page will eventually settle.</div>
+      ${body}`,
   });
 }
