@@ -51,7 +51,11 @@ export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  */
 export async function getJson(
   url: string,
-  { retries = 3, timeoutMs = 30_000 }: { retries?: number; timeoutMs?: number } = {},
+  {
+    retries = 3,
+    timeoutMs = 30_000,
+    headers = {},
+  }: { retries?: number; timeoutMs?: number; headers?: Record<string, string> } = {},
 ): Promise<{ status: number; body: any }> {
   let lastStatus = 0;
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -60,7 +64,7 @@ export async function getJson(
     try {
       const res = await fetch(url, {
         signal: ctrl.signal,
-        headers: { 'User-Agent': UA, Accept: 'application/json' },
+        headers: { 'User-Agent': UA, Accept: 'application/json', ...headers },
       });
       lastStatus = res.status;
       if (res.status === 429 || res.status >= 500) {

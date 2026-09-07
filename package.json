@@ -16,9 +16,10 @@
     "start": "tsx src/main.ts",
     "report": "tsx src/report.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test src/*.test.ts",
+    "test": "tsx --test src/**/*.test.ts",
     "worker": "tsx src/cron.ts",
-    "web": "tsx src/web/server.ts"
+    "web": "tsx src/web/server.ts",
+    "grade": "tsx src/results/run.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.7",
