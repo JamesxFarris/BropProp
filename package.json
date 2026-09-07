@@ -20,7 +20,8 @@
     "worker": "tsx src/cron.ts",
     "web": "tsx src/web/server.ts",
     "grade": "tsx src/results/run.ts",
-    "backfill": "tsx src/results/backfill.ts"
+    "backfill": "tsx src/results/backfill.ts",
+    "oe": "tsx src/results/oracleselixir.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.7",
