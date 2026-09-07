@@ -755,6 +755,25 @@ function bestSide(book: string, delta: number | null): 'both' | 'over' | 'under'
   return ppCheaper ? 'under' : 'over';
 }
 
+/**
+ * Which sides are takeable on `book` — the single answer both pages use.
+ *
+ * `bestSide` says which side is the better price; this says which sides are
+ * *offered*, and the difference is the whole bug it was written for. The board
+ * restricted the offer, but the disagreements page passed "both" and used
+ * bestSide only to paint a marker — so with a slip open on Underdog it still
+ * offered the Underdog over while PrizePicks priced that same over lower.
+ * Marking a side is advice; offering it is a button that takes the worse
+ * number, and the two pages must not disagree about which they are doing.
+ */
+export function offeredSides(
+  book: string,
+  delta: number | null,
+  restrict: boolean,
+): 'both' | 'over' | 'under' {
+  return restrict ? bestSide(book, delta) : 'both';
+}
+
 export function boardPage(o: {
   rows: MarketRow[];
   picks: PickRow[];
@@ -984,7 +1003,7 @@ export function boardPage(o: {
                 ? `<td class="n bookcol" data-book="PrizePicks"><div class="bookcell">
                 <span class="fig${r.pp_line === null ? ' muted' : ''}">${num(r.pp_line)}</span>
                 ${ouButtons(r.pp_prop_id, back, r.pp_side,
-                  restrict ? bestSide('prizepicks', r.delta === null ? null : Number(r.delta)) : 'both',
+                  offeredSides('prizepicks', r.delta === null ? null : Number(r.delta), restrict),
                   play?.book === 'prizepicks' ? play.side : 'both',
                   { over: r.pp_over_ok, under: r.pp_under_ok })}
               </div></td>`
@@ -996,7 +1015,7 @@ export function boardPage(o: {
                 ? `<td class="n bookcol" data-book="Underdog"><div class="bookcell">
                 <span class="fig${r.ud_line === null ? ' muted' : ''}">${num(r.ud_line)}</span>
                 ${ouButtons(r.ud_prop_id, back, r.ud_side,
-                  restrict ? bestSide('underdog', r.delta === null ? null : Number(r.delta)) : 'both',
+                  offeredSides('underdog', r.delta === null ? null : Number(r.delta), restrict),
                   play?.book === 'underdog' ? play.side : 'both',
                   { over: r.ud_over_ok, under: r.ud_under_ok })}
               </div></td>`
@@ -1034,6 +1053,13 @@ export function edgesPage(o: {
 }): string {
   const back = `/${qs({}, o.filters)}`;
   const gaps = o.rows.filter((r) => r.delta !== null && Number(r.delta) !== 0);
+  // Same two lines as the board, and deliberately identical: an app chosen by
+  // filter and an app forced by an open slip narrow this page the same way,
+  // because the server has already collapsed the two into filters.book. Every
+  // row here has a non-zero gap, so under a narrowed app exactly one side of
+  // each is the better number — and only that one is offered.
+  const only = o.lockedBook ?? o.filters.book;
+  const restrict = Boolean(only) && o.filters.best;
 
   const gapsCard =
     gaps.length === 0
@@ -1075,7 +1101,8 @@ export function edgesPage(o: {
               ${
                 o.lockedBook === 'underdog'
                   ? ''
-                  : ouButtons(r.pp_prop_id, back, r.pp_side, 'both',
+                  : ouButtons(r.pp_prop_id, back, r.pp_side,
+                      offeredSides('prizepicks', r.delta === null ? null : Number(r.delta), restrict),
                       bestSide('prizepicks', r.delta === null ? null : Number(r.delta)))
               }</div></td>
             <td class="c gapcell"><span class="gap-chip ${d > 0 ? 'up' : 'down'}">${signed(d)}</span></td>
@@ -1083,7 +1110,8 @@ export function edgesPage(o: {
               ${
                 o.lockedBook === 'prizepicks'
                   ? ''
-                  : ouButtons(r.ud_prop_id, back, r.ud_side, 'both',
+                  : ouButtons(r.ud_prop_id, back, r.ud_side,
+                      offeredSides('underdog', r.delta === null ? null : Number(r.delta), restrict),
                       bestSide('underdog', r.delta === null ? null : Number(r.delta)))
               }</div></td>
             <td class="sidecol"><span class="pickside wide ${cls}">${cheaper}</span></td>
