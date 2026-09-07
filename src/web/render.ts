@@ -650,7 +650,7 @@ export function boardPage(o: {
           restrict ? ' · showing only the side each app prices better' : ''
         }</span>
       </div>
-      <div class="scroll"><table>
+      <div class="scroll"><table class="board-table">
         <thead><tr>
           <th class="c">Score</th>
           <th>Player</th>
@@ -697,11 +697,11 @@ export function boardPage(o: {
               <div class="sub2">${esc(statLabel(r.stat))}</div>
               <div class="meta">${esc(maps(r.map_start, r.map_end))}</div>
             </td>
-            <td class="n">${formCell(formOf(r), play)}</td>
+            <td class="n formcol">${formCell(formOf(r), play)}</td>
             <td>${playCell(play, formOf(r), r)}</td>
             ${
               showPP
-                ? `<td class="n"><div class="bookcell">
+                ? `<td class="n bookcol" data-book="PrizePicks"><div class="bookcell">
                 <span class="fig${r.pp_line === null ? ' muted' : ''}">${num(r.pp_line)}</span>
                 ${ouButtons(r.pp_prop_id, back, r.pp_side,
                   restrict ? bestSide('prizepicks', r.delta === null ? null : Number(r.delta)) : 'both',
@@ -710,10 +710,10 @@ export function boardPage(o: {
               </div></td>`
                 : ''
             }
-            <td class="c">${gap}</td>
+            <td class="c gapcol">${gap}</td>
             ${
               showUD
-                ? `<td class="n"><div class="bookcell">
+                ? `<td class="n bookcol" data-book="Underdog"><div class="bookcell">
                 <span class="fig${r.ud_line === null ? ' muted' : ''}">${num(r.ud_line)}</span>
                 ${ouButtons(r.ud_prop_id, back, r.ud_side,
                   restrict ? bestSide('underdog', r.delta === null ? null : Number(r.delta)) : 'both',
