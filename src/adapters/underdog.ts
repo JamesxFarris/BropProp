@@ -1,7 +1,14 @@
 import { getJson, type FetchResult, type RawProp } from './types.js';
 import { canonLeague, parseUnderdogStat, parseAmerican } from '../normalize.js';
 
-const URL = 'https://api.underdogfantasy.com/beta/v6/over_under_lines';
+// The `/beta/` tree was version-gated on 2026-09-07: every path from v3 to v6
+// began returning HTTP 426 `upgrade_required` ("A new version is required to
+// continue") to any client, while v7+ 404s — so there is no newer beta to move
+// to. The unversioned `/v1/` path serves the identical payload (same top-level
+// arrays, same nested field names) and is not gated. Underdog rebranded to
+// underdogsports.com around the same time; `api.underdogsports.com` does not
+// resolve, so the API host is unchanged.
+const URL = 'https://api.underdogfantasy.com/v1/over_under_lines';
 
 /**
  * Underdog returns the whole board in one unauthenticated call (~15MB) as a set
