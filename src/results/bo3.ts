@@ -43,7 +43,7 @@ const API = 'https://api.bo3.gg/api/v1';
 const CS2_DISCIPLINE = 1;
 
 /** No rate limiting was observed. This is politeness, not a measured floor. */
-const GAP_MS = 90;
+export const GAP_MS = 90;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -85,7 +85,7 @@ export type Bo3PlayerStat = {
   } | null;
 };
 
-async function getJson<T>(url: string): Promise<T> {
+export async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url, {
     headers: { Accept: 'application/json', 'User-Agent': 'BropProp/0.1 (prop research)' },
   });

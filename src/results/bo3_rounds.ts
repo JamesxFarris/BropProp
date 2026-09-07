@@ -1,5 +1,6 @@
 import { pathToFileURL } from 'node:url';
 import { pool, q } from '../db.js';
+import { getJson, GAP_MS } from './bo3.js';
 
 /**
  * Backfill `map_stat.rounds` for CS2 history stored before Task 4 taught the
@@ -20,22 +21,15 @@ import { pool, q } from '../db.js';
  * every response is re-checked: any game id that comes back which was not
  * requested is skipped rather than written, matching the discipline `bo3.ts`
  * already applies to every filter it sends.
+ *
+ * `getJson` and the `GAP_MS` politeness delay are imported from `bo3.ts`
+ * rather than duplicated, so a future change to headers or pacing there
+ * cannot silently drift out of sync with this file.
  */
 
 const API = 'https://api.bo3.gg/api/v1';
 
-/** Same politeness delay bo3.ts uses. No rate limiting observed; not a measured floor. */
-const GAP_MS = 90;
-
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-async function getJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, {
-    headers: { Accept: 'application/json', 'User-Agent': 'BropProp/0.1 (prop research)' },
-  });
-  if (!res.ok) throw new Error(`bo3 ${res.status} ${url.slice(API.length)}`);
-  return (await res.json()) as T;
-}
 
 type Bo3GameRow = {
   id: number;
@@ -131,7 +125,17 @@ export async function backfillRounds(limit?: number): Promise<{ games: number; r
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const capArg = process.argv[2];
-  const cap = capArg ? Number(capArg) : undefined;
+  let cap: number | undefined;
+  if (capArg !== undefined) {
+    const parsed = Number(capArg);
+    // NaN passes `typeof === 'number'`, and Array.slice(0, NaN) silently
+    // returns an empty array — that would report success after doing
+    // nothing. Fail loudly instead of quietly processing zero games.
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      throw new Error(`bo3_rounds: expected a positive number of games, got "${capArg}"`);
+    }
+    cap = parsed;
+  }
   await backfillRounds(cap);
   await pool.end();
 }
