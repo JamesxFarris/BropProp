@@ -203,6 +203,59 @@ column working — a tool that names an edge on every row has no edges.
   uncollectable — though it should keep saying so until enough history has
   actually accrued, since the honest empty state was never the problem.
   Headshot props specifically move from ungradeable to gradeable.
+- **2026-09-07** — Gave the chrome its own colour, because gold was making two
+  claims at once. A selected filter and a high-scoring line were the same
+  amber, which meant the one hue that is supposed to say *this is worth your
+  money* also said *you clicked this*. Navigation, filters and the freshness
+  readout moved to a cyan drawn from the LoL identity, and cyan is now barred
+  from appearing on a row exactly as gold, green and red are barred from the
+  chrome. The wordmark takes the same cyan on its second half — the one place
+  colour is allowed to be decoration, since a name means itself. (Note the
+  drift this resolves: the section above still says league carries colour, but
+  the palette was cut to three meanings before this and league identity is a
+  neutral chip. It is a chip because the label already says which game it is.)
+- **2026-09-07** — Replaced the green status dot with a depleting gauge. A dot
+  is binary and spends its whole life saying "fine" right up to the moment it
+  says "not fine", which is the least useful shape a staleness indicator can
+  take — the interesting part is the approach, not the arrival. The gauge fills
+  over two poll intervals with a notch at one, so a board halfway to overdue
+  looks halfway to overdue, and the age is written beside it because a bar
+  alone is a feeling and this page deals in numbers. Once it pins, colour and
+  the word "overdue" take over and on a narrow header the bar stands down,
+  having nothing left to say.
+- **2026-09-07** — Everything except the board was unusable on a phone, and in
+  the worst way: the tables didn't overflow, they were *clipped* by the card
+  around them, so the Underdog column, the match and the leg status were not
+  merely awkward but unreachable. Silent truncation is worse than a scrollbar,
+  and a card is better than either, so the board's card treatment became a
+  general one and each table now places its own cells — the disagreement table
+  leads with the gap and the side it favours, the movement table with where a
+  line came from and where it got to. Tap targets went to 44px throughout;
+  where a player name genuinely is a small piece of text, the hit area is grown
+  with a pseudo-element so the target gets bigger without the card getting
+  taller.
+- **2026-09-07** — The slip became a bottom sheet wherever the rail can't sit
+  beside the board. Stacked under twenty market cards it existed but could not
+  be seen while building, which is the only time it matters. It is a label
+  driving a checkbox rather than a script, because everything inside it is a
+  write and writes here are plain forms that survive having scripts blocked — a
+  drawer needing JavaScript to open would have hidden the one set of controls
+  that must never need it.
+- **2026-09-07** — Search filters as you type. This is deliberately a narrowing
+  of what the server already sent rather than a fetch: the form still submits on
+  Enter, so with scripts off the box behaves exactly as it did, and no write
+  path learned a new trick. Rows carry their own search text from the server,
+  since a continuation row omits the match title on purpose and reading it back
+  out of the DOM would have made those rows unfindable. While a term is live the
+  continuation rows stop being quiet, because the row they were borrowing their
+  identity from may no longer be on screen.
+- **2026-09-07** — Took some of the flatness out without reaching for shadows.
+  Structure still comes from rules and spacing, but card headers now sit on
+  their own tone, raised surfaces carry a one-pixel highlight along their top
+  edge, and the header wears a band of the chrome colour. That is lighting, not
+  a drop shadow: it says where the light is and nothing else. The remaining
+  middle-dot meta strings went at the same time — they were the documented tell
+  the last rebuild was supposed to have removed.
 - **2026-09-06** — Stack: server-rendered HTML from the existing Node app with
   hand-written CSS. No framework and no component library, so nothing arrives
   with a default look that has to be fought. It's read-only tables over

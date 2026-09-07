@@ -1,14 +1,20 @@
 /* BropProp
    ---------------------------------------------------------------------
-   Colour carries exactly three meanings and nothing else:
+   Colour carries exactly four meanings and nothing else:
 
-     gold   this is worth your money   (brand, and the strength score)
+     gold   this is worth your money   (the strength score, the place button)
      green  over
      red    under
+     cyan   the view you have chosen   (nav, filters, freshness)
 
-   Everything else — leagues, books, chrome — is neutral. Four competing
-   colour languages is what made the board hard to read; league identity
-   is now a labelled chip, because the label already says which game it is.
+   Cyan is the chrome voice and never appears on a row; gold, green and red
+   are the data voices and never appear in the chrome. That separation is the
+   point: gold used to do double duty as both "selected filter" and "worth
+   your money", which is one hue making two claims on the same screen.
+
+   Everything else — leagues, books — is neutral. Four competing colour
+   languages is what made the board hard to read; league identity is a
+   labelled chip, because the label already says which game it is.
 
    Dark is the default: this is a tool used at night, next to a stream. */
 
@@ -36,8 +42,15 @@
   --under:     #fb7185;
   --under-bg:  #fb718522;
 
-  --live:      #34d399;
-  --focus:     #f0b429;
+  /* Chrome. One hue for "where you are", so gold can mean only one thing. */
+  --nav:       #3fc9e4;
+  --nav-dim:   #3fc9e41f;
+  --nav-ink:   #06222a;
+
+  --focus:     #3fc9e4;
+  /* A one-pixel lift along the top edge of raised surfaces. Not a drop
+     shadow — the light is coming from above, which is all it says. */
+  --lift:      inset 0 1px 0 rgba(255, 255, 255, .045);
 
   --font: 'Barlow', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -66,8 +79,11 @@
   --over-bg:   #0f8a5f16;
   --under:     #c2334d;
   --under-bg:  #c2334d16;
-  --live:      #0f8a5f;
-  --focus:     #a76a00;
+  --nav:       #0d7d96;
+  --nav-dim:   #0d7d9614;
+  --nav-ink:   #ffffff;
+  --focus:     #0d7d96;
+  --lift:      inset 0 1px 0 rgba(255, 255, 255, .9);
 }
 
 * { box-sizing: border-box; }
@@ -99,6 +115,14 @@ a { color: inherit; }
   position: sticky; top: 0; z-index: 20;
   background: var(--surface);
   border-bottom: 1px solid var(--line);
+  box-shadow: var(--lift);
+}
+/* A band across the very top, in the chrome hue. The header used to be a
+   grey strip with one gold pill in it; this gives the app an edge you can
+   see from across the room without adding a hue to any row. */
+.top::before {
+  content: ''; display: block; height: 3px;
+  background: var(--nav);
 }
 .top-in {
   max-width: 1560px; margin: 0 auto; padding: 12px 22px;
@@ -106,41 +130,95 @@ a { color: inherit; }
 }
 
 .brand {
-  display: flex; align-items: baseline; gap: 9px;
-  font-size: 20px; font-weight: 700; letter-spacing: -.02em;
+  display: flex; align-items: baseline; gap: 10px;
+  font-size: 21px; font-weight: 700; letter-spacing: -.025em;
   margin: 0; white-space: nowrap;
 }
+.brand a {
+  text-decoration: none; color: var(--text);
+  border-radius: var(--r-s);
+}
+/* Two-tone wordmark: the second half in the chrome hue, so the name is the
+   one place the app's own colour is allowed to be decoration — it is the
+   name, and a name is the only thing on this page that means itself. */
+.brand a span { color: var(--nav); }
+.brand a:hover span { color: var(--text); }
 .brand em {
-  font-style: normal; font-weight: 500; font-size: 14px; color: var(--text-3);
+  font-style: normal; font-weight: 600; font-size: 12px;
+  letter-spacing: 0; color: var(--text-2);
+  padding: 3px 8px; border-radius: 99px;
+  background: var(--surface-2); border: 1px solid var(--line);
 }
 
-.tabs { display: flex; gap: 4px; }
+.tabs { display: flex; gap: 2px; }
 .tabs a {
-  padding: 8px 16px; border-radius: var(--r);
+  position: relative;
+  padding: 9px 15px 10px; border-radius: var(--r-s) var(--r-s) 0 0;
   font-size: 15px; font-weight: 600; color: var(--text-2);
   text-decoration: none; white-space: nowrap;
+  border-bottom: 2px solid transparent;
 }
 .tabs a:hover { background: var(--surface-2); color: var(--text); }
-.tabs a[aria-current="page"] { background: var(--brand); color: var(--brand-ink); }
+.tabs a[aria-current="page"] {
+  color: var(--nav); background: var(--nav-dim); border-bottom-color: var(--nav);
+}
 
 .top .grow { flex: 1 1 auto; }
 
-.status {
-  display: inline-flex; align-items: center; gap: 7px;
+/* ---- freshness ------------------------------------------------------
+   A depleting gauge, not a status light. A dot is binary and spends most of
+   its life saying "fine" — the useful information is how far through the
+   window you are, so the fill is the share of two poll intervals already
+   spent and the age is written out beside it. The notch marks one interval:
+   past it a poll is late, past the end of the track it is overdue. */
+
+.fresh {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 12px; border-radius: 99px;
+  border: 1px solid var(--line); background: var(--surface-2);
+  box-shadow: var(--lift);
   font-size: 13px; font-weight: 500; color: var(--text-2);
 }
-.dot {
-  width: 8px; height: 8px; border-radius: 50%;
-  background: var(--live); flex: none;
+.fresh-k { color: var(--text-3); }
+.fresh-v {
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+  font-size: 13px; color: var(--text);
 }
-.status.stale { color: var(--under); }
-.status.stale .dot { background: var(--under); }
+.fresh-gauge {
+  position: relative; display: block;
+  width: 54px; height: 6px; flex: none;
+  border-radius: 99px; overflow: hidden;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+.fresh-gauge > i {
+  display: block; height: 100%;
+  background: var(--nav);
+  transition: width .4s linear;
+}
+/* One poll interval. Half the track is a fact, not a decoration. */
+.fresh-gauge::after {
+  content: ''; position: absolute; left: 50%; top: 0; bottom: 0;
+  width: 1px; background: var(--bg); opacity: .85;
+}
+.fresh.stale {
+  color: var(--under); border-color: var(--under); background: var(--under-bg);
+}
+.fresh.stale .fresh-k { color: var(--under); }
+.fresh.stale .fresh-v { color: var(--under); }
+.fresh.stale .fresh-gauge { border-color: var(--under); background: transparent; }
+.fresh.stale .fresh-gauge > i { background: var(--under); }
+.fresh.stale .fresh-gauge::after { background: var(--under-bg); }
+.fresh-flag {
+  font-size: 12px; font-weight: 600; color: var(--under);
+}
 
 .icon-btn {
   font-family: var(--font); font-size: 13px; font-weight: 600;
-  padding: 7px 13px; border-radius: var(--r);
+  padding: 8px 13px; border-radius: var(--r);
   background: var(--surface-2); color: var(--text-2);
   border: 1px solid var(--line); cursor: pointer;
+  box-shadow: var(--lift);
 }
 .icon-btn:hover { color: var(--text); border-color: var(--line-2); }
 
@@ -168,23 +246,44 @@ a { color: inherit; }
   font-size: 15px; font-weight: 600; text-decoration: none;
   white-space: nowrap;
 }
+.seg a { box-shadow: var(--lift); }
 .seg a:hover { border-color: var(--line-2); color: var(--text); }
+/* Selected is the chrome hue, not gold: "this filter is on" and "this line is
+   worth your money" were the same colour, and only one of them is about money. */
 .seg a[aria-current="page"] {
-  background: var(--brand); border-color: var(--brand); color: var(--brand-ink);
-}
-.seg a.cs2[aria-current="page"], .seg a.lol[aria-current="page"] {
-  background: var(--brand); border-color: var(--brand); color: var(--brand-ink);
+  background: var(--nav); border-color: var(--nav); color: var(--nav-ink);
+  box-shadow: none;
 }
 
-
-.search { display: flex; gap: 6px; align-items: center; }
+.search { display: flex; gap: 6px; align-items: center; position: relative; }
 .search input {
-  font-family: var(--font); font-size: 14px;
-  padding: 8px 12px; width: 200px;
+  font-family: var(--font); font-size: 15px;
+  padding: 9px 12px; width: 210px;
   border-radius: var(--r); border: 1px solid var(--line);
   background: var(--surface); color: var(--text);
 }
 .search input::placeholder { color: var(--text-3); }
+.search input:focus { border-color: var(--nav); }
+.search input::-webkit-search-cancel-button { filter: grayscale(1) opacity(.6); }
+/* Enter already submits. The button exists for the no-script case and for
+   thumbs, and gets out of the way once the live filter has taken over. */
+.search-go {
+  font-family: var(--font); font-size: 14px; font-weight: 600;
+  padding: 9px 14px; border-radius: var(--r);
+  background: var(--surface-2); color: var(--text-2);
+  border: 1px solid var(--line); cursor: pointer;
+}
+.search-go:hover { color: var(--text); border-color: var(--line-2); }
+.search.live .search-go { display: none; }
+
+/* A row the live filter has ruled out. A class rather than [hidden], because
+   the phone layout sets display:block on rows and would win against it. */
+tr.filtered-out { display: none !important; }
+.live-empty {
+  margin: 0; padding: 22px 18px; color: var(--text-2); font-size: 15px;
+  border-top: 1px solid var(--line);
+}
+.live-empty[hidden] { display: none; }
 
 /* ---- page ----------------------------------------------------------- */
 
@@ -205,18 +304,26 @@ a { color: inherit; }
   border: 1px solid var(--line);
   border-radius: 10px;
   overflow: hidden;
+  box-shadow: var(--lift);
 }
 .card + .card { margin-top: 20px; }
 
+/* The header sits on its own plane. Two flat surfaces with a rule between
+   them read as one sheet of paper; a step in tone reads as a card. */
 .card-head {
   display: flex; align-items: center; gap: 14px;
   padding: 14px 18px;
+  background: var(--surface-2);
   border-bottom: 1px solid var(--line);
 }
 .card-head h2 {
   margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -.01em;
 }
 .card-head .sub { font-size: 14px; color: var(--text-3); margin-left: auto; }
+.card-head .sub b {
+  color: var(--text-2); font-weight: 600;
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+}
 
 .scroll { overflow-x: auto; }
 
@@ -230,6 +337,7 @@ thead th {
   text-align: left; padding: 10px 7px;
   background: var(--surface-2);
   border-bottom: 1px solid var(--line);
+  box-shadow: 0 1px 0 var(--line);
   white-space: nowrap;
 }
 th.n, td.n { text-align: right; }
@@ -323,9 +431,15 @@ td.match .sub2 {
 
 form.inline { display: inline; }
 
-/* ---- slip rail ------------------------------------------------------ */
+/* ---- slip rail ------------------------------------------------------
+   Wide enough for the rail to sit beside the board, it is a sticky column.
+   Narrower than that it becomes a bar pinned to the bottom of the screen
+   that opens into a sheet — see the sheet block further down. Either way
+   the markup is one thing, so the write forms inside it never change. */
 
 .rail { position: sticky; top: 74px; }
+.sheet-toggle { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.sheet-bar { display: none; }
 
 .slip-legs { display: flex; flex-direction: column; }
 .leg {
@@ -337,11 +451,14 @@ form.inline { display: inline; }
 .leg .l1 { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .leg .nm { font-weight: 600; font-size: 15px; overflow: hidden; text-overflow: ellipsis; }
 .leg .l2 { font-size: 13px; color: var(--text-3); }
-.leg .pickside {
+.pickside {
+  display: inline-block;
   font-size: 12px; font-weight: 700; padding: 2px 7px; border-radius: var(--r-s);
+  white-space: nowrap;
 }
-.leg .pickside.o { color: var(--over);  background: var(--over-bg); }
-.leg .pickside.u { color: var(--under); background: var(--under-bg); }
+.pickside.wide { font-size: 13px; font-weight: 600; padding: 4px 9px; }
+.pickside.o { color: var(--over);  background: var(--over-bg); }
+.pickside.u { color: var(--under); background: var(--under-bg); }
 
 button.rm {
   font-family: var(--font); font-size: 16px; line-height: 1;
@@ -381,10 +498,13 @@ button.rm:hover { color: var(--under); border-color: var(--under); background: v
 
 button.go {
   font-family: var(--font); font-size: 16px; font-weight: 700;
-  width: 100%; padding: 13px; border-radius: var(--r); cursor: pointer;
+  width: 100%; min-height: 46px; padding: 13px; border-radius: var(--r);
+  cursor: pointer;
   background: var(--brand); color: var(--brand-ink); border: 1px solid var(--brand);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .28);
 }
 button.go:hover { opacity: .88; }
+button.go:active { box-shadow: none; transform: translateY(1px); }
 
 button.link {
   font-family: var(--font); font-size: 13px; font-weight: 600;
@@ -477,9 +597,12 @@ button.link:hover { color: var(--under); text-decoration: underline; }
 .seg-locked {
   display: inline-flex; align-items: center;
   padding: 9px 17px; border-radius: var(--r);
-  background: var(--brand); color: var(--brand-ink);
+  background: var(--nav); color: var(--nav-ink);
   font-size: 14px; font-weight: 600;
 }
+/* `only-sm` carries a fact the phone card has room for and the desktop table
+   already shows in its own column — the match name, mostly. */
+.only-sm { display: none; }
 
 /* A side that is a worse number than the other app offers. Visible, so the
    market still reads as a pair, but not takeable. */
@@ -540,7 +663,9 @@ button.link:hover { color: var(--under); text-decoration: underline; }
 
 /* Kick-off. Quiet until it matters — a market that has already started is
    the one thing here you cannot act on. */
-.whenline { display: flex; align-items: center; gap: 6px; }
+/* Not a flex row: the gap between items landed before the comma that joins
+   the kick-off to the move, which read as a typo. */
+.whenline { display: block; }
 .when { color: var(--text-3); }
 .when.started { color: var(--under); font-weight: 600; }
 
@@ -568,51 +693,135 @@ button.link:hover { color: var(--under); text-decoration: underline; }
 .evnum.down { color: var(--under); }
 .evlab { font-size: 13px; color: var(--text-2); }
 
+
+/* ---- the slip, when it can't sit beside the board -------------------
+   Below the width where the rail fits alongside, the slip used to stack
+   underneath the board — which on a phone meant twenty market cards of
+   scrolling between taking a leg and seeing it. It becomes a bar pinned to
+   the bottom of the screen instead, opening into a sheet.
+
+   A label driving a checkbox, not a script: everything inside the sheet is
+   a write, and writes on this dashboard are plain forms that survive having
+   scripts blocked. A drawer that needs JavaScript to open would have hidden
+   the only controls that must never need it. */
+
+@media (max-width: 1399px) {
+  .rail {
+    position: fixed; inset: auto 0 0 0; top: auto;
+    z-index: 30;
+    background: var(--surface);
+    border-top: 1px solid var(--line-2);
+  }
+  .sheet-bar {
+    display: flex; align-items: center; gap: 9px;
+    max-width: 1560px; margin: 0 auto;
+    min-height: 56px; padding: 0 16px;
+    cursor: pointer; user-select: none;
+    font-size: 15px; color: var(--text);
+    box-shadow: var(--lift);
+  }
+  .sheet-bar .grow { flex: 1 1 auto; }
+  .sb-k { font-size: 15px; font-weight: 600; color: var(--text); }
+  .sb-k + .sb-k { font-size: 14px; font-weight: 500; color: var(--text-2); }
+  .sb-n {
+    font-family: var(--mono); font-variant-numeric: tabular-nums;
+    font-size: 21px; font-weight: 600; color: var(--brand);
+  }
+  .sb-none { font-size: 14px; color: var(--text-3); }
+  .sb-app {
+    font-size: 13px; font-weight: 600; color: var(--text-2);
+    background: var(--surface-2); border: 1px solid var(--line);
+    padding: 3px 9px; border-radius: var(--r-s);
+  }
+  /* Chevron. It points the way the bar will move. */
+  .sb-caret {
+    width: 9px; height: 9px; flex: none; margin-left: 2px;
+    border-right: 2px solid var(--text-3); border-bottom: 2px solid var(--text-3);
+    transform: rotate(-135deg) translate(-2px, 2px);
+    transition: transform .18s ease;
+  }
+  .sheet-toggle:checked ~ main .sb-caret { transform: rotate(45deg) translate(-1px, -1px); }
+  /* The control is the label; the checkbox behind it still takes focus, so
+     the focus ring has to be drawn where the eye is. */
+  .sheet-toggle:focus-visible ~ main .sheet-bar {
+    outline: 2px solid var(--focus); outline-offset: -3px; border-radius: var(--r);
+  }
+
+  .sheet-body { display: none; }
+  .sheet-toggle:checked ~ main .sheet-body {
+    display: block;
+    max-width: 1560px; margin: 0 auto;
+    max-height: 62vh; overflow-y: auto;
+    border-top: 1px solid var(--line);
+  }
+  /* Inside the sheet the card frame is redundant — the sheet is the frame,
+     and the bar above already says whose slip this is and how long it is. */
+  .sheet-body .card {
+    border: 0; border-radius: 0; box-shadow: none; background: transparent;
+  }
+  .sheet-body .card-head { display: none; }
+  .sheet-body .slip-legs > .leg:first-child { border-top: 0; }
+
+  /* Room for the bar, so the last row and the footer are never under it. */
+  .page { padding-bottom: 76px; }
+  .foot { padding-bottom: 84px; }
+}
+
 /* ---- phone ----------------------------------------------------------
-   A nine-column table doesn't survive a 390px screen, and squeezing it
-   just makes every column unreadable. Below this width each market
-   becomes a card: the score and the call first, because on a phone the
-   question is "what should I take", and the two apps stacked and named
-   underneath so the choice is still explicit. Rows are already sorted
-   strongest-first, so the best options are simply at the top. */
+   A nine-column table doesn't survive a 390px screen, and squeezing it just
+   makes every column unreadable. Below this width every table on the site
+   becomes a list of cards. `.stack-sm` does the conversion; each table then
+   places its own cells, because what leads a card differs — the board leads
+   with the score, the movement table with where the line came from.
+
+   Left alone, these tables didn't scroll sideways: the card clipped them, so
+   the Underdog column and the match simply weren't reachable on a phone.
+   Silent truncation is worse than a scrollbar, and a card is better than
+   either. */
 
 @media (max-width: 760px) {
-  .board-table thead { display: none; }
-  .board-table, .board-table tbody, .board-table tr, .board-table td { display: block; width: auto; }
+  .stack-sm thead { display: none; }
+  .stack-sm, .stack-sm tbody, .stack-sm tr, .stack-sm td { display: block; width: auto; }
 
-  .board-table tr {
+  .stack-sm tr {
     position: relative;
     border: 1px solid var(--line);
     border-radius: 10px;
-    padding: 12px 14px 10px 64px;   /* room for the score */
+    padding: 12px 14px 11px;
     margin: 0 0 10px;
     background: var(--surface);
+    box-shadow: var(--lift);
   }
-  .board-table tbody tr:nth-child(even) td,
-  .board-table tbody tr:hover td { background: transparent; }
-  .board-table td { border: 0; padding: 0; white-space: normal; }
+  .stack-sm tbody tr:nth-child(even) td,
+  .stack-sm tbody tr:hover td { background: transparent; }
+  .stack-sm td { border: 0; padding: 0; white-space: normal; text-align: left; }
+  .stack-sm tr:last-child { margin-bottom: 0; }
+  /* The card already carries the match, so the column that exists for wide
+     screens must stay gone — display:block above would otherwise revive it. */
+  .stack-sm td.hide-sm { display: none; }
 
-  /* Score pinned to the left edge of the card. */
+  .who { gap: 8px; }
+  .name { font-size: 17px; }
+  .matchline { max-width: none; }
+  .only-sm { display: block; }
+  .statcol .statname, .statcol .sub2 { font-size: 15px; }
+
+  /* -- board: the score leads, then the call, then the two apps -- */
+  .board-table tr { padding-left: 64px; }
   .board-table td.c:first-child {
     position: absolute; left: 12px; top: 12px;
     width: 44px; text-align: left;
   }
   .score.hi { font-size: 26px; }
   .score.mid { font-size: 22px; }
-
-  /* Secondary columns: the call already carries the reasoning. */
   .formcol, .gapcol { display: none !important; }
-
-  .who { gap: 8px; }
-  .name { font-size: 17px; }
-  .matchline { max-width: none; }
-
   .play { margin-top: 8px; }
   .play .dir { font-size: 18px; }
 
-  /* The two apps, stacked and named, so the choice stays explicit. */
+  /* -- the two apps, stacked and named, so the choice stays explicit -- */
   .bookcol {
     display: flex !important; align-items: center; gap: 10px;
+    flex: 1 1 100%;
     margin-top: 8px; padding-top: 8px;
     border-top: 1px solid var(--line);
   }
@@ -622,35 +831,128 @@ button.link:hover { color: var(--under); text-decoration: underline; }
     min-width: 84px;
   }
   .bookcol .bookcell { flex: 1; justify-content: flex-end; }
-  .ou button { min-width: 44px; height: 40px; font-size: 15px; }
+  .ou button { min-width: 46px; height: 44px; font-size: 16px; }
 
-  /* Filters: full-width rows that wrap instead of a cramped single line. */
-  .filters { gap: 12px; }
-  .group { flex-wrap: wrap; }
-  .seg a { padding: 9px 14px; }
-  .search input { width: 100%; }
-  .search { width: 100%; }
+  /* -- edges, disagreements: the gap and the side it favours lead -- */
+  .gaps-table tr {
+    display: grid; gap: 4px 10px; align-items: baseline;
+    grid-template-columns: auto 1fr auto;
+  }
+  .gaps-table .idcol   { grid-area: 1 / 1 / 2 / 3; min-width: 0; }
+  .gaps-table .statcol { grid-area: 1 / 3 / 2 / 4; justify-self: end; text-align: right; }
+  .gaps-table .gapcell { grid-area: 2 / 1 / 3 / 2; justify-self: start; margin-top: 8px; }
+  .gaps-table .sidecol { grid-area: 2 / 2 / 3 / 4; margin-top: 8px; }
+  .gaps-table .bookcol { grid-column: 1 / -1; }
 
-  .card-head { flex-wrap: wrap; gap: 6px; }
-  .card-head .sub { margin-left: 0; }
-  .scroll { overflow-x: visible; }
-}
+  /* -- edges, movement: opened, now, and the distance travelled -- */
+  .moves-table tr {
+    display: grid; gap: 4px 10px; align-items: baseline;
+    grid-template-columns: auto auto auto 1fr;
+  }
+  .moves-table .idcol   { grid-area: 1 / 1 / 2 / 4; min-width: 0; }
+  .moves-table .statcol { grid-area: 1 / 4 / 2 / 5; justify-self: end; text-align: right; }
+  .moves-table .appcol  { grid-area: 2 / 1 / 3 / 2; margin-top: 6px; }
+  .moves-table .from    { grid-area: 2 / 2 / 3 / 3; margin-top: 6px; }
+  .moves-table .to      { grid-area: 2 / 3 / 3 / 4; margin-top: 6px; }
+  .moves-table .c.travel{ grid-area: 2 / 4 / 3 / 5; justify-self: end; margin-top: 6px; }
+  .moves-table .obs     { grid-area: 3 / 1 / 4 / 5; }
+  .moves-table .from::after {
+    content: '→'; margin-left: 7px; color: var(--text-3); font-family: var(--font);
+  }
+  .moves-table .obs .meta::after { content: ' changes recorded'; }
 
-/* The filters shouldn't cost a screen of scrolling before the first market. */
-@media (max-width: 760px) {
-  .top-in { padding: 10px 14px; gap: 10px 12px; }
-  .brand { font-size: 17px; }
+  /* -- slips: what was taken, at what number, on which app -- */
+  .legs-table tr {
+    display: grid; gap: 4px 10px; align-items: baseline;
+    grid-template-columns: auto auto auto 1fr;
+  }
+  .legs-table .idcol    { grid-area: 1 / 1 / 2 / 4; min-width: 0; }
+  .legs-table .statcol  { grid-area: 1 / 4 / 2 / 5; justify-self: end; text-align: right; }
+  .legs-table .sidecol  { grid-area: 2 / 1 / 3 / 2; margin-top: 6px; }
+  .legs-table .linecol  { grid-area: 2 / 2 / 3 / 3; margin-top: 6px; }
+  .legs-table .appcol   { grid-area: 2 / 3 / 3 / 4; margin-top: 6px; }
+  .legs-table .statuscol{ grid-area: 2 / 4 / 3 / 5; justify-self: end; margin-top: 6px; }
+
+  /* -- build: the leg, the call, and what it is priced to do -- */
+  .entry-table tr {
+    display: grid; gap: 4px 10px; align-items: baseline;
+    grid-template-columns: auto 1fr auto;
+  }
+  .entry-table .idcol   { grid-area: 1 / 1 / 2 / 3; min-width: 0; }
+  .entry-table .statcol { grid-area: 1 / 3 / 2 / 4; justify-self: end; text-align: right; }
+  .entry-table .callcol { grid-area: 2 / 1 / 3 / 2; margin-top: 6px; }
+  .entry-table .probcol { grid-area: 2 / 2 / 3 / 3; margin-top: 6px; text-align: left; }
+  .entry-table .multcol { grid-area: 2 / 3 / 3 / 4; justify-self: end; margin-top: 6px; }
+  .evbar { flex-wrap: wrap; gap: 4px 12px; padding: 12px 14px; }
+  .evbar .grow { flex: 1 1 100%; height: 0; }
+  .evbar form.inline { width: 100%; }
+  .evbar button.go { width: 100% !important; }
+
+  /* A card list makes its own gutters; only the board's own wrapper stops
+     scrolling. Every other table still scrolls inside its container. */
+  .cards-sm { overflow-x: visible; }
+
+  /* -- header: identity and freshness on one line, tabs on their own -- */
+  .top-in { padding: 10px 14px; gap: 8px 10px; }
+  .brand { font-size: 19px; order: 1; }
   .brand em { display: none; }
-  .tabs a { padding: 6px 12px; font-size: 15px; }
-  .status { font-size: 12px; }
+  .top .grow { order: 2; }
+  .fresh { order: 3; gap: 6px; padding: 5px 10px; }
+  .fresh-k { display: none; }
+  /* Once the gauge is pinned it has nothing left to say, so on a narrow
+     header the word takes its place rather than sitting beside it. */
+  .fresh.stale .fresh-gauge { display: none; }
+  .icon-btn { order: 4; min-height: 44px; }
+  .tabs { order: 5; flex: 1 1 100%; gap: 3px; }
+  .tabs a {
+    flex: 1 1 0; min-width: 0; min-height: 44px;
+    display: flex; align-items: center; justify-content: center;
+    padding: 6px 4px; font-size: 15px;
+    border-radius: var(--r-s);
+    border-bottom-width: 2px;
+  }
+
+  /* -- filters: everything thumb-sized -- */
   .filters { padding: 10px 14px 0; gap: 8px; }
+  .group { flex-wrap: wrap; }
   .group > .lab { display: none; }        /* the chips say what they are */
   .seg { gap: 4px; }
-  .seg a { padding: 8px 12px; font-size: 14px; }
-  .search input { padding: 8px 10px; }
+  .seg a { min-height: 44px; padding: 0 14px; font-size: 15px; }
+  .seg-locked { min-height: 44px; }
+  .search { width: 100%; }
+  .search input { width: 100%; min-height: 46px; padding: 10px 12px; font-size: 16px; }
+  .search-go { min-height: 46px; }
+
   .page { padding-top: 12px; }
-  .banner { font-size: 13px; padding: 9px 12px; }
-  .card-head { padding: 12px 14px; }
+  .banner { font-size: 13px; padding: 10px 12px; }
+  .card-head { padding: 12px 14px; flex-wrap: wrap; gap: 4px 10px; }
+  .card-head .sub { margin-left: 0; }
+  .hist-head { padding: 14px; }
+  .hist-head .name { font-size: 20px; }
+  .facts { gap: 14px 24px; padding: 0 14px 16px; }
+  .chart { padding: 4px 14px 14px; }
+
+  /* -- slip contents, at thumb size -- */
+  .leg { padding: 12px 14px; }
+  button.rm { width: 44px; height: 44px; font-size: 20px; }
+  .payout input, .payout select { min-height: 44px; font-size: 16px; }
+  button.link { min-height: 44px; }
+
+  /* A name in a row is a small target for a thumb. The hit area is grown
+     with a pseudo-element so nothing on the card actually moves. */
+  .name a, .brand a, a.meta { position: relative; display: inline-block; }
+  .name a::after, .brand a::after, a.meta::after {
+    content: ''; position: absolute; top: -13px; bottom: -13px;
+    left: 50%; transform: translateX(-50%);
+    width: max(44px, calc(100% + 20px));
+    z-index: 1; border-radius: var(--r-s);
+  }
+}
+
+/* Between the two: the match column is gone from the table but the card
+   layout hasn't started, so the phone-only copy of it earns its place. */
+@media (max-width: 860px) {
+  .only-sm { display: block; }
 }
 
 /* Several markets on one player are several different bets. Repeating the
@@ -658,6 +960,11 @@ button.link:hover { color: var(--under); text-decoration: underline; }
    so a continuation row keeps the identity quiet and lets the market lead. */
 .who.cont .name { font-weight: 500; color: var(--text-3); font-size: 15px; }
 .who.cont { align-items: center; }
+/* Unless a live search is running: a continuation row borrows its match and
+   kick-off from the row above, and once filtering can hide that row the
+   survivor has to stand on its own name. */
+body.searching .who.cont .name { font-weight: 600; color: var(--text); font-size: 17px; }
+body.searching .tick { display: none; }
 .tick {
   display: inline-block; width: 34px; flex: none;
   border-left: 2px solid var(--line-2); height: 18px; margin-left: 8px;

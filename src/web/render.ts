@@ -148,12 +148,64 @@ function filterBar(path: string, f: Filters, leagues: string[], locked: string |
           : a(qs({ matched: !f.matched }, f), 'On both apps', f.matched)
       }
     </nav></div>
-    <form class="search" method="get" action="${esc(path)}">
+    <form class="search" method="get" action="${esc(path)}"
+          data-live data-q="${esc(f.search ?? '')}">
       ${f.league ? `<input type="hidden" name="league" value="${esc(f.league)}">` : ''}
       ${f.book ? `<input type="hidden" name="book" value="${esc(f.book)}">` : ''}
       ${f.matched ? '<input type="hidden" name="matched" value="1">' : ''}
-      <input name="q" value="${esc(f.search ?? '')}" placeholder="Player or match" aria-label="Search players or matches">
+      ${f.callsOnly ? '<input type="hidden" name="calls" value="1">' : ''}
+      ${f.best === false ? '<input type="hidden" name="best" value="0">' : ''}
+      <input name="q" type="search" value="${esc(f.search ?? '')}" autocomplete="off"
+             enterkeyhint="search" placeholder="Player, match or stat"
+             aria-label="Search players, matches or stats">
+      <button class="search-go" type="submit" aria-label="Search">Search</button>
     </form>
+  </div>`;
+}
+
+/**
+ * Anything the live filter should be able to match a row on.
+ *
+ * Built server-side so the browser never has to guess which cell holds the
+ * player: a continuation row deliberately omits the match title, and reading
+ * it back out of the DOM would make those rows unsearchable.
+ */
+const rowKey = (...parts: (string | null | undefined)[]) =>
+  esc(parts.filter(Boolean).join(' ').toLowerCase());
+
+/** Polling cadence. Two of these with no successful run is the warning line. */
+const POLL_INTERVAL_S = 900;
+
+/**
+ * How fresh the board is.
+ *
+ * A green dot said "fine" right up to the second it said "not fine", which is
+ * the least useful thing a staleness indicator can do — the interesting part is
+ * the approach, not the arrival. This is a depleting gauge instead: the fill is
+ * the share of the two-interval budget already spent, so a board halfway to
+ * overdue looks halfway to overdue. The age is written out next to it, because
+ * a bar alone is a feeling and this page deals in numbers.
+ */
+function freshness(lastOk: string | null): string {
+  const age = lastOk ? Math.max(0, (Date.now() - new Date(lastOk).getTime()) / 1000) : null;
+  const budget = POLL_INTERVAL_S * 2;
+  const level = age === null ? 'stale' : age > budget ? 'stale' : age > POLL_INTERVAL_S ? 'due' : 'ok';
+  const pct = age === null ? 100 : Math.min(100, (age / budget) * 100);
+  const title =
+    age === null
+      ? 'No successful poll on record.'
+      : `Last successful poll ${ago(lastOk)}. Polls run every ${POLL_INTERVAL_S / 60} minutes; ` +
+        `the gauge fills over two of them and turns red past that.`;
+  return `<div class="fresh ${level}" title="${esc(title)}">
+    <span class="fresh-k">Lines</span>
+    <span class="fresh-v"${lastOk ? ` data-ok="${esc(lastOk)}"` : ''}>${
+      age === null ? 'never' : ago(lastOk)
+    }</span>
+    <span class="fresh-gauge" role="img"
+          aria-label="${esc(
+            age === null ? 'No successful poll on record' : `Last poll ${ago(lastOk)}`,
+          )}"><i style="width:${pct.toFixed(0)}%"></i></span>
+    ${level === 'stale' ? '<span class="fresh-flag">overdue</span>' : ''}
   </div>`;
 }
 
@@ -165,10 +217,6 @@ function shell(o: {
   rail?: string;
   body: string;
 }): string {
-  const stale = o.health.last_ok_poll
-    ? (Date.now() - new Date(o.health.last_ok_poll).getTime()) / 1000 > 1800
-    : true;
-
   const tab = (href: string, label: string, on: boolean) =>
     `<a href="${href}"${on ? ' aria-current="page"' : ''}>${label}</a>`;
 
@@ -189,7 +237,10 @@ function shell(o: {
 
 <header class="top">
   <div class="top-in">
-    <h1 class="brand">BropProp <em>${esc(o.title)}</em></h1>
+    <h1 class="brand">
+      <a href="/board">Brop<span>Prop</span></a>
+      <em>${esc(o.title)}</em>
+    </h1>
     <nav class="tabs">
       ${tab('/board', 'Board', o.active === 'board')}
       ${tab('/build', 'Build', o.active === 'build')}
@@ -197,9 +248,7 @@ function shell(o: {
       ${tab('/slips', 'Slips', o.active === 'slips')}
     </nav>
     <span class="grow"></span>
-    <span class="status${stale ? ' stale' : ''}"><span class="dot"></span>${
-      stale ? `Lines ${ago(o.health.last_ok_poll)}` : `Updated ${ago(o.health.last_ok_poll)}`
-    }</span>
+    ${freshness(o.health.last_ok_poll)}
     <button type="button" class="icon-btn" id="theme">Theme</button>
   </div>
 </header>
@@ -212,8 +261,9 @@ ${
     : ''
 }
 
+${o.rail ? '<input type="checkbox" id="slipsheet" class="sheet-toggle" aria-label="Show your slip">' : ''}
 <main class="page${o.rail ? ' with-rail' : ''}">
-  <div>${o.body}</div>
+  <div class="col">${o.body}</div>
   ${o.rail ? `<aside class="rail">${o.rail}</aside>` : ''}
 </main>
 
@@ -248,7 +298,7 @@ ${
         : mins < 60 ? 'in ' + mins + 'm'
         : mins < 1440 ? 'in ' + Math.round(mins / 60) + 'h'
         : 'in ' + Math.round(mins / 1440) + 'd';
-      el.textContent = day + clock + ' · ' + rel;
+      el.textContent = day + clock + ', ' + rel;
       if (mins < 0) el.classList.add('started');
       el.title = t.toLocaleString();
     });
@@ -269,6 +319,77 @@ ${
     mult.addEventListener('input', calc);
     calc();
   })();
+  // The freshness gauge keeps depleting while the tab sits open, so a board
+  // left on a second monitor stops claiming it was updated a minute ago.
+  (function () {
+    var box = document.querySelector('.fresh');
+    if (!box) return;
+    var v = box.querySelector('.fresh-v');
+    var fill = box.querySelector('.fresh-gauge > i');
+    var at = v && v.getAttribute('data-ok');
+    if (!at) return;
+    var t = new Date(at).getTime();
+    if (isNaN(t)) return;
+    var BUDGET = ${POLL_INTERVAL_S * 2};
+    function tick() {
+      var s = Math.max(0, (Date.now() - t) / 1000);
+      v.textContent = s < 60 ? Math.floor(s) + 's ago'
+        : s < 3600 ? Math.floor(s / 60) + 'm ago'
+        : s < 86400 ? Math.floor(s / 3600) + 'h ago'
+        : Math.floor(s / 86400) + 'd ago';
+      fill.style.width = Math.min(100, (s / BUDGET) * 100).toFixed(0) + '%';
+      box.className = 'fresh ' + (s > BUDGET ? 'stale' : s > BUDGET / 2 ? 'due' : 'ok');
+    }
+    tick();
+    setInterval(tick, 15000);
+  })();
+
+  // Search as you type. Read-only, and purely a narrowing of what the server
+  // already sent: the form still submits on Enter, so with scripts blocked the
+  // box behaves exactly as it did before. Nothing here writes anything.
+  (function () {
+    var form = document.querySelector('form.search[data-live]');
+    if (!form) return;
+    var input = form.querySelector('input[name=q]');
+    var tables = [].slice.call(document.querySelectorAll('table[data-filter]'));
+    if (!input || !tables.length) return;
+    form.classList.add('live');
+
+    var groups = tables.map(function (t) {
+      var card = t.closest('.card');
+      return {
+        rows: [].slice.call(t.querySelectorAll('tbody > tr[data-search]')),
+        count: card && card.querySelector('[data-count]'),
+        empty: card && card.querySelector('.live-empty'),
+      };
+    });
+
+    function apply() {
+      var term = input.value.trim().toLowerCase();
+      groups.forEach(function (g) {
+        var shown = 0;
+        g.rows.forEach(function (r) {
+          var hit = !term || r.getAttribute('data-search').indexOf(term) !== -1;
+          r.classList.toggle('filtered-out', !hit);
+          if (hit) shown++;
+        });
+        // A continuation row borrows its match and kick-off from the row above.
+        // Once filtering can hide that row, the first survivor has to stand on
+        // its own, so the table stops quietening repeats while a term is live.
+        if (g.count) g.count.textContent = String(shown);
+        if (g.empty) g.empty.hidden = shown > 0 || !term;
+      });
+      document.body.classList.toggle('searching', term.length > 0);
+    }
+
+    var pending;
+    input.addEventListener('input', function () {
+      clearTimeout(pending);
+      pending = setTimeout(apply, 60);
+    });
+    if (input.value.trim()) apply();
+  })();
+
   document.getElementById('theme').addEventListener('click', function () {
     var el = document.documentElement, cur = el.getAttribute('data-theme');
     var dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -283,13 +404,37 @@ ${
 
 // ------------------------------------------------------------------- slip --
 
+/**
+ * The bar the slip collapses to when the rail can't sit beside the board.
+ *
+ * A label driving a checkbox rather than a script: the slip is where the write
+ * actions live, and those have to keep working with scripts blocked. The bar
+ * carries the leg count and the app, because those are the two facts that
+ * decide whether it's worth opening.
+ */
+function sheetBar(picks: PickRow[]): string {
+  const n = picks.length;
+  const app = picks[0] ? bookName(picks[0].book) : null;
+  return `<label class="sheet-bar" for="slipsheet">
+    <span class="sb-k">Your slip</span>
+    ${
+      n === 0
+        ? '<span class="sb-none">empty</span>'
+        : `<span class="sb-n">${n}</span><span class="sb-k">leg${n === 1 ? '' : 's'}</span>`
+    }
+    <span class="grow"></span>
+    ${app ? `<span class="sb-app">${esc(app)}</span>` : ''}
+    <span class="sb-caret" aria-hidden="true"></span>
+  </label>`;
+}
+
 function slipRail(picks: PickRow[], back: string): string {
   if (picks.length === 0) {
-    return `<div class="card">
+    return `${sheetBar(picks)}<div class="sheet-body"><div class="card">
       <div class="card-head"><h2>Your slip</h2></div>
       <div class="empty">No legs yet. Press <strong>O</strong> or <strong>U</strong> on any
         market to add one. Each leg records the line at the moment you take it.</div>
-    </div>`;
+    </div></div>`;
   }
 
   const legs = picks
@@ -302,7 +447,7 @@ function slipRail(picks: PickRow[], back: string): string {
             ${leagueBadge(p.league)}
             <span class="nm">${esc(p.handle)}</span>
           </div>
-          <div class="l2">${esc(statLabel(p.stat))} · ${esc(maps(p.map_start, p.map_end))} · ${esc(
+          <div class="l2">${esc(statLabel(p.stat))}, ${esc(maps(p.map_start, p.map_end).toLowerCase())} on ${esc(
             p.book === 'prizepicks' ? 'PrizePicks' : 'Underdog',
           )}</div>
         </div>
@@ -339,7 +484,7 @@ function slipRail(picks: PickRow[], back: string): string {
   const discounted = legMults.filter((m) => Math.abs(m - 1) > 0.005).length;
   const estimated = base === null ? null : base * multProduct;
 
-  return `<div class="card">
+  return `${sheetBar(picks)}<div class="sheet-body"><div class="card">
     <div class="card-head">
       <h2>Your slip</h2>
       <span class="sub">${n} leg${n === 1 ? '' : 's'}</span>
@@ -393,7 +538,7 @@ function slipRail(picks: PickRow[], back: string): string {
       <input type="hidden" name="back" value="${esc(back)}">
       <button class="link">Clear all legs</button>
     </form>
-  </div>`;
+  </div></div>`;
 }
 
 /**
@@ -431,14 +576,14 @@ function formCell(f: FormStats | undefined, play: Play | null): string {
   // Show the number the call was actually made from, and say which it is.
   if (play?.method === 'maps') {
     return `<div class="fig sm">${(f.perMap ?? 0).toFixed(1)}</div>
-      <div class="meta">per map · ${f.mapValues.length} maps</div>`;
+      <div class="meta">per map, from ${f.mapValues.length} maps</div>`;
   }
   if (f.series > 0) {
     return `<div class="fig sm">${f.mean.toFixed(1)}</div>
       <div class="meta">${f.series} series</div>`;
   }
   return `<div class="fig sm">${(f.perMap ?? 0).toFixed(1)}</div>
-    <div class="meta">per map · ${f.mapValues.length} maps</div>`;
+    <div class="meta">per map, from ${f.mapValues.length} maps</div>`;
 }
 
 /**
@@ -495,7 +640,7 @@ function playCell(
       <span class="dir">${dir}</span>
       <span class="at">${bookName(play.book) === 'PrizePicks' ? 'PP' : 'UD'} ${play.line.toFixed(1)}</span>
     </div>
-    <div class="meta">${signed(play.edge)} · ${basis}${
+    <div class="meta">${signed(play.edge)} in your favour, ${basis}${
       play.method === 'maps'
         ? ` <span class="est" title="Estimated by resampling ${play.sample} single maps, because too few series played this exact map range">est</span>`
         : ''
@@ -640,13 +785,13 @@ export function boardPage(o: {
       : `<div class="card">
       <div class="card-head">
         <h2>Board</h2>
-        <span class="sub">${ranked.length}${
+        <span class="sub"><b data-count>${ranked.length}</b>${
           o.filters.callsOnly ? ` of ${o.rows.length}` : ''
-        } markets · strongest calls first${
-          restrict ? ' · showing only the side each app prices better' : ''
+        } markets, strongest calls first${
+          restrict ? ', showing only the side each app prices better' : ''
         }</span>
       </div>
-      <div class="scroll"><table class="board-table">
+      <div class="scroll cards-sm"><table class="board-table stack-sm" data-filter>
         <thead><tr>
           <th class="c">Score</th>
           <th>Player</th>
@@ -674,7 +819,7 @@ export function boardPage(o: {
                   : `<span class="gap-chip ${d > 0 ? 'up' : 'down'}">${signed(d)}</span>`;
             const moved = r.moved === null ? null : Number(r.moved);
             const histId = r.pp_prop_id ?? r.ud_prop_id;
-            return `<tr>
+            return `<tr data-search="${rowKey(r.handle, r.match_title, statLabel(r.stat), r.league)}">
             <td class="c">${scoreCell(play)}</td>
             <td>
               <div class="who${sameAsPrev ? ' cont' : ''}">
@@ -691,7 +836,7 @@ export function boardPage(o: {
                         )}</div>
                   <div class="meta whenline">${whenCell(r.scheduled_at)}${
                           moved !== null && moved !== 0
-                            ? ` · moved <span class="move ${moved > 0 ? 'up' : 'down'}">${signed(moved)}</span>`
+                            ? `, moved <span class="move ${moved > 0 ? 'up' : 'down'}">${signed(moved)}</span>`
                             : ''
                         }</div>`
                   }
@@ -731,6 +876,8 @@ export function boardPage(o: {
           })
           .join('')}</tbody>
       </table></div>
+      <p class="live-empty" hidden>No market on this board matches what you typed.
+        Press <strong>Enter</strong> to search every market instead.</p>
     </div>`;
 
   return shell({
@@ -766,9 +913,9 @@ export function edgesPage(o: {
       : `<div class="card">
       <div class="card-head">
         <h2>Where the apps disagree</h2>
-        <span class="sub">${gaps.length} of ${o.health.matched} shared markets</span>
+        <span class="sub"><b data-count>${gaps.length}</b> of ${o.health.matched} shared markets</span>
       </div>
-      <div class="scroll"><table>
+      <div class="scroll cards-sm"><table class="stack-sm gaps-table" data-filter>
         <thead><tr>
           <th>Player</th><th>Market</th>
           <th class="n">PrizePicks</th><th class="c">Gap</th><th class="n">Underdog</th>
@@ -782,32 +929,40 @@ export function edgesPage(o: {
             const cheaper = d < 0 ? 'Over on PrizePicks' : 'Over on Underdog';
             const cls = d < 0 ? 'o' : 'u';
             const histId = r.pp_prop_id ?? r.ud_prop_id;
-            return `<tr>
-            <td><div class="who">${leagueBadge(r.league)}
-              <div class="name">${histId ? `<a href="/prop/${histId}">${esc(r.handle)}</a>` : esc(r.handle)}</div>
-              ${r.is_combo ? '<span class="chip warn">Combo</span>' : ''}</div></td>
-            <td><div class="sub2">${esc(statLabel(r.stat))}</div>
+            return `<tr data-search="${rowKey(r.handle, r.match_title, statLabel(r.stat), r.league)}">
+            <td class="idcol"><div class="who">${leagueBadge(r.league)}
+              <div class="whobody">
+                <div class="name">${histId ? `<a href="/prop/${histId}">${esc(r.handle)}</a>` : esc(r.handle)}${
+                  r.is_combo ? ' <span class="chip warn">Combo</span>' : ''
+                }</div>
+                <div class="meta matchline only-sm" title="${esc(r.match_title ?? '')}">${esc(
+                  r.match_title ?? '—',
+                )}</div>
+              </div></div></td>
+            <td class="statcol"><div class="statname">${esc(statLabel(r.stat))}</div>
                 <div class="meta">${esc(maps(r.map_start, r.map_end))}</div></td>
-            <td class="n"><div class="bookcell"><span class="fig">${num(r.pp_line)}</span>
+            <td class="n bookcol" data-book="PrizePicks"><div class="bookcell"><span class="fig">${num(r.pp_line)}</span>
               ${
                 o.lockedBook === 'underdog'
                   ? ''
                   : ouButtons(r.pp_prop_id, back, r.pp_side, 'both',
                       bestSide('prizepicks', r.delta === null ? null : Number(r.delta)))
               }</div></td>
-            <td class="c"><span class="gap-chip ${d > 0 ? 'up' : 'down'}">${signed(d)}</span></td>
-            <td class="n"><div class="bookcell"><span class="fig">${num(r.ud_line)}</span>
+            <td class="c gapcell"><span class="gap-chip ${d > 0 ? 'up' : 'down'}">${signed(d)}</span></td>
+            <td class="n bookcol" data-book="Underdog"><div class="bookcell"><span class="fig">${num(r.ud_line)}</span>
               ${
                 o.lockedBook === 'prizepicks'
                   ? ''
                   : ouButtons(r.ud_prop_id, back, r.ud_side, 'both',
                       bestSide('underdog', r.delta === null ? null : Number(r.delta)))
               }</div></td>
-            <td><span class="pickside ${cls}" style="padding:4px 9px;border-radius:4px;font-size:13px;font-weight:600">${cheaper}</span></td>
+            <td class="sidecol"><span class="pickside wide ${cls}">${cheaper}</span></td>
             <td class="match hide-sm"><span class="sub2" title="${esc(r.match_title ?? '')}">${esc(r.match_title ?? '—')}</span></td>
           </tr>`;
           })
           .join('')}</tbody></table></div>
+      <p class="live-empty" hidden>No disagreement matches what you typed.
+        Press <strong>Enter</strong> to search every market instead.</p>
     </div>`;
 
   const movCard =
@@ -817,28 +972,33 @@ export function edgesPage(o: {
          seen at two different values, so this fills in as the logger runs.</div></div>`
       : `<div class="card">
       <div class="card-head"><h2>Lines on the move</h2>
-        <span class="sub">largest move first</span></div>
-      <div class="scroll"><table>
+        <span class="sub"><b data-count>${o.mov.length}</b> lines, largest move first</span></div>
+      <div class="scroll cards-sm"><table class="stack-sm moves-table" data-filter>
         <thead><tr><th>Player</th><th>Market</th><th>App</th>
           <th class="n">Opened</th><th class="n">Now</th><th class="c">Move</th>
           <th class="n">Changes</th><th class="hide-sm">Match</th></tr></thead>
         <tbody>${o.mov
           .map((r) => {
             const mv = Number(r.move);
-            return `<tr>
-            <td><div class="who">${leagueBadge(r.league)}
-              <div class="name"><a href="/prop/${r.prop_id ?? ''}">${esc(r.handle)}</a></div></div></td>
-            <td><div class="sub2">${esc(statLabel(r.stat))}</div>
+            return `<tr data-search="${rowKey(r.handle, r.match_title, statLabel(r.stat), r.league)}">
+            <td class="idcol"><div class="who">${leagueBadge(r.league)}
+              <div class="whobody">
+                <div class="name"><a href="/prop/${r.prop_id ?? ''}">${esc(r.handle)}</a></div>
+                <div class="meta matchline only-sm">${esc(r.match_title ?? '—')}</div>
+              </div></div></td>
+            <td class="statcol"><div class="statname">${esc(statLabel(r.stat))}</div>
                 <div class="meta">${esc(maps(r.map_start, r.map_end))}</div></td>
-            <td><span class="chip">${r.book === 'prizepicks' ? 'PrizePicks' : 'Underdog'}</span></td>
-            <td class="n"><span class="fig sm muted">${num(r.opened)}</span></td>
-            <td class="n"><span class="fig sm">${num(r.latest)}</span></td>
-            <td class="c"><span class="gap-chip ${mv > 0 ? 'up' : 'down'}">${signed(mv)}</span></td>
-            <td class="n"><span class="meta">${r.observations}</span></td>
+            <td class="appcol"><span class="chip">${r.book === 'prizepicks' ? 'PrizePicks' : 'Underdog'}</span></td>
+            <td class="n travel from"><span class="fig sm muted">${num(r.opened)}</span></td>
+            <td class="n travel to"><span class="fig sm">${num(r.latest)}</span></td>
+            <td class="c travel"><span class="gap-chip ${mv > 0 ? 'up' : 'down'}">${signed(mv)}</span></td>
+            <td class="n obs"><span class="meta">${r.observations}</span></td>
             <td class="hide-sm"><span class="sub2">${esc(r.match_title ?? '—')}</span></td>
           </tr>`;
           })
           .join('')}</tbody></table></div>
+      <p class="live-empty" hidden>No moving line matches what you typed.
+        Press <strong>Enter</strong> to search every market instead.</p>
     </div>`;
 
   return shell({
@@ -958,7 +1118,7 @@ function gamesCard(games: PlayerGame[], hist: PropHistory, line: number | null):
         <td class="n">${
           beat === null
             ? '<span class="meta">—</span>'
-            : `<span class="pickside ${beat ? 'o' : 'u'}" style="padding:3px 8px;border-radius:4px;font-size:13px;font-weight:600">${
+            : `<span class="pickside wide ${beat ? 'o' : 'u'}">${
                 beat ? 'over' : 'under'
               }</span>`
         }</td>
@@ -969,7 +1129,7 @@ function gamesCard(games: PlayerGame[], hist: PropHistory, line: number | null):
   return `<div class="card">
     <div class="card-head">
       <h2>Recent games</h2>
-      <span class="sub">${esc(range)} · ${
+      <span class="sub">${esc(range)}, ${
         hits !== null && complete.length > 0
           ? `${hits} of ${complete.length} cleared ${line!.toFixed(1)}`
           : `${complete.length} complete series`
@@ -1097,19 +1257,22 @@ export function slipsPage(o: {
             s.pending === s.legs ? 'Awaiting results' : `${s.won}W / ${s.lost}L`
           }</div></div>
         </div>
-        <div class="scroll"><table><tbody>${legs
+        <div class="scroll cards-sm"><table class="stack-sm legs-table"><tbody>${legs
           .map(
             (p) => `<tr>
-          <td><div class="who">${leagueBadge(p.league)}<span class="name">${esc(p.handle)}</span></div></td>
-          <td><div class="sub2">${esc(statLabel(p.stat))}</div>
+          <td class="idcol"><div class="who">${leagueBadge(p.league)}
+            <div class="whobody"><span class="name">${esc(p.handle)}</span>
+              <div class="meta matchline only-sm">${esc(p.match_title ?? '—')}</div>
+            </div></div></td>
+          <td class="statcol"><div class="sub2">${esc(statLabel(p.stat))}</div>
               <div class="meta">${esc(maps(p.map_start, p.map_end))}</div></td>
-          <td><span class="pickside ${p.side === 'over' ? 'o' : 'u'}" style="padding:3px 8px;border-radius:4px;font-size:13px;font-weight:600">${
+          <td class="sidecol"><span class="pickside ${p.side === 'over' ? 'o' : 'u'}">${
             p.side === 'over' ? 'Over' : 'Under'
           }</span></td>
-          <td class="n"><span class="fig">${num(p.line_at_pick)}</span></td>
-          <td><span class="chip">${p.book === 'prizepicks' ? 'PP' : 'UD'}</span></td>
+          <td class="n linecol"><span class="fig">${num(p.line_at_pick)}</span></td>
+          <td class="appcol"><span class="chip">${p.book === 'prizepicks' ? 'PP' : 'UD'}</span></td>
           <td class="hide-sm"><span class="sub2">${esc(p.match_title ?? '—')}</span></td>
-          <td class="n"><span class="meta pending">${esc(p.status)}</span></td>
+          <td class="n statuscol"><span class="meta pending">${esc(p.status)}</span></td>
         </tr>`,
           )
           .join('')}</tbody></table></div>
@@ -1166,8 +1329,8 @@ export function buildPage(o: {
         return `<div class="card">
       <div class="card-head">
         <h2>${e.size}-pick</h2>
-        <span class="sub">${e.payout.toFixed(2)}× payout · ${(e.winProb * 100).toFixed(1)}% to hit all${
-          e.discounted ? ` · ${e.discounted} discounted leg${e.discounted === 1 ? '' : 's'}` : ''
+        <span class="sub">${e.payout.toFixed(2)}× payout for a ${(e.winProb * 100).toFixed(1)}% chance of hitting every leg${
+          e.discounted ? `, with ${e.discounted} discounted leg${e.discounted === 1 ? '' : 's'}` : ''
         }</span>
       </div>
       <div class="evbar">
@@ -1182,21 +1345,21 @@ export function buildPage(o: {
           <button class="go" style="width:auto;padding:9px 18px">Build this slip</button>
         </form>
       </div>
-      <div class="scroll"><table><tbody>${e.legs.map((l) => `<tr>
-        <td><div class="who">${leagueBadge(l.row.league)}
+      <div class="scroll cards-sm"><table class="stack-sm entry-table"><tbody>${e.legs.map((l) => `<tr>
+        <td class="idcol"><div class="who">${leagueBadge(l.row.league)}
           <div class="whobody">
             <div class="name">${esc(l.row.handle)}</div>
             <div class="meta matchline">${esc(l.row.match_title ?? '—')}</div>
           </div></div></td>
-        <td><div class="sub2">${esc(statLabel(l.row.stat))}</div>
+        <td class="statcol"><div class="sub2">${esc(statLabel(l.row.stat))}</div>
             <div class="meta">${esc(maps(l.row.map_start, l.row.map_end))}</div></td>
-        <td><div class="play ${l.play.side === 'over' ? 'o' : 'u'}">
+        <td class="callcol"><div class="play ${l.play.side === 'over' ? 'o' : 'u'}">
               <span class="dir">${l.play.side === 'over' ? 'Over' : 'Under'}</span>
               <span class="at">${l.play.line.toFixed(1)}</span>
             </div></td>
-        <td class="n"><span class="fig sm">${(l.p * 100).toFixed(0)}%</span>
+        <td class="n probcol"><span class="fig sm">${(l.p * 100).toFixed(0)}%</span>
             <div class="meta">${l.play.method === 'series' ? `${l.play.series} series` : 'modelled'}</div></td>
-        <td class="n">${
+        <td class="n multcol">${
           Math.abs(l.mult - 1) > 0.005
             ? `<span class="est">${l.mult.toFixed(2)}×</span>`
             : '<span class="meta">standard</span>'
