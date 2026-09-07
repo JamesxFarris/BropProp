@@ -236,7 +236,7 @@ export async function projectFor(opts: {
               max(played_at) AS at,
               count(*) FILTER (WHERE map_number BETWEEN $3 AND $4)      AS maps_played,
               sum(${col}) FILTER (WHERE map_number BETWEEN $3 AND $4)   AS total
-       FROM map_stat
+       FROM map_stat_dedup
        WHERE canon_handle = $1 AND league = $2
        GROUP BY series_key
      ),
@@ -315,7 +315,7 @@ export async function projectBoard(
                 count(*) FILTER (WHERE ms.map_number BETWEEN w.map_start AND w.map_end)     AS maps_played,
                 sum(ms.${col}) FILTER (WHERE ms.map_number BETWEEN w.map_start AND w.map_end) AS total
          FROM want w
-         JOIN map_stat ms ON ms.canon_handle = w.canon_handle AND ms.league = w.league
+         JOIN map_stat_dedup ms ON ms.canon_handle = w.canon_handle AND ms.league = w.league
          GROUP BY w.canon_handle, w.league, w.map_start, w.map_end, ms.series_key
        ),
        ranked AS (
@@ -354,7 +354,7 @@ export async function projectBoard(
                 row_number() OVER (PARTITION BY w.canon_handle, w.league
                                    ORDER BY ms.played_at DESC) AS rn
          FROM want w
-         JOIN map_stat ms ON ms.canon_handle = w.canon_handle AND ms.league = w.league
+         JOIN map_stat_dedup ms ON ms.canon_handle = w.canon_handle AND ms.league = w.league
          WHERE ms.${col} IS NOT NULL
        )
        SELECT canon_handle, league, array_agg(v ORDER BY played_at DESC)::float[] AS vals

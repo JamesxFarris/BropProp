@@ -131,6 +131,7 @@ export type HistoryPoint = { observed_at: string; line: number; over_price: numb
 export type PropHistory = {
   prop_id: number;
   handle: string;
+  canon_handle: string;
   league: string;
   stat: string;
   map_start: number;
@@ -148,7 +149,8 @@ export type PropHistory = {
  */
 export async function propHistory(propId: number): Promise<PropHistory | null> {
   const head = await q<Omit<PropHistory, 'points'>>(
-    `SELECT p.id AS prop_id, pl.handle, p.league, p.stat, p.map_start, p.map_end,
+    `SELECT p.id AS prop_id, pl.handle, pl.canon_handle, p.league, p.stat,
+            p.map_start, p.map_end,
             b.code AS book, m.title AS match_title, m.scheduled_at
      FROM prop p
      JOIN player pl ON pl.id = p.player_id
@@ -176,5 +178,71 @@ export async function siblingProps(propId: number) {
        AND c.variant = 'standard'
      ORDER BY c.book`,
     [propId],
+  );
+}
+
+
+/**
+ * A player's recent series, for the exact market being viewed.
+ *
+ * Built to survive the data changing underneath it, which it will:
+ *
+ * - Sources come and go, so rows are keyed only by canon_handle and league.
+ *   Nothing here parses a series key or assumes which source produced it.
+ * - Map counts vary by format, so the range is measured per series rather
+ *   than assumed. A series that didn't play the whole range is returned and
+ *   labelled, not silently dropped and not silently summed short — the same
+ *   rule grading uses, so the page can't disagree with the grader.
+ * - A player with no rows returns an empty list, never an error. New names
+ *   appear on the board constantly and must render as "nothing yet" rather
+ *   than breaking the page they're on.
+ */
+export type PlayerGame = {
+  series_key: string;
+  played_at: string | null;
+  team: string | null;
+  values: number[] | null;   // the stat, map by map, within the range
+  maps_in_range: number;
+  maps_total: number;
+  total: number | null;      // null when the range wasn't completed
+};
+
+const GAME_STAT_COLUMN: Record<string, string> = {
+  kills: 'kills', headshots: 'headshots', assists: 'assists', deaths: 'deaths',
+};
+
+export async function playerGames(opts: {
+  canonHandle: string;
+  league: string;
+  stat: string;
+  mapStart: number;
+  mapEnd: number;
+  limit?: number;
+}): Promise<PlayerGame[]> {
+  const col = GAME_STAT_COLUMN[opts.stat];
+  // Fantasy points have no stored column; say nothing rather than guess.
+  if (!col) return [];
+
+  return q<PlayerGame>(
+    `WITH s AS (
+       SELECT series_key,
+              max(played_at) AS played_at,
+              max(team)      AS team,
+              count(*)                                                     AS maps_total,
+              count(*) FILTER (WHERE map_number BETWEEN $3 AND $4)          AS maps_in_range,
+              array_agg(${col} ORDER BY map_number)
+                FILTER (WHERE map_number BETWEEN $3 AND $4)                 AS values,
+              sum(${col}) FILTER (WHERE map_number BETWEEN $3 AND $4)       AS range_total
+       FROM map_stat_dedup
+       WHERE canon_handle = $1 AND league = $2 AND ${col} IS NOT NULL
+       GROUP BY series_key
+     )
+     SELECT series_key, played_at, team, values, maps_in_range, maps_total,
+            CASE WHEN maps_in_range = $5 THEN range_total ELSE NULL END AS total
+     FROM s
+     ORDER BY played_at DESC NULLS LAST
+     LIMIT $6`,
+    [opts.canonHandle, opts.league, opts.mapStart, opts.mapEnd,
+     opts.mapEnd - opts.mapStart + 1, opts.limit ?? 12],
   );
 }

@@ -1,6 +1,6 @@
 import type { Movement, Health } from './queries.js';
 import type { PickRow, SlipSummary } from './picks.js';
-import type { MarketRow, PropHistory } from './boardq.js';
+import type { MarketRow, PropHistory, PlayerGame } from './boardq.js';
 import type { FormStats, Play } from './projection.js';
 import { recommend, type LineOption } from './projection.js';
 import type { Entry } from './optimize.js';
@@ -909,9 +909,87 @@ function chart(points: { observed_at: string; line: number }[]): string {
   </svg>`;
 }
 
+/**
+ * The player's recent series for this exact market.
+ *
+ * Shows the maps that made up each total, so a number can be argued with
+ * rather than taken on faith, and marks series that didn't play the whole
+ * range as void — the same call grading makes, so the two can't disagree.
+ */
+function gamesCard(games: PlayerGame[], hist: PropHistory, line: number | null): string {
+  const range = maps(hist.map_start, hist.map_end);
+
+  if (games.length === 0) {
+    const why = PROJECTABLE.has(hist.stat)
+      ? `No games recorded for ${esc(hist.handle)} yet. Results are collected after each match,
+         so this fills in once they have played — a player new to the board starts empty rather
+         than being left out.`
+      : `${esc(statLabel(hist.stat))} isn't stored per map, so past games can't be listed for
+         this market. Kills, assists, deaths and headshots can.`;
+    return `<div class="card">
+      <div class="card-head"><h2>Recent games</h2></div>
+      <div class="empty">${why}</div>
+    </div>`;
+  }
+
+  const complete = games.filter((g) => g.total !== null);
+  const hits =
+    line === null ? null : complete.filter((g) => Number(g.total) > line).length;
+
+  const rows = games
+    .map((g) => {
+      const vals = (g.values ?? []).map((v) => Number(v));
+      const total = g.total === null ? null : Number(g.total);
+      const beat = total !== null && line !== null ? total > line : null;
+      return `<tr>
+        <td><span class="sub2">${
+          g.played_at ? new Date(g.played_at).toISOString().slice(0, 10) : '—'
+        }</span>${g.team ? `<div class="meta">${esc(g.team)}</div>` : ''}</td>
+        <td><span class="meta">${
+          vals.length ? vals.join(' · ') : '—'
+        }</span><div class="meta">${g.maps_total} map${g.maps_total === 1 ? '' : 's'} played</div></td>
+        <td class="n">${
+          total === null
+            ? `<span class="chip" title="Only ${g.maps_in_range} of the ${
+                hist.map_end - hist.map_start + 1
+              } maps in this range were played, so this prop would have been voided">void</span>`
+            : `<span class="fig">${total.toFixed(0)}</span>`
+        }</td>
+        <td class="n">${
+          beat === null
+            ? '<span class="meta">—</span>'
+            : `<span class="pickside ${beat ? 'o' : 'u'}" style="padding:3px 8px;border-radius:4px;font-size:13px;font-weight:600">${
+                beat ? 'over' : 'under'
+              }</span>`
+        }</td>
+      </tr>`;
+    })
+    .join('');
+
+  return `<div class="card">
+    <div class="card-head">
+      <h2>Recent games</h2>
+      <span class="sub">${esc(range)} · ${
+        hits !== null && complete.length > 0
+          ? `${hits} of ${complete.length} cleared ${line!.toFixed(1)}`
+          : `${complete.length} complete series`
+      }</span>
+    </div>
+    <div class="scroll"><table>
+      <thead><tr>
+        <th>Played</th><th>By map</th>
+        <th class="n">${esc(range)}</th><th class="n">vs ${line === null ? 'line' : line.toFixed(1)}</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+  </div>`;
+}
+
 export function historyPage(o: {
   hist: PropHistory;
   siblings: { prop_id: number; book: string; line: number }[];
+  games: PlayerGame[];
+  line: number | null;
   picks: PickRow[];
   health: Health;
 }): string {
@@ -966,12 +1044,7 @@ export function historyPage(o: {
       : ''
   }
 
-  <div class="card">
-    <div class="card-head"><h2>Player results</h2></div>
-    <div class="empty">Hit rate and recent performance need match results, which aren't being
-      collected yet. This is the next thing being built — until then, only line movement is
-      real and nothing here is estimated.</div>
-  </div>`;
+  ${gamesCard(o.games, o.hist, o.line)}`;
 
   return shell({
     title: 'Line history',

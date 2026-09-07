@@ -5,7 +5,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { pool } from '../db.js';
 import { config } from '../config.js';
 import { movements, health, leagues } from './queries.js';
-import { markets, propHistory, siblingProps } from './boardq.js';
+import { markets, propHistory, siblingProps, playerGames } from './boardq.js';
 import {
   openPicks, addPick, removePick, placeSlip, clearOpenSlip, slips, slipPicks,
   openSlipBook, WrongBookError, SideUnavailableError,
@@ -202,7 +202,13 @@ const server = createServer(async (req, res) => {
         return;
       }
       const siblings = await siblingProps(id);
-      return html(res, historyPage({ hist, siblings, picks, health: h }));
+      const games = await playerGames({
+        canonHandle: hist.canon_handle, league: hist.league, stat: hist.stat,
+        mapStart: hist.map_start, mapEnd: hist.map_end,
+      });
+      // The line this market is currently offered at, for the hit column.
+      const line = hist.points.length ? Number(hist.points[hist.points.length - 1]!.line) : null;
+      return html(res, historyPage({ hist, siblings, games, line, picks, health: h }));
     }
 
     if (url.pathname === '/board') {
