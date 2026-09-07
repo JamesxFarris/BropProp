@@ -5,12 +5,13 @@ run. Written so it makes sense cold, with no memory of the session that built it
 
 ## Backfill player history (do this when you get home)
 
-Two sources, deliberately split by job:
+Three sources, split by job and by game:
 
 | | Source | Job | Rate limits |
 |---|---|---|---|
-| **Bulk history** | Oracle's Elixir | months/years of past games | none |
-| **Today's results** | Leaguepedia | games that finished minutes ago | brutal |
+| **LoL bulk history** | Oracle's Elixir | months/years of past games | none |
+| **LoL today's results** | Leaguepedia | games that finished minutes ago | brutal |
+| **CS2, both jobs** | bo3.gg | history *and* current, one adapter | none seen |
 
 ### 1. Oracle's Elixir — the main backfill (LoL)
 
@@ -45,107 +46,103 @@ the fight, so reach for this only for something Oracle's Elixir lacks.
 If it fails with "exceeded your rate limit", that's the cooldown — wait it out
 or run it from somewhere else. Nothing is wrong with the code.
 
-### 3. CS2 history — measured, and HLTV is not the answer
+### 3. CS2 history — solved, and it is bo3.gg
+
+```bash
+npm run bo3                # last 30 days
+npm run bo3 365            # a year
+npm run bo3 30 --all-players
+```
+
+Free, no key, no browser, no rate limit. **This is the CS2 equivalent of
+Oracle's Elixir** and it is wired into the scheduled runs, so the manual
+command is for backfilling depth rather than for keeping current.
+
+`GET /games/{game_id}/players_stats` returns one row per player per map:
+kills, deaths, assists, **headshots**, ADR, KAST, first kills, clutches.
+
+Measured 2026-09-07, against this board:
+
+| | bo3.gg | HLTV (what it replaced) |
+|---|---|---|
+| Maps with per-player stats | **665 of 672** | 1 of 30 results |
+| Board handles matched in 14 days | **138 of 255** | 0 |
+| Headshots | yes, plain column | no, `/stats/` 403s |
+| Auth / browser | none | Playwright + Cloudflare fight |
+| Rate limit | none seen in 40 rapid requests | 403 on any plain client |
+| Archive | pages back to 2023 | first results page only |
+
+Those 14 days alone would have written **1,238 map stat lines**.
+
+The clinching number is in production. The HLTV accumulator ran daily on
+Railway from the day it was deployed, and on 2026-09-07 `map_stat` held **3,894
+rows, every one of them Oracle's Elixir LoL, and not a single CS2 row**. It was
+not collecting slowly. It was collecting nothing.
+
+**Three things to know before you touch `src/results/bo3.ts`:**
+
+- **`parsed_status` is the gate.** Of 60 recent finished tier-C matches, every
+  map of a `done` match had stats (74 of 75) and no map of an unparsed match
+  had any (0 of 62). It is a clean binary — filter on it rather than fetching
+  hopefully.
+- **Stats lag the match by 7.5 to 33 hours** (median 13). Picks stay pending
+  overnight. This is not something to fix by polling harder; the data does not
+  exist yet. It is why the results run looks back three days and the daily
+  sweep looks back fourteen.
+- **Unknown filters are ignored, not rejected.** `filter[status]=finished`
+  returns the *unfiltered* list with HTTP 200. The working shape is
+  `filter[<table>.<column>][<op>]=<value>`, e.g.
+  `filter[games.match_id][eq]=128851`. The adapter re-checks every filter on
+  the response for exactly this reason. Watch for the same trap elsewhere on
+  this API — `bo3.gg/api/demo/<id>` also returns **HTTP 200** with a body of
+  `{"error":"Invalid API path"}`.
+
+Depth going back is patchy and tracks how much of that era was ever parsed:
+roughly 18–85% of maps by month, sampled across 2023–2026. Recent months are at
+the top of that range.
+
+**What this closed:** CS2 headshot props are now gradeable. They were
+`ungradeable` by construction under HLTV, whose headshot numbers exist only in
+the `/stats/` section that 403s even in a real browser.
+
+### HLTV — kept, demoted, no longer on any schedule
 
 ```bash
 npm run backfill:cs2       # one pass over HLTV's current results page
 ```
 
-Resumable and cheap on re-runs, but it is an **accumulator, not a backfill**.
-Two measured limits:
+Still works and still needs Playwright. Nothing calls it automatically any
+more and there is no reason to run it: bo3.gg covers strictly more, for less.
+It stays in the tree because the rows it already wrote are real, and
+`map_stat_source_rank` still ranks it (below `bo3`) so that history is not
+silently demoted below some future source.
 
-- **Coverage.** Of 30 recent results, one carried per-map player stats, and
-  none of its players were on our board. HLTV publishes stats only for matches
-  whose demos it parsed, which skews to big events; our props are mostly
-  tier-C qualifiers.
-- **Depth.** Only the first results page is reachable. `/results` serves fine,
-  `/results?offset=100` returns a Cloudflare challenge, so the archive can't be
-  walked backwards.
+### CS2 stats — the ideas that are now moot
 
-Run it daily and it collects what appeared since yesterday. It will not build
-a season.
+These were the ranked plan before bo3.gg's `players_stats` endpoint was found.
+Recorded so nobody spends money or a verification queue on a solved problem.
 
-**PandaScore's free tier does not solve this** — tested 2026-09-07 with a real
-token. List endpoints work (matches, players, teams, both CS2 and LoL, 1000
-requests/hour) but every stats endpoint is 403: `/games/{id}`,
-`/matches/{id}`, `/players/{id}/stats`. Per-map player stats are a paid
-feature. The token is in `.env` as `PANDASCORE_TOKEN` and is fine for
-fixtures and rosters if we ever want them.
-
-**So CS2 form needs either a paid feed or patience** — the accumulator plus
-grading builds history for the teams we actually bet, just slowly.
-
-## CS2 stats — the open ideas, ranked
-
-Nothing here is started. Everything below was tested or priced on 2026-09-07;
-pick one up when you have time and don't re-test the dead ends.
-
-### 1. FACEIT Data API — free, blocked on identity verification
-
-Free per-map player stats including headshots, via
-`GET /matches/{id}/stats` → `rounds[]` (one per map) → `teams[] → players[] →
-player_stats`. Covers matches played **on the FACEIT platform**: ESEA League
-(Advanced/Main), organizer championships, open qualifiers — genuine tier-C
-depth HLTV never parses. Won't cover South American or CIS qualifiers run off
-platform.
-
-**Blocked on:** FACEIT requires document upload and their anti-cheat installed
-before issuing a key. Key comes from developers.faceit.com → create an app →
-API Keys → **server-side** key.
-
-**Do when:** you're at home and willing to do the verification. Cheapest real
-win available.
-
-### 2. BALLDONTLIE CS2 — $39.99/mo, 48-hour free trial
-
-Has a literal `player_match_map_stats` endpoint: kills, deaths, assists, adr,
-kast, rating, headshot_percentage, first_kills, clutches, keyed by
-`match_map_id`. Base `https://api.balldontlie.io/cs/v1/`.
-
-Free and $9.99 tiers do **not** include matches or player stats — only the
-**GOAT tier at $39.99/mo** does. Ten times cheaper than PandaScore for the same
-data shape.
-
-**Coverage is undocumented**, which is the whole risk. **Do this first, it's
-free:** take the 48-hour GOAT trial, query `/tournaments` for a tier-C or
-regional qualifier, then `player_match_map_stats` for one of its maps. That one
-test answers whether $40/mo solves the problem. Card required for the trial.
-
-### 3. Parse the demos yourself — free, full control, real build
-
-The route nobody can revoke. `api.bo3.gg/api/v1/games/{id}` returns a
-**`demo_url`** on finished games, and matches carry **`tier: "c"`** — so tier-C
-matches can be enumerated straight from their free API and joined to games.
-Verified present continuously from 2023 to now, on exactly our tier of teams
-(Sinners, Quazar, Omega, zwaw).
-
-Parse with **awpy 2.x** (wraps `demoparser2`); it computes ADR and KAST
-natively. Everything else we need is per-round events.
-
-**Unresolved:** the demo CDN base. `bo3.gg/api/demo/...` returns "Invalid API
-path", and cdn/static/s3 guesses all 404. **Five-minute job:** open a bo3.gg
-match page, click the demo download button with devtools open, and read the
-real URL (it may be a signed-URL endpoint).
-
-**Cost:** compute and storage, not licensing. Highest ceiling, highest effort.
-
-### 4. Keep accumulating — already running
-
-`npm run backfill:cs2` runs daily on Railway at 05:23 and collects whatever
-HLTV parsed since yesterday for players we price. It cannot build history but
-it is free and already automatic. Grading also stores stats for every CS2 match
-you actually bet, so history builds fastest for the teams you care about.
+- **FACEIT Data API** — free per-map stats, but blocked behind document upload
+  and an anti-cheat install. Only worth revisiting if you specifically want
+  ESEA/FACEIT-platform matches that bo3.gg does not cover.
+- **BALLDONTLIE CS2** — has the right data shape but only on the **GOAT tier at
+  $39.99/mo**, with undocumented coverage. Do not pay for this.
+- **Parse the demos yourself** — `demo_url` is on every finished game
+  (`demos/manually_uploaded/...`, a relative path), and `awpy 2.x` would parse
+  it. The demo CDN base was never found: every guessed base 404s and the loaded
+  JS bundles contain no URL construction for it. Moot regardless — the API
+  hands over better stats than a demo parse would yield, for none of the
+  compute, storage or effort.
 
 ### Dead ends — do not re-test
 
 - **PandaScore free**: fixtures only; every stats endpoint 403s. Paid
   Historical tier is **€400/mo per game**, and their terms say stats plans are
-  **only sold for non-betting use**.
+  **only sold for non-betting use**. The token in `.env` as `PANDASCORE_TOKEN`
+  is fine for fixtures and rosters if we ever want them.
 - **Esportal**: fully open API, has the right tournaments (PGL Wallachia OQ SA
   / EEU / SEA), but every match returns `kills:0, deaths:0, headshots:0`. It
   only tracks brackets for events played on organizer servers.
-- **bo3.gg for stats**: per-round per-**team** only, never per-player. Its
-  value is `demo_url` and `tier`.
 - **Liquipedia**: no player stats anywhere in match wikitext — but it does
   carry `|stats=<HLTV mapstatsid>` per map, so it's a free tier-C *index*.
   Needs gzip + a descriptive User-Agent or it 406s.
@@ -154,21 +151,10 @@ you actually bet, so history builds fastest for the teams you care about.
   **SportDevs**: DNS doesn't resolve. **GRID Open Access**: free to apply but
   rights are per-tournament, so tier-1 only in practice.
   **Abios / Sportradar**: $2,000-10,000/mo, enterprise.
-
-### Older notes on CS2 history
-
-HLTV serves per-map kills to a real browser, and `npm run grade` already uses
-that for matches you hold picks on. But **player history is another matter**:
-HLTV's `/stats/` section returns 403 even in a browser, so there's no per-player
-history endpoint to crawl. Options if you want CS2 form:
-
-- crawl match pages for teams you care about and accumulate over time (slow but
-  free, and the grader is already doing a little of this)
-- a paid API with CS2 player stats (PandaScore has a free dev tier)
-
-CS2 **headshot** props can't be graded at all for the same reason — headshots
-only exist under `/stats/`. Those report `ungradeable` with that reason rather
-than being scored from a guess.
+- **bo3.gg's per-round endpoints**: `game_rounds` really is per-**team** only.
+  That earlier finding was right; the mistake was concluding from it that the
+  whole site had no per-player stats. It does — under `players_stats`, which
+  the match page calls and the round data does not lead you to.
 
 ## Grading
 
@@ -179,10 +165,12 @@ npm run grade              # fetch results, then grade anything gradeable
 Runs automatically on the worker (`RESULTS_CRON`, twice an hour). Safe to run by
 hand any time.
 
-**CS2 grading needs a browser.** It works locally because Playwright is
-installed here; on Railway it fails with a clear message and the run is recorded
-in `result_run` as failed. To turn it on in production, the container needs
-Chromium — that's an unmade deployment decision, not a bug.
+**CS2 grading no longer needs a browser.** It reads bo3.gg's JSON, so it runs
+in the Railway container exactly as it does locally, and Chromium is no longer
+a deployment decision anyone has to make. What remains is patience: stats
+appear 7.5 to 33 hours after a match ends, so CS2 picks sit `pending`
+overnight and grade on a later run. A pick with no stat line yet is left
+pending rather than marked ungradeable, so nothing is lost by waiting.
 
 ## The logger
 

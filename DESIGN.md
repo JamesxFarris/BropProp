@@ -197,6 +197,12 @@ column working — a tool that names an edge on every row has no edges.
 - **2026-09-06** — Added Board and Slips. Wanted a Discord tracker later, once
   the core works — deferred deliberately, since the thing worth posting is
   graded results, not raw lines.
+- **2026-09-07** — CS2 stat history stopped being a blocker: bo3.gg serves
+  per-map, per-player kills/deaths/assists/**headshots** free and unauthenticated.
+  The prop-history panel can therefore stop saying player hit rate is
+  uncollectable — though it should keep saying so until enough history has
+  actually accrued, since the honest empty state was never the problem.
+  Headshot props specifically move from ungradeable to gradeable.
 - **2026-09-06** — Stack: server-rendered HTML from the existing Node app with
   hand-written CSS. No framework and no component library, so nothing arrives
   with a default look that has to be fought. It's read-only tables over

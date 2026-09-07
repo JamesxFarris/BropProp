@@ -28,8 +28,9 @@ export function canonLeague(raw: string | null | undefined): string | null {
 
 /**
  * Player handles are the join key between books AND between a book and a stats
- * source (HLTV/vlr). Underdog stores the handle in `last_name`, sometimes with
- * stray whitespace; PrizePicks uses a display name. Fold both to the same shape.
+ * source (bo3.gg for CS2, Leaguepedia and Oracle's Elixir for LoL). Underdog
+ * stores the handle in `last_name`, sometimes with stray whitespace;
+ * PrizePicks uses a display name. Fold both to the same shape.
  */
 export function canonHandle(raw: string | null | undefined): string {
   return (raw ?? '').normalize('NFKD').toLowerCase().replace(/[^a-z0-9]/g, '');

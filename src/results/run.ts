@@ -1,58 +1,26 @@
 import { pathToFileURL } from 'node:url';
 import { pool, q } from '../db.js';
-import { canonHandle } from '../normalize.js';
 import { fetchLeaguepedia } from './leaguepedia.js';
-import { fetchHltv, teamHintsFrom } from './hltv.js';
+import { fetchBo3 } from './bo3.js';
 import { pendingPicks, gradePick, applyGrade, settleSlips } from './grade.js';
+import { storeStats } from './store_stats.js';
 import type { MapStat } from './types.js';
-
-async function storeStats(stats: MapStat[]): Promise<number> {
-  let written = 0;
-  for (const s of stats) {
-    // Upsert, so re-running a fetch corrects a row rather than duplicating it.
-    const res = await q(
-      `INSERT INTO map_stat (source, league, series_key, map_number, handle_raw,
-                             canon_handle, team, kills, deaths, assists, headshots,
-                             played_at, raw, fetched_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13, now())
-       ON CONFLICT (source, series_key, map_number, canon_handle) DO UPDATE
-         SET kills = EXCLUDED.kills, deaths = EXCLUDED.deaths,
-             assists = EXCLUDED.assists, headshots = EXCLUDED.headshots,
-             team = COALESCE(EXCLUDED.team, map_stat.team),
-             played_at = COALESCE(EXCLUDED.played_at, map_stat.played_at),
-             fetched_at = now()
-       RETURNING id`,
-      [s.source, s.league, s.seriesKey, s.mapNumber, s.handleRaw,
-       canonHandle(s.handleRaw), s.team, s.kills, s.deaths, s.assists, s.headshots,
-       s.playedAt, s.raw ?? {}],
-    );
-    if (res.length) written++;
-  }
-  return written;
-}
 
 /** Fetch results, then grade whatever became gradeable. */
 export async function runResults(): Promise<void> {
   console.log(`[${new Date().toISOString()}] results start`);
 
-  // Target the CS2 crawl at matches we actually hold picks on. HLTV is not a
-  // public API and every match page is a real page load, so opening the whole
-  // results list would be both slow and rude.
-  const cs2Titles = await q<{ title: string | null }>(
-    `SELECT DISTINCT m.title
-     FROM pick p
-     JOIN slip s  ON s.id = p.slip_id AND s.status <> 'open'
-     JOIN prop pr ON pr.id = p.prop_id AND pr.league = 'CS2'
-     LEFT JOIN match m ON m.id = pr.match_id
-     WHERE p.status = 'pending'`,
-  );
-  const hints = teamHintsFrom(cs2Titles.map((r) => r.title));
-
+  // CS2 comes from bo3.gg: a plain JSON API with no auth, no rate limit and
+  // no browser, which HLTV required for a fraction of the coverage. Because it
+  // is cheap it runs unconditionally rather than only when a pick is pending —
+  // every stat line collected now is history the projections use later.
+  //
+  // Three days rather than one: stats appear 7.5 to 33 hours after a match
+  // ends, so a one-day window would miss the slower half and never revisit it.
   const sources: [string, () => Promise<{ stats: MapStat[] }>][] = [
     ['leaguepedia', () => fetchLeaguepedia()],
+    ['bo3', () => fetchBo3({ days: 3 })],
   ];
-  // Nothing pending for CS2 means nothing to crawl for.
-  if (hints.length > 0) sources.push(['hltv', () => fetchHltv({ teamHints: hints })]);
 
   for (const [source, fetcher] of sources) {
     const run = await q<{ id: number }>(

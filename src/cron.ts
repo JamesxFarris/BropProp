@@ -2,7 +2,8 @@ import cron from 'node-cron';
 import { config } from './config.js';
 import { pollOnce } from './poll.js';
 import { runResults } from './results/run.js';
-import { backfillCs2 } from './results/hltv_backfill.js';
+import { fetchBo3 } from './results/bo3.js';
+import { storeStats } from './results/store_stats.js';
 
 console.log(`BropProp logger up — schedule "${config.pollCron}", leagues ${config.leagues.join(',')}`);
 
@@ -49,22 +50,26 @@ async function gradeTick() {
 let accumulating = false;
 
 /**
- * Collect CS2 stat lines that appeared since yesterday.
+ * A wider daily sweep of CS2 stats than the results run makes.
  *
- * Deliberately daily and unattended. It cannot build history — HLTV publishes
- * stats for maybe one match in thirty and its archive can't be paged — but run
- * every day it accumulates the matches that do get parsed, for the players we
- * price. That is the only free path to CS2 form.
+ * The results run covers three days, which catches a match parsed within about
+ * a day and a half of finishing. A minority are parsed much later than that,
+ * and once the three-day window slides past them nothing would ever look
+ * again. Two weeks daily closes that gap; the upsert makes the overlap free.
+ *
+ * Unlike the HLTV crawler this replaced, it needs no browser, so it runs in
+ * the container as happily as it does locally.
  */
 async function accumulateTick() {
   if (accumulating) return;
   accumulating = true;
   try {
-    await backfillCs2(1);
+    const { stats } = await fetchBo3({ days: 14, maxMatches: 1500 });
+    const written = await storeStats(stats);
+    console.log(`cs2 sweep: ${stats.length} stat lines, ${written} stored`);
   } catch (err) {
-    // No browser in the image, HLTV reshaped, Cloudflare in a mood — none of
-    // it should touch the poller.
-    console.warn('cs2 accumulate skipped:', (err as Error).message.slice(0, 120));
+    // A reshaped payload or a bad gateway must never touch the poller.
+    console.warn('cs2 sweep skipped:', (err as Error).message.slice(0, 120));
   } finally {
     accumulating = false;
   }

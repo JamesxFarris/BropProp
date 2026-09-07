@@ -96,7 +96,9 @@ PrizePicks writes a *range*, Underdog *enumerates*. Collapsing both into
 `(stat, map_start, map_end)` in `src/normalize.ts` turns cross-book comparison
 into an exact join rather than fuzzy matching. That plus a folded player handle
 (`canon_handle`) is the whole basis of the `cross_book_diff` view — and it's
-the same key that will later join to HLTV/vlr stats in Phase 2.
+the same key that joins to the stat sources in Phase 2. It holds up there too:
+138 of the board's 255 CS2 handles matched bo3.gg's player names over a single
+fortnight, with no fuzzy matching.
 
 A gapped selection (`maps 1 and 3`) is deliberately **rejected**, not flattened
 into `1-3` — silently widening it would fabricate a market neither book offers.
@@ -136,7 +138,7 @@ same stat, same map range, different number).
 ## Roadmap
 
 - **Phase 1 — line logger.** *Done.* Both books, change-detected history.
-- **Phase 2 — result grader.** *LoL done; CS2 source chosen but not wired.*
+- **Phase 2 — result grader.** *Done for both games.*
   Per-map stat lines land in `map_stat`, and grading reads them separately so a
   grading fix can be re-run without re-scraping. `npm run grade` runs it; the
   worker also runs it on `RESULTS_CRON`.
@@ -147,10 +149,16 @@ same stat, same map range, different number).
   game-number column, but `GameId` is `MatchId + "_" + game number`, so the map
   number is derived rather than guessed. Fandom rate-limits hard and reports it
   as HTTP 200 with an error body, so the adapter backs off on that specifically
-  and paginates with long gaps. **HLTV** 403s any plain client but loads in a
-  real browser engine, so CS2 is reachable via Playwright — not wired up yet,
-  since it needs Chromium in the container. **bo3.gg** has an open API with
-  matches and per-map games for both leagues but no player stat lines.
+  and paginates with long gaps.
+
+  CS2 comes from **bo3.gg**, whose `/games/{id}/players_stats` serves per-map,
+  per-player kills, deaths, assists and headshots with no key, no browser and
+  no rate limit. It replaced an HLTV crawler that needed Playwright and lost a
+  fight with Cloudflare past the first results page: of thirty recent HLTV
+  results exactly one carried per-map player stats, where bo3.gg covered 665 of
+  672 maps. `parsed_status` tells you in advance which matches carry stats, and
+  the only real cost is latency: stats land 7.5 to 33 hours after a match ends,
+  so CS2 picks grade the next day rather than the same night.
 
   The rules that decide money are tested directly: an unplayed map in the range
   voids the prop rather than grading it short, a stat the source can't produce
