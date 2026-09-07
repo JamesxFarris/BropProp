@@ -726,6 +726,13 @@ button.link:hover { color: var(--under); text-decoration: underline; }
   .board-table th:nth-child(6), .board-table td:nth-child(6) { width: 15%; }
 }
 
+/* Fair % vs. our own hit rate, twenty points or more apart. Not a fifth
+   colour — colour keeps its four meanings — so the flag is a rule down the
+   cell's left edge instead, the same device `.tick` already uses. Unscoped
+   by width, unlike the `title` beside it: `title` never fires on touch, and
+   this board is used on phones. */
+.board-table td.fairgap { border-left: 2px solid var(--line-2); }
+
 /* Kick-off. Quiet until it matters — a market that has already started is
    the one thing here you cannot act on. */
 /* Not a flex row: the gap between items landed before the comma that joins

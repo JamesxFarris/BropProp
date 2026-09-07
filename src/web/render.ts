@@ -975,7 +975,7 @@ export function boardPage(o: {
           <th>Player</th>
           <th>Market</th>
           <th class="n">Averages</th>
-          <th class="n">Market %</th>
+          <th class="n">Fair %</th>
           <th>Take</th>
           ${showPP ? '<th class="n">PrizePicks</th>' : ''}
           <th class="c gapcol">${gapLabel}</th>
@@ -1034,7 +1034,9 @@ export function boardPage(o: {
               <div class="meta">${esc(maps(r.map_start, r.map_end))}</div>
             </td>
             <td class="n formcol">${formCell(formOf(r), play)}</td>
-            <td class="n"${
+            <td class="n${
+              gapToMarket !== null && Math.abs(gapToMarket) >= MARKET_GAP ? ' fairgap' : ''
+            }"${
               gapToMarket !== null && Math.abs(gapToMarket) >= MARKET_GAP
                 ? ` title="${Math.round(Math.abs(gapToMarket) * 100)} points from what we think — worth a second look"`
                 : ''
