@@ -571,3 +571,9 @@ button.link:hover { color: var(--under); text-decoration: underline; }
   max-width: 20ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 @media (min-width: 1560px) { .matchline { max-width: 32ch; } }
+
+/* Kick-off. Quiet until it matters — a market that has already started is
+   the one thing here you cannot act on. */
+.whenline { display: flex; align-items: center; gap: 6px; }
+.when { color: var(--text-3); }
+.when.started { color: var(--under); font-weight: 600; }

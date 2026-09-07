@@ -43,6 +43,19 @@ function starts(iso: string | null): string {
   return `in ${Math.floor(s / 86400)}d`;
 }
 
+/**
+ * Kick-off time.
+ *
+ * The server renders the timezone-independent part ("in 3h") so the row is
+ * correct with scripts blocked, and tags the timestamp for the browser to
+ * upgrade to the reader's own clock. Rendering an absolute time server-side
+ * would show Railway's UTC to someone sitting in Eastern.
+ */
+function whenCell(iso: string | null): string {
+  if (!iso) return '<span class="when">time tbd</span>';
+  return `<span class="when" data-at="${esc(iso)}">${starts(iso)}</span>`;
+}
+
 const clock = (iso: string) =>
   new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
@@ -215,6 +228,27 @@ ${
     var t = localStorage.getItem('bp-theme');
     if (t) document.documentElement.setAttribute('data-theme', t);
   } catch (e) {}
+  // Kick-off times in the reader's own timezone. The server can only know
+  // UTC, so it renders the relative form and this fills in the clock time.
+  (function () {
+    var now = Date.now();
+    document.querySelectorAll('.when[data-at]').forEach(function (el) {
+      var t = new Date(el.getAttribute('data-at'));
+      if (isNaN(t)) return;
+      var mins = Math.round((t - now) / 60000);
+      var sameDay = t.toDateString() === new Date(now).toDateString();
+      var clock = t.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      var day = sameDay ? '' : t.toLocaleDateString([], { weekday: 'short' }) + ' ';
+      var rel = mins < 0 ? 'started'
+        : mins < 60 ? 'in ' + mins + 'm'
+        : mins < 1440 ? 'in ' + Math.round(mins / 60) + 'h'
+        : 'in ' + Math.round(mins / 1440) + 'd';
+      el.textContent = day + clock + ' · ' + rel;
+      if (mins < 0) el.classList.add('started');
+      el.title = t.toLocaleString();
+    });
+  })();
+
   // Payout preview updates as the stake or multiplier is typed.
   (function () {
     var f = document.getElementById('slipform');
@@ -488,7 +522,16 @@ export function boardPage(o: {
   // Strongest calls first. The point of the board is to find the few markets
   // worth acting on, so making them the first thing on screen is the feature —
   // markets with no call keep their existing order underneath.
+  //
+  // Matches already under way sink below the rest whatever their score: the
+  // line can't be taken any more, and a strong call you cannot act on at the
+  // top of the board is worse than no call at all.
+  const started = (r: MarketRow) =>
+    r.scheduled_at !== null && new Date(r.scheduled_at).getTime() < Date.now();
   const ranked = [...o.rows].sort((a, b) => {
+    const sa = started(a);
+    const sb = started(b);
+    if (sa !== sb) return sa ? 1 : -1;
     const pa = playOf(a);
     const pb = playOf(b);
     if (pa && pb) return pb.strength - pa.strength;
@@ -529,7 +572,6 @@ export function boardPage(o: {
           ${showPP ? '<th class="n">PrizePicks</th>' : ''}
           <th class="c">${gapLabel}</th>
           ${showUD ? '<th class="n">Underdog</th>' : ''}
-          <th class="n hide-md">Starts</th>
         </tr></thead>
         <tbody>${ranked
           .map((r) => {
@@ -554,9 +596,10 @@ export function boardPage(o: {
                   }${r.is_combo ? ' <span class="chip warn">Combo</span>' : ''}</div>
                   <div class="meta matchline" title="${esc(r.match_title ?? '')}">${esc(
                     r.match_title ?? '—',
-                  )}${
+                  )}</div>
+                  <div class="meta whenline">${whenCell(r.scheduled_at)}${
                     moved !== null && moved !== 0
-                      ? ` · <span class="move ${moved > 0 ? 'up' : 'down'}">${signed(moved)}</span> since open`
+                      ? ` · moved <span class="move ${moved > 0 ? 'up' : 'down'}">${signed(moved)}</span>`
                       : ''
                   }</div>
                 </div>
@@ -589,7 +632,6 @@ export function boardPage(o: {
               </div></td>`
                 : ''
             }
-            <td class="n hide-md"><span class="meta">${starts(r.scheduled_at)}</span></td>
           </tr>`;
           })
           .join('')}</tbody>
