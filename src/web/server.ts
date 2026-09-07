@@ -190,12 +190,10 @@ const server = createServer(async (req, res) => {
       ]);
       // One projection lookup for the whole board rather than per row.
       const form = await projectBoard(
-        rows.flatMap((r) => [
-          { canon_handle: r.canon_handle, league: r.league, stat: r.stat,
-            map_start: r.map_start, map_end: r.map_end, line: r.pp_line },
-          { canon_handle: r.canon_handle, league: r.league, stat: r.stat,
-            map_start: r.map_start, map_end: r.map_end, line: r.ud_line },
-        ]),
+        rows.map((r) => ({
+          canon_handle: r.canon_handle, league: r.league, stat: r.stat,
+          map_start: r.map_start, map_end: r.map_end,
+        })),
       );
       return html(res, boardPage({ rows, picks, health: h, leagues: known, filters, lockedBook, blocked, form }));
     }

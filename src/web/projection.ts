@@ -30,6 +30,93 @@ export type Projection = {
   edge: number | null;   // mean minus line, in stat units
 };
 
+/** A player's totals over one map range, line-independent. */
+export type FormStats = {
+  series: number;
+  mean: number;
+  sd: number | null;
+  totals: number[];      // most recent first
+};
+
+export type Play = {
+  side: 'over' | 'under';
+  book: 'prizepicks' | 'underdog';
+  line: number;
+  edge: number;          // stat units in your favour at that line
+  edgeSd: number | null; // edge relative to how much this player swings
+  hitRate: number;       // share of past series that would have won this side
+  series: number;
+  strength: number;      // ranking score, not a probability
+};
+
+const MIN_SERIES = 6;    // below this, form is noise wearing a number
+const MIN_EDGE = 0.5;    // half a kill is inside the rounding of a line
+
+/**
+ * Which side to take, on which app.
+ *
+ * The two questions are separate and were being answered as one. Direction is a
+ * question about the player: does their real output sit above or below this
+ * number. App is a question about price: for an over you want the LOWEST line
+ * available, for an under the HIGHEST — opposite books win opposite sides.
+ *
+ * So each direction is evaluated at the best line available for it, and the
+ * direction with the larger edge wins. That naturally picks the book too.
+ *
+ * No call is made below MIN_SERIES or MIN_EDGE. A recommendation off four games
+ * would be a coin flip wearing a decimal point.
+ */
+export function recommend(
+  form: FormStats | undefined,
+  ppLine: number | null,
+  udLine: number | null,
+): Play | null {
+  if (!form || form.series < MIN_SERIES) return null;
+
+  const lines: { book: 'prizepicks' | 'underdog'; line: number }[] = [];
+  if (ppLine !== null) lines.push({ book: 'prizepicks', line: ppLine });
+  if (udLine !== null) lines.push({ book: 'underdog', line: udLine });
+  if (lines.length === 0) return null;
+
+  // An over wants the lowest number available; an under wants the highest.
+  const forOver = lines.reduce((a, b) => (b.line < a.line ? b : a));
+  const forUnder = lines.reduce((a, b) => (b.line > a.line ? b : a));
+
+  const overEdge = form.mean - forOver.line;
+  const underEdge = forUnder.line - form.mean;
+
+  const pick =
+    overEdge >= underEdge
+      ? { side: 'over' as const, ...forOver, edge: overEdge }
+      : { side: 'under' as const, ...forUnder, edge: underEdge };
+
+  if (pick.edge < MIN_EDGE) return null;
+
+  const wins = form.totals.filter((t) =>
+    pick.side === 'over' ? t > pick.line : t < pick.line,
+  ).length;
+  const hitRate = wins / form.totals.length;
+
+  // Relative to how much the player actually swings: two kills on a 30-kill
+  // line is a smaller claim than two kills on a 5-kill line, and ranking them
+  // the same would put noisy high-volume markets on top every time.
+  const edgeSd = form.sd && form.sd > 0 ? pick.edge / form.sd : null;
+
+  return {
+    side: pick.side,
+    book: pick.book,
+    line: pick.line,
+    edge: pick.edge,
+    edgeSd,
+    hitRate,
+    series: form.series,
+    // Hit rate carries the ranking, nudged by how big the edge is relative to
+    // the player's own variance. Sample size damps small-sample confidence.
+    strength:
+      (hitRate - 0.5) * 2 * (edgeSd ?? 0.5) * Math.min(1, form.series / 12),
+  };
+}
+
 export async function projectFor(opts: {
   canonHandle: string;
   league: string;
@@ -97,12 +184,12 @@ export async function projectFor(opts: {
 export async function projectBoard(
   markets: {
     canon_handle: string; league: string; stat: string;
-    map_start: number; map_end: number; line: number | null;
+    map_start: number; map_end: number;
   }[],
   limit = 20,
-): Promise<Map<string, Projection>> {
-  const out = new Map<string, Projection>();
-  const wanted = markets.filter((m) => m.line !== null && STAT_COLUMN[m.stat]);
+): Promise<Map<string, FormStats>> {
+  const out = new Map<string, FormStats>();
+  const wanted = markets.filter((m) => STAT_COLUMN[m.stat]);
   if (wanted.length === 0) return out;
 
   // One query per stat column, since the column name can't be parameterised.
@@ -157,29 +244,19 @@ export async function projectBoard(
       rows.map((r) => [`${r.canon_handle}|${r.league}|${r.map_start}|${r.map_end}`, r]),
     );
 
-    // The totals come back once per player+range; hit rate is then counted
-    // against each book's own line, since the two books price differently.
+    // Line-independent: the two books price the same market differently, and
+    // the recommendation has to weigh both lines against one set of totals.
     for (const m of group) {
+      const key = `${m.canon_handle}|${m.stat}|${m.map_start}|${m.map_end}`;
+      if (out.has(key)) continue;
       const s = stats.get(`${m.canon_handle}|${m.league}|${m.map_start}|${m.map_end}`);
       if (!s || !s.totals?.length) continue;
       const totals = s.totals;
       const n = totals.length;
       const mean = totals.reduce((a, b) => a + b, 0) / n;
       const sd =
-        n > 1
-          ? Math.sqrt(totals.reduce((a, b) => a + (b - mean) ** 2, 0) / (n - 1))
-          : null;
-      const line = m.line as number;
-      const over = totals.filter((t) => t > line).length;
-      out.set(`${m.canon_handle}|${m.stat}|${m.map_start}|${m.map_end}|${line}`, {
-        series: n,
-        mean,
-        sd,
-        last: totals[0] ?? null,
-        overCount: over,
-        hitRate: over / n,
-        edge: mean - line,
-      });
+        n > 1 ? Math.sqrt(totals.reduce((a, b) => a + (b - mean) ** 2, 0) / (n - 1)) : null;
+      out.set(key, { series: n, mean, sd, totals });
     }
   }
 

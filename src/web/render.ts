@@ -1,7 +1,8 @@
 import type { Movement, Health } from './queries.js';
 import type { PickRow, SlipSummary } from './picks.js';
 import type { MarketRow, PropHistory } from './boardq.js';
-import type { Projection } from './projection.js';
+import type { FormStats, Play } from './projection.js';
+import { recommend } from './projection.js';
 
 export const esc = (s: unknown) =>
   String(s ?? '').replace(/[&<>"']/g, (c) =>
@@ -367,29 +368,41 @@ function lockNotice(locked: string | null, blocked: string | null): string {
 /**
  * Recent form: what this player has actually totalled over the same map range.
  *
- * Sample size is shown next to the number and never hidden. Six series is a
- * different claim from twenty, and a projection presented without its sample
+ * Sample size sits next to the number and is never hidden. Six series is a
+ * different claim from twenty, and a projection shown without its sample
  * invites exactly the confidence it hasn't earned.
  */
-function formCell(p: Projection | undefined): string {
-  if (!p) return '<span class="meta">—</span>';
-  return `<div class="fig sm">${p.mean.toFixed(1)}</div>
-    <div class="meta">${p.series} series${
-      p.hitRate !== null && p.series >= 4
-        ? ` · ${Math.round(p.hitRate * 100)}% over`
-        : ''
-    }</div>`;
+function formCell(f: FormStats | undefined): string {
+  if (!f) return '<span class="meta">—</span>';
+  return `<div class="fig sm">${f.mean.toFixed(1)}</div>
+    <div class="meta">${f.series} series</div>`;
 }
 
 /**
- * How far this book's line sits from the player's average. Shown small and
- * beside the line rather than as a verdict: it's one input, and with these
- * sample sizes it is not yet a reason on its own.
+ * The call: which side, on which app.
+ *
+ * Direction is a question about the player — does their real output sit above
+ * or below this number. App is a question about price — an over wants the
+ * lowest line available, an under the highest. Answering them separately and
+ * then combining is what makes a single row actionable.
+ *
+ * "No call" is a real answer and is shown as one. Most markets don't have an
+ * edge worth naming, and inventing one for every row would make the column
+ * worthless.
  */
-function leanMark(p: Projection | undefined): string {
-  if (!p || p.edge === null || p.series < 4) return '';
-  if (Math.abs(p.edge) < 0.5) return '';
-  return ` <span class="lean ${p.edge > 0 ? 'up' : 'down'}">${signed(p.edge)}</span>`;
+function playCell(play: Play | null, f: FormStats | undefined): string {
+  if (!play) {
+    return `<span class="meta">${
+      !f ? 'no history' : f.series < 6 ? `${f.series} series` : 'no edge'
+    }</span>`;
+  }
+  const dir = play.side === 'over' ? 'Over' : 'Under';
+  const cls = play.side === 'over' ? 'o' : 'u';
+  return `<div class="play ${cls}">
+      <span class="dir">${dir}</span>
+      <span class="at">${bookName(play.book) === 'PrizePicks' ? 'PP' : 'UD'} ${play.line.toFixed(1)}</span>
+    </div>
+    <div class="meta">${signed(play.edge)} · ${Math.round(play.hitRate * 100)}% of ${play.series}</div>`;
 }
 
 // ------------------------------------------------------------------ board --
@@ -446,13 +459,26 @@ export function boardPage(o: {
   filters: Filters;
   lockedBook: string | null;
   blocked: string | null;
-  form?: Map<string, Projection>;
+  form?: Map<string, FormStats>;
 }): string {
   const back = `/board${qs({}, o.filters)}`;
-  const proj = (r: MarketRow, line: number | null) =>
-    line === null
-      ? undefined
-      : o.form?.get(`${r.canon_handle}|${r.stat}|${r.map_start}|${r.map_end}|${line}`);
+  const formOf = (r: MarketRow) =>
+    o.form?.get(`${r.canon_handle}|${r.stat}|${r.map_start}|${r.map_end}`);
+  const playOf = (r: MarketRow) =>
+    recommend(formOf(r), r.pp_line === null ? null : Number(r.pp_line),
+              r.ud_line === null ? null : Number(r.ud_line));
+
+  // Strongest calls first. The point of the board is to find the few markets
+  // worth acting on, so making them the first thing on screen is the feature —
+  // markets with no call keep their existing order underneath.
+  const ranked = [...o.rows].sort((a, b) => {
+    const pa = playOf(a);
+    const pb = playOf(b);
+    if (pa && pb) return pb.strength - pa.strength;
+    if (pa) return -1;
+    if (pb) return 1;
+    return 0;
+  });
 
   // One app selected (by filter or by an open slip) means one column. Showing
   // the other app's line with live take buttons offered a pick that cannot
@@ -472,10 +498,8 @@ export function boardPage(o: {
       : `<div class="card">
       <div class="card-head">
         <h2>Board</h2>
-        <span class="sub">${o.rows.length} markets${
-          restrict
-            ? ' · showing only the side each app prices better'
-            : ' · the outlined side is the better price on that app'
+        <span class="sub">${o.rows.length} markets · strongest calls first${
+          restrict ? ' · showing only the side each app prices better' : ''
         }</span>
       </div>
       <div class="scroll"><table>
@@ -483,14 +507,16 @@ export function boardPage(o: {
           <th>Player</th>
           <th>Market</th>
           <th class="n">Form</th>
+          <th>Play</th>
           ${showPP ? '<th class="n">PrizePicks</th>' : ''}
           <th class="c">${gapLabel}</th>
           ${showUD ? '<th class="n">Underdog</th>' : ''}
           <th class="hide-sm">Match</th>
           <th class="n hide-md">Starts</th>
         </tr></thead>
-        <tbody>${o.rows
+        <tbody>${ranked
           .map((r) => {
+            const play = playOf(r);
             const d = r.delta === null ? null : Number(r.delta);
             const gap =
               d === null
@@ -521,14 +547,15 @@ export function boardPage(o: {
               <div class="sub2">${esc(statLabel(r.stat))}</div>
               <div class="meta">${esc(maps(r.map_start, r.map_end))}</div>
             </td>
-            <td class="n">${formCell(proj(r, r.pp_line) ?? proj(r, r.ud_line))}</td>
+            <td class="n">${formCell(formOf(r))}</td>
+            <td>${playCell(play, formOf(r))}</td>
             ${
               showPP
                 ? `<td class="n"><div class="bookcell">
-                <span class="fig${r.pp_line === null ? ' muted' : ''}">${num(r.pp_line)}${leanMark(proj(r, r.pp_line))}</span>
+                <span class="fig${r.pp_line === null ? ' muted' : ''}">${num(r.pp_line)}</span>
                 ${ouButtons(r.pp_prop_id, back, r.pp_side,
                   restrict ? bestSide('prizepicks', r.delta === null ? null : Number(r.delta)) : 'both',
-                  bestSide('prizepicks', r.delta === null ? null : Number(r.delta)))}
+                  play?.book === 'prizepicks' ? play.side : 'both')}
               </div></td>`
                 : ''
             }
@@ -536,10 +563,10 @@ export function boardPage(o: {
             ${
               showUD
                 ? `<td class="n"><div class="bookcell">
-                <span class="fig${r.ud_line === null ? ' muted' : ''}">${num(r.ud_line)}${leanMark(proj(r, r.ud_line))}</span>
+                <span class="fig${r.ud_line === null ? ' muted' : ''}">${num(r.ud_line)}</span>
                 ${ouButtons(r.ud_prop_id, back, r.ud_side,
                   restrict ? bestSide('underdog', r.delta === null ? null : Number(r.delta)) : 'both',
-                  bestSide('underdog', r.delta === null ? null : Number(r.delta)))}
+                  play?.book === 'underdog' ? play.side : 'both')}
               </div></td>`
                 : ''
             }

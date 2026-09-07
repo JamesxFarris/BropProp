@@ -528,3 +528,14 @@ button.link:hover { color: var(--under); text-decoration: underline; }
 .lean { font-family: var(--mono); font-size: 12px; font-weight: 500; }
 .lean.up { color: var(--over); }
 .lean.down { color: var(--under); }
+
+/* The call. Direction is the loud part — it's the thing being decided; the
+   app and line sit under it as the where. */
+.play { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
+.play .dir { font-size: 16px; font-weight: 700; letter-spacing: -.01em; }
+.play .at {
+  font-family: var(--mono); font-size: 13px; font-weight: 500;
+  color: var(--text-2);
+}
+.play.o .dir { color: var(--over); }
+.play.u .dir { color: var(--under); }

@@ -145,6 +145,29 @@ Rules that follow from it:
   eyebrows, no middle-dot meta strings.
 - Base type is 15px, figures 17px — the first version was too small to scan.
 
+## The call
+
+Two questions were being answered as one, which is why the board could say
+"take the over on PrizePicks" about a side the numbers didn't support.
+
+- **Direction is a question about the player.** Does their real output over this
+  map range sit above or below the number.
+- **App is a question about price.** An over wants the *lowest* line available,
+  an under the *highest*. Opposite books win opposite sides of the same market.
+
+So each direction is priced at the best line available for it, and the direction
+with the larger edge wins — which picks the book as a side effect. One
+highlighted button per row: the one to press.
+
+Ranking is hit rate, scaled by the edge relative to how much that player
+actually swings, damped by sample size. Two kills on a 30-kill line is a smaller
+claim than two kills on a 5-kill line; ranking them alike would float noisy
+high-volume markets to the top forever.
+
+**No call is a real answer.** Below six series or half a stat unit the column
+says so. Roughly half the board has no call at any given time, and that is the
+column working — a tool that names an edge on every row has no edges.
+
 ## Open decisions
 
 - Whether grading results live in the same view as live lines, or separately.
