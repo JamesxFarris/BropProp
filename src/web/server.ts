@@ -12,7 +12,7 @@ import {
 } from './picks.js';
 import { boardPage, edgesPage, slipsPage, historyPage, buildPage } from './render.js';
 import { buildEntries } from './optimize.js';
-import { projectBoard } from './projection.js';
+import { projectMarkets } from './projection.js';
 
 const PORT = Number(process.env.PORT ?? 3000);
 const PUBLIC = 'public';
@@ -69,6 +69,20 @@ const redirect = (res: ServerResponse, to: string) => {
 const html = (res: ServerResponse, body: string) => {
   res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
   res.end(body);
+};
+
+/**
+ * Which markets the board keeps.
+ *
+ * Default is `all`: hiding by default would hide the reason the board is
+ * quiet, and on 2026-09-07 that reason was 386 of 465 rows having no stat
+ * history rather than no edge. `live` drops those and keeps everything the
+ * model actually priced; `calls` keeps only what it has an opinion on.
+ */
+const showMode = (p: URLSearchParams): 'all' | 'live' | 'calls' => {
+  const v = p.get('show');
+  if (v === 'live' || v === 'calls' || v === 'all') return v;
+  return p.get('calls') === '1' ? 'calls' : 'all';
 };
 
 const numOrNull = (v: string | null) => {
@@ -183,7 +197,10 @@ const server = createServer(async (req, res) => {
       // On by default once an app is chosen — the reason to narrow to one app
       // is to take the best number available on it. Explicit best=0 opts out.
       best: url.searchParams.get('best') !== '0',
-      callsOnly: url.searchParams.get('calls') === '1',
+      // How much of the quiet part of the board to keep. `calls=1` is the
+      // older single toggle and still means the strictest setting, so a
+      // bookmarked link keeps working.
+      show: showMode(url.searchParams),
     };
 
     // A slip already committed to an app narrows the board to that app: props
@@ -217,10 +234,11 @@ const server = createServer(async (req, res) => {
         openPicks(),
         health(filters.league),
       ]);
-      // One projection lookup for the whole board rather than per row.
-      const form = await projectBoard(
+      // One projection lookup for the whole board rather than per row. The
+      // handle goes along because a combo's members are only recorded there.
+      const form = await projectMarkets(
         rows.map((r) => ({
-          canon_handle: r.canon_handle, league: r.league, stat: r.stat,
+          canon_handle: r.canon_handle, handle: r.handle, league: r.league, stat: r.stat,
           map_start: r.map_start, map_end: r.map_end,
         })),
       );
@@ -233,9 +251,9 @@ const server = createServer(async (req, res) => {
         (lockedBook as 'prizepicks' | 'underdog' | null) ??
         (bookParam === 'underdog' ? 'underdog' : 'prizepicks');
       const rows = await markets({ league: filters.league, book, matched: false, search: null });
-      const form = await projectBoard(
+      const form = await projectMarkets(
         rows.map((r) => ({
-          canon_handle: r.canon_handle, league: r.league, stat: r.stat,
+          canon_handle: r.canon_handle, handle: r.handle, league: r.league, stat: r.stat,
           map_start: r.map_start, map_end: r.map_end,
         })),
       );

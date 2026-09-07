@@ -78,7 +78,16 @@ export async function markets(opts: {
        FROM prop_snapshot GROUP BY prop_id HAVING count(*) > 1
      ),
      m AS (
-       SELECT c.canon_handle, c.league, c.stat, c.map_start, c.map_end, c.is_combo,
+       SELECT c.canon_handle, c.league, c.stat, c.map_start, c.map_end,
+              -- NOT a grouping key. A combo's canon_handle is the members run
+              -- together ("binxunknight") and can't collide with a real
+              -- player's, so grouping by it already keeps combos separate.
+              -- Grouping by the flag as well only splits a market in two when
+              -- the books disagree about it — which they do: PrizePicks marks
+              -- the CS2 player eraa a combo and Underdog lists the same kills
+              -- market as an ordinary player, so the pair never met and the
+              -- board showed two half-rows with no gap between them.
+              bool_or(c.is_combo)                                    AS is_combo,
               max(c.handle)                                          AS handle,
               max(c.match_title)                                     AS match_title,
               min(c.scheduled_at)                                    AS scheduled_at,
@@ -96,7 +105,7 @@ export async function markets(opts: {
               max(c.over_multiplier)  FILTER (WHERE c.book = 'underdog') AS ud_over_mult,
               max(c.under_multiplier) FILTER (WHERE c.book = 'underdog') AS ud_under_mult
        FROM cl c
-       GROUP BY c.canon_handle, c.league, c.stat, c.map_start, c.map_end, c.is_combo
+       GROUP BY c.canon_handle, c.league, c.stat, c.map_start, c.map_end
      )
      SELECT m.*,
             (m.pp_line - m.ud_line) AS delta,

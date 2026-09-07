@@ -1,4 +1,6 @@
 import { q } from '../db.js';
+import { comboParts } from '../normalize.js';
+import { foldCombo, type ComboStatRow } from '../combo.js';
 
 /**
  * What a player has actually done over the same map range, and how that sits
@@ -132,13 +134,64 @@ export type LineOption = {
   underOk: boolean;
 };
 
+/**
+ * Why there is no call, when there is no call.
+ *
+ * "No call" was one answer covering six different situations, and they are not
+ * the same fact about a market. `fair` means the model looked and found the
+ * line honest — that row is one line move from being live. `none` and `thin`
+ * mean the model could not look at all, and no amount of line movement will
+ * change that until the stat history arrives. Sorting and filtering both need
+ * to tell those apart, and so does anyone asking why the board is quiet.
+ */
+export type NoCall =
+  /** No stored column for the stat — fantasy points use a formula the books don't publish. */
+  | { kind: 'unsupported' }
+  /** A combo whose handle can't be split into players. */
+  | { kind: 'unreadable' }
+  /** Not one stat line for this player. */
+  | { kind: 'none' }
+  /** Some history, below MIN_SERIES whole-range series and MIN_MAPS single maps. */
+  | { kind: 'thin'; series: number; maps: number }
+  /** Neither side is offered by any book listing it. */
+  | { kind: 'unavailable' }
+  /** Evaluated, and the best edge available is under MIN_EDGE. */
+  | { kind: 'fair'; edge: number };
+
+export type CallStatus = { play: Play; why: null } | { play: null; why: NoCall };
+
+/** Everything `evaluate` needs to either make a call or say why it won't. */
+export type Evaluation = {
+  form: FormStats | undefined;
+  options: LineOption[];
+  maps?: number;
+  seed?: string;
+  /** Canonical stat, so an unprojectable one is named as such rather than as missing history. */
+  stat?: string;
+  /** The market's handle, so an unsplittable combo is named as such. */
+  handle?: string;
+};
+
+/** How close a `fair` market is to being a call — 1.0 means it is at MIN_EDGE. */
+export const edgeProgress = (edge: number) => Math.max(0, edge) / MIN_EDGE;
+
 export function recommend(
   form: FormStats | undefined,
   options: LineOption[],
   maps = 1,
   seed = '',
 ): Play | null {
-  if (!form) return null;
+  return evaluate({ form, options, maps, seed }).play;
+}
+
+export function evaluate(o: Evaluation): CallStatus {
+  const { form, options, maps = 1, seed = '' } = o;
+
+  if (o.stat !== undefined && !STAT_COLUMN[o.stat]) return { play: null, why: { kind: 'unsupported' } };
+  if (o.handle !== undefined && /\+/.test(o.handle) && comboParts(o.handle).length < 2) {
+    return { play: null, why: { kind: 'unreadable' } };
+  }
+  if (!form) return { play: null, why: { kind: 'none' } };
 
   // Prefer real totals over the exact range. Fall back to modelling the range
   // from single maps only when there aren't enough of them — more data, but
@@ -149,7 +202,11 @@ export function recommend(
     : form.mapValues.length >= MIN_MAPS
       ? resampleTotals(form.mapValues, maps, `${seed}|${maps}`)
       : null;
-  if (!sample || sample.length === 0) return null;
+  if (!sample || sample.length === 0) {
+    return form.series === 0 && form.mapValues.length === 0
+      ? { play: null, why: { kind: 'none' } }
+      : { play: null, why: { kind: 'thin', series: form.series, maps: form.mapValues.length } };
+  }
 
   const mean = sample.reduce((a, b) => a + b, 0) / sample.length;
   const sd =
@@ -160,9 +217,9 @@ export function recommend(
   // Only sides that can actually be taken. Underdog lists every LoL assists
   // market higher-only, and PrizePicks' promo projections are over-only —
   // naming a side the book won't accept is as useless as naming the wrong one.
-  const overs = options.filter((o) => o.overOk);
-  const unders = options.filter((o) => o.underOk);
-  if (overs.length === 0 && unders.length === 0) return null;
+  const overs = options.filter((x) => x.overOk);
+  const unders = options.filter((x) => x.underOk);
+  if (overs.length === 0 && unders.length === 0) return { play: null, why: { kind: 'unavailable' } };
 
   // An over wants the lowest number available; an under wants the highest.
   const forOver = overs.length ? overs.reduce((a, b) => (b.line < a.line ? b : a)) : null;
@@ -178,7 +235,11 @@ export function recommend(
         ? { side: 'under' as const, book: forUnder.book, line: forUnder.line, edge: underEdge }
         : null;
 
-  if (!pick || pick.edge < MIN_EDGE) return null;
+  if (!pick) return { play: null, why: { kind: 'unavailable' } };
+  // Evaluated and honest. The edge is reported anyway, because a line half a
+  // unit from a call is a different row from one two units away, and only one
+  // of them is worth watching.
+  if (pick.edge < MIN_EDGE) return { play: null, why: { kind: 'fair', edge: pick.edge } };
 
   const wins = sample.filter((t) => (pick.side === 'over' ? t > pick.line : t < pick.line)).length;
   const hitRate = wins / sample.length;
@@ -198,19 +259,22 @@ export function recommend(
   const strength = (hitRate - 0.5) * 2 * (edgeSd ?? 0.5) * evidence;
 
   return {
-    side: pick.side,
-    book: pick.book,
-    line: pick.line,
-    edge: pick.edge,
-    edgeSd,
-    hitRate,
-    series: form.series,
-    strength,
-    method: useSeries ? 'series' : 'maps',
-    sample: useSeries ? form.series : form.mapValues.length,
-    // A rank, not a probability. 60 is a better bet than 30; it is not a claim
-    // that it wins 60% of the time — hit rate is shown separately for that.
-    score: Math.max(1, Math.min(99, Math.round(strength * 100))),
+    why: null,
+    play: {
+      side: pick.side,
+      book: pick.book,
+      line: pick.line,
+      edge: pick.edge,
+      edgeSd,
+      hitRate,
+      series: form.series,
+      strength,
+      method: useSeries ? 'series' : 'maps',
+      sample: useSeries ? form.series : form.mapValues.length,
+      // A rank, not a probability. 60 is a better bet than 30; it is not a claim
+      // that it wins 60% of the time — hit rate is shown separately for that.
+      score: Math.max(1, Math.min(99, Math.round(strength * 100))),
+    },
   };
 }
 
@@ -385,4 +449,113 @@ export async function projectBoard(
   }
 
   return out;
+}
+
+/** The shape both `projectBoard` and `projectCombos` are asked about. */
+export type MarketKey = {
+  canon_handle: string;
+  handle: string;
+  league: string;
+  stat: string;
+  map_start: number;
+  map_end: number;
+};
+
+export const formKey = (m: {
+  canon_handle: string; stat: string; map_start: number; map_end: number;
+}) => `${m.canon_handle}|${m.stat}|${m.map_start}|${m.map_end}`;
+
+/**
+ * Form for combo markets, keyed the same way as single-player form so the
+ * board can look either up without knowing which it has.
+ *
+ * The query fetches raw per-player, per-map rows for the members and the
+ * folding happens in `src/combo.ts`, deliberately: the rule that decides which
+ * maps and series count is the rule that decides money on these markets, and a
+ * rule buried in SQL cannot be unit tested without a database. What SQL is left
+ * to do is the part it is good at — bounding the fetch to series where every
+ * member appears at all, most recent first.
+ *
+ * One query per (stat column, member set); combos are a couple of percent of
+ * the board, so this is a handful of round trips, not a per-row lookup.
+ */
+export async function projectCombos(
+  markets: MarketKey[],
+  limit = 20,
+): Promise<Map<string, FormStats>> {
+  const out = new Map<string, FormStats>();
+
+  // Collapse to one job per distinct market, since both books' rows arrive
+  // already paired but a search or filter can repeat one.
+  const jobs = new Map<string, { m: MarketKey; parts: string[]; col: string }>();
+  for (const m of markets) {
+    const col = STAT_COLUMN[m.stat];
+    if (!col) continue;
+    const parts = comboParts(m.handle);
+    if (parts.length < 2) continue;
+    const key = formKey(m);
+    if (!jobs.has(key)) jobs.set(key, { m, parts, col });
+  }
+
+  for (const [key, { m, parts, col }] of jobs) {
+    const rows = await q<ComboStatRow>(
+      `WITH r AS (
+         SELECT ms.series_key, ms.map_number, ms.canon_handle, ms.played_at,
+                ms.${col} AS value
+         FROM map_stat_dedup ms
+         WHERE ms.league = $1 AND ms.canon_handle = ANY($2::text[])
+       ),
+       -- Only series every member turned up in are worth carrying back. A
+       -- series missing one of them can never produce a combo total, so
+       -- fetching it would only be work for the fold to throw away.
+       keep AS (
+         SELECT series_key, max(played_at) AS at
+         FROM r
+         GROUP BY series_key
+         HAVING count(DISTINCT canon_handle) = $3
+         ORDER BY max(played_at) DESC NULLS LAST
+         LIMIT $4
+       )
+       SELECT r.series_key, r.map_number, r.canon_handle, r.value, r.played_at
+       FROM r JOIN keep k ON k.series_key = r.series_key
+       ORDER BY k.at DESC NULLS LAST, r.map_number`,
+      [m.league, parts, parts.length, limit * 3],
+    );
+
+    const { totals, mapValues } = foldCombo(parts, rows, m.map_start, m.map_end, limit);
+    if (totals.length === 0 && mapValues.length === 0) continue;
+
+    const n = totals.length;
+    const mean = n ? totals.reduce((a, b) => a + b, 0) / n : 0;
+    const sd =
+      n > 1 ? Math.sqrt(totals.reduce((a, b) => a + (b - mean) ** 2, 0) / (n - 1)) : null;
+    const perMap = mapValues.length
+      ? mapValues.reduce((a, b) => a + b, 0) / mapValues.length
+      : null;
+    out.set(key, { series: n, mean, sd, totals, mapValues, perMap });
+  }
+
+  return out;
+}
+
+/**
+ * Form for a whole board, single-player markets and combos alike.
+ *
+ * Callers shouldn't have to know which kind a row is — the combo is a market
+ * like any other once its members' history has been combined, and keeping the
+ * split inside here is what lets the board, the builder and the recommendation
+ * treat them alike.
+ */
+export async function projectMarkets(
+  markets: MarketKey[],
+  limit = 20,
+): Promise<Map<string, FormStats>> {
+  const singles = markets.filter((m) => comboParts(m.handle).length < 2);
+  const combos = markets.filter((m) => comboParts(m.handle).length >= 2);
+  const [a, b] = await Promise.all([
+    projectBoard(singles, limit),
+    projectCombos(combos, limit),
+  ]);
+  for (const [k, v] of b) a.set(k, v);
+  return a;
 }

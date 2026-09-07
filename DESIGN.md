@@ -88,9 +88,18 @@ The dashboard writes as well as reads. Rules that fell out of building it:
 - **Over/under are plain forms**, not fetch calls, and every write redirects
   (Post/Redirect/Get). Taking a prop works with scripts blocked, and a refresh
   never double-adds a leg.
-- **Combo props are marked.** A row like `Dhokla + Inspired + Saint` looks
-  exactly like a single-player line and is not one — it can't be graded per
-  player and must never be cross-book matched against one.
+- **Combo props are marked, and now priced.** A row like
+  `Dhokla + Inspired + Saint` looks exactly like a single-player line and is
+  not one. It is still marked, and still never cross-book matched against a
+  single player — but it is no longer a dead row. Its projection is built from
+  the series its members actually played *together*, and its result is the sum
+  of their totals, so it grades like anything else.
+- **The handle decides what a combo is, not the book's flag.** PrizePicks also
+  sets `combo` on the player node, and it over-fires: on 2026-09-07 it was set
+  on `eraa`, one CS2 player, whom Underdog listed as an ordinary player on the
+  same kills market. Believing the flag split that market in two, hid a 4.0
+  cross-book gap, and made it ungradeable. A name with one player in it is one
+  player.
 - **Legs read PENDING and stay there** until grading exists. Better an honest
   empty column than a fabricated result.
 - **A slip belongs to one app.** PrizePicks and Underdog are separate books
@@ -169,8 +178,54 @@ claim than two kills on a 5-kill line; ranking them alike would float noisy
 high-volume markets to the top forever.
 
 **No call is a real answer.** Below six series or half a stat unit the column
-says so. Roughly half the board has no call at any given time, and that is the
-column working — a tool that names an edge on every row has no edges.
+says so. A tool that names an edge on every row has no edges.
+
+**But "no call" was one word for six different facts**, and counting them
+settled the question of whether to hide the quiet rows — by accident, because
+the answer changed while it was being counted.
+
+Same 465-market board, same code, on 2026-09-07:
+
+| | 07:45 UTC | 08:40 UTC |
+|---|---|---|
+| CS2 stat rows in `map_stat` | 527, over 36 series | **8,390, over 719 series** |
+| Markets with a call | 22 (4.7%) | **278 (59.8%)** |
+| Priced fair — no edge | 27 | 70 |
+| Waiting on stat history | 386 | 89 |
+| CS2 board handles with enough history | 0 of 200 | **155 of 200** |
+
+Nothing about the markets changed in that hour. A bo3.gg backfill ran. The 386
+rows that looked dead were not markets without an edge — they were markets the
+model could not see, and 255 of them had an opinion an hour later.
+
+That is the whole argument. A market priced *fair* is live: the evidence is
+there and one line move puts it in play — 20 of the 70 sit within a single
+half-point move of the threshold. A market with no history is inert, and no
+line movement will make it speak. Two different rows, one word. So:
+
+- **Nothing is hidden by default.** The dominant reason a row is quiet is our
+  own data pipeline, not the market. Hiding those rows would have hidden the
+  gap rather than the market, and would have hidden it right through the hour
+  in which it closed.
+- **The header counts the reasons.** "278 with a call · 70 priced fair · 89
+  waiting on history" answers *why is this board quiet* without scrolling it,
+  and would have made the backfill visible the moment it landed.
+- **Dead rows sink rather than disappear.** Calls first by strength, then
+  markets priced fair — nearest to the threshold first, because those are the
+  ones a half-point move turns into a call — then everything waiting on data.
+- **Hiding is offered, at two strengths.** *Priced* keeps only markets the
+  model could evaluate. *With a call* keeps only markets it has an opinion on.
+  Both are one click and neither is the default, because a market with no edge
+  on our numbers is still a market the user may have a reason to take, and the
+  model cannot see those reasons.
+
+**Left open:** with CS2 history filled in, 60% of the board now carries a call,
+which is the opposite complaint. The damping holds the top of the board honest
+— of 284 calls, 199 score under 10 and only 13 reach 50 — but `MIN_EDGE` is an
+absolute 0.5, and half a kill against a 30.5-kill CS2 line is a 1.6% claim
+where the same 0.5 against a 5.5-kill assists line is 9%. A proportional floor,
+or one scaled by the player's own spread, is the obvious next question. Not
+changed here: it decides money and deserves its own measurement.
 
 ## Open decisions
 
@@ -203,6 +258,25 @@ column working — a tool that names an edge on every row has no edges.
   uncollectable — though it should keep saying so until enough history has
   actually accrued, since the honest empty state was never the problem.
   Headshot props specifically move from ungradeable to gradeable.
+- **2026-09-07** — Combo props stopped being dead rows. A combo is projected
+  from the series its members played *together*, never from summing their
+  distributions: means add under any dependence, but variances only add under
+  independence, and every combo on the board is several players in one match.
+  Measured across each board combo's full joint history, the real per-map
+  spread was 1.06x to 1.18x what independence implies — teammates' kills move
+  together — which would have inflated every combo's `edgeSd` and floated them
+  above the single-player markets they compete with. Combos grade too, now that
+  both games have per-map stats: the result is the members' totals summed, with
+  the same two refusals applied member by member (an unplayed map voids, a
+  missing stat line is ungradeable rather than zero).
+- **2026-09-07** — Counted why the board is quiet rather than assuming, and the
+  count answered itself: 22 of 465 markets carried a call at 07:45 with 386
+  waiting on stat history, and 278 did at 08:40 after a CS2 backfill landed.
+  Chose to sort dead rows down and count the reasons in the header rather than
+  hide them, with hiding available at two strengths behind the Show filter.
+  Hiding by default would have concealed a data-pipeline fact behind a page
+  that looked like a judgement — and concealed it through the hour it fixed
+  itself.
 - **2026-09-06** — Stack: server-rendered HTML from the existing Node app with
   hand-written CSS. No framework and no component library, so nothing arrives
   with a default look that has to be fought. It's read-only tables over
