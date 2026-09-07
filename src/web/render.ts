@@ -390,6 +390,23 @@ function formCell(f: FormStats | undefined): string {
  * edge worth naming, and inventing one for every row would make the column
  * worthless.
  */
+/**
+ * How good this line is, at a glance.
+ *
+ * Coloured by the side it recommends rather than by a fifth hue, so the far
+ * left of the row already tells you both how strong the call is and which way
+ * it goes. Size and weight carry the strength; the colour carries direction.
+ *
+ * It is a rank, not a probability. 60 beats 30; it is not a claim about how
+ * often it wins — hit rate sits in the Play column for that.
+ */
+function scoreCell(play: Play | null): string {
+  if (!play) return '<span class="score none">—</span>';
+  const tier = play.score >= 50 ? 'hi' : play.score >= 25 ? 'mid' : 'lo';
+  const dir = play.side === 'over' ? 'o' : 'u';
+  return `<span class="score ${tier} ${dir}" title="Ranking score, not a win probability">${play.score}</span>`;
+}
+
 function playCell(play: Play | null, f: FormStats | undefined): string {
   if (!play) {
     return `<span class="meta">${
@@ -504,6 +521,7 @@ export function boardPage(o: {
       </div>
       <div class="scroll"><table>
         <thead><tr>
+          <th class="c">Score</th>
           <th>Player</th>
           <th>Market</th>
           <th class="n">Form</th>
@@ -511,7 +529,6 @@ export function boardPage(o: {
           ${showPP ? '<th class="n">PrizePicks</th>' : ''}
           <th class="c">${gapLabel}</th>
           ${showUD ? '<th class="n">Underdog</th>' : ''}
-          <th class="hide-sm">Match</th>
           <th class="n hide-md">Starts</th>
         </tr></thead>
         <tbody>${ranked
@@ -527,20 +544,22 @@ export function boardPage(o: {
             const moved = r.moved === null ? null : Number(r.moved);
             const histId = r.pp_prop_id ?? r.ud_prop_id;
             return `<tr>
+            <td class="c">${scoreCell(play)}</td>
             <td>
               <div class="who">
                 ${leagueBadge(r.league)}
-                <div>
+                <div class="whobody">
                   <div class="name">${
                     histId ? `<a href="/prop/${histId}">${esc(r.handle)}</a>` : esc(r.handle)
-                  }</div>
-                  ${
+                  }${r.is_combo ? ' <span class="chip warn">Combo</span>' : ''}</div>
+                  <div class="meta matchline" title="${esc(r.match_title ?? '')}">${esc(
+                    r.match_title ?? '—',
+                  )}${
                     moved !== null && moved !== 0
-                      ? `<div class="meta">moved <span class="move ${moved > 0 ? 'up' : 'down'}">${signed(moved)}</span> since open</div>`
+                      ? ` · <span class="move ${moved > 0 ? 'up' : 'down'}">${signed(moved)}</span> since open`
                       : ''
-                  }
+                  }</div>
                 </div>
-                ${r.is_combo ? '<span class="chip warn">Combo</span>' : ''}
               </div>
             </td>
             <td>
@@ -570,7 +589,6 @@ export function boardPage(o: {
               </div></td>`
                 : ''
             }
-            <td class="match hide-sm"><span class="sub2" title="${esc(r.match_title ?? '')}">${esc(r.match_title ?? '—')}</span></td>
             <td class="n hide-md"><span class="meta">${starts(r.scheduled_at)}</span></td>
           </tr>`;
           })

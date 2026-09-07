@@ -232,7 +232,10 @@ a { color: inherit; }
   display: grid; gap: 22px;
   grid-template-columns: minmax(0, 1fr);
 }
-@media (min-width: 1180px) {
+/* The rail only sits alongside when the board still fits beside it. Below
+   this it stacks, rather than squeezing the table until columns run off the
+   edge of the card. */
+@media (min-width: 1400px) {
   .page.with-rail { grid-template-columns: minmax(0, 1fr) 330px; align-items: start; }
 }
 
@@ -263,7 +266,7 @@ table { width: 100%; border-collapse: collapse; }
 thead th {
   font-size: 12px; font-weight: 600; color: var(--text-2);
   letter-spacing: .02em;
-  text-align: left; padding: 10px 14px;
+  text-align: left; padding: 10px 11px;
   background: var(--surface-2);
   border-bottom: 1px solid var(--line);
   white-space: nowrap;
@@ -272,7 +275,7 @@ th.n, td.n { text-align: right; }
 th.c, td.c { text-align: center; }
 
 tbody td {
-  padding: 11px 14px;
+  padding: 10px 11px;
   border-bottom: 1px solid var(--line);
   white-space: nowrap;
   vertical-align: middle;
@@ -342,12 +345,12 @@ td.match .sub2 {
 
 /* ---- take buttons --------------------------------------------------- */
 
-.bookcell { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.bookcell { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 
-.ou { display: flex; gap: 5px; }
+.ou { display: flex; gap: 4px; }
 .ou button {
   font-family: var(--font); font-size: 14px; font-weight: 700;
-  min-width: 38px; height: 34px; padding: 0 10px;
+  min-width: 33px; height: 32px; padding: 0 7px;
   border-radius: var(--r); cursor: pointer;
   background: var(--surface-2); color: var(--text-2);
   border: 1px solid var(--line);
@@ -544,3 +547,27 @@ button.link:hover { color: var(--under); text-decoration: underline; }
 }
 .play.o .dir { color: var(--over); }
 .play.u .dir { color: var(--under); }
+
+/* ---- score --------------------------------------------------------- */
+
+/* Coloured by the side it recommends, so the far left of a row says both
+   how strong the call is and which way it goes. Weight and size carry the
+   strength; no fifth hue is introduced to say it. */
+.score {
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+  display: inline-block; min-width: 1.9em; text-align: center;
+}
+.score.none { color: var(--text-3); font-size: 15px; }
+.score.hi  { font-size: 22px; font-weight: 700; }
+.score.mid { font-size: 19px; font-weight: 600; }
+.score.lo  { font-size: 16px; font-weight: 500; opacity: .75; }
+.score.o { color: var(--over); }
+.score.u { color: var(--under); }
+
+/* Player cell now carries the matchup, so the table no longer needs a wide
+   trailing column that ran off the edge of the card. */
+.whobody { min-width: 0; }
+.matchline {
+  max-width: 20ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+@media (min-width: 1560px) { .matchline { max-width: 32ch; } }

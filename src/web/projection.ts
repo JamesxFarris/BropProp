@@ -47,6 +47,7 @@ export type Play = {
   hitRate: number;       // share of past series that would have won this side
   series: number;
   strength: number;      // ranking score, not a probability
+  score: number;         // strength on a 0-99 scale, for reading at a glance
 };
 
 const MIN_SERIES = 6;    // below this, form is noise wearing a number
@@ -102,6 +103,10 @@ export function recommend(
   // the same would put noisy high-volume markets on top every time.
   const edgeSd = form.sd && form.sd > 0 ? pick.edge / form.sd : null;
 
+  // Hit rate carries the ranking, nudged by how big the edge is relative to
+  // the player's own variance. Sample size damps small-sample confidence.
+  const strength = (hitRate - 0.5) * 2 * (edgeSd ?? 0.5) * Math.min(1, form.series / 12);
+
   return {
     side: pick.side,
     book: pick.book,
@@ -110,10 +115,10 @@ export function recommend(
     edgeSd,
     hitRate,
     series: form.series,
-    // Hit rate carries the ranking, nudged by how big the edge is relative to
-    // the player's own variance. Sample size damps small-sample confidence.
-    strength:
-      (hitRate - 0.5) * 2 * (edgeSd ?? 0.5) * Math.min(1, form.series / 12),
+    strength,
+    // A rank, not a probability. 60 is a better bet than 30; it is not a claim
+    // that it wins 60% of the time — hit rate is shown separately for that.
+    score: Math.max(1, Math.min(99, Math.round(strength * 100))),
   };
 }
 
