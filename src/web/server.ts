@@ -11,6 +11,7 @@ import {
   openSlipBook, WrongBookError,
 } from './picks.js';
 import { boardPage, edgesPage, slipsPage, historyPage } from './render.js';
+import { projectBoard } from './projection.js';
 
 const PORT = Number(process.env.PORT ?? 3000);
 const PUBLIC = 'public';
@@ -187,7 +188,16 @@ const server = createServer(async (req, res) => {
         openPicks(),
         health(filters.league),
       ]);
-      return html(res, boardPage({ rows, picks, health: h, leagues: known, filters, lockedBook, blocked }));
+      // One projection lookup for the whole board rather than per row.
+      const form = await projectBoard(
+        rows.flatMap((r) => [
+          { canon_handle: r.canon_handle, league: r.league, stat: r.stat,
+            map_start: r.map_start, map_end: r.map_end, line: r.pp_line },
+          { canon_handle: r.canon_handle, league: r.league, stat: r.stat,
+            map_start: r.map_start, map_end: r.map_end, line: r.ud_line },
+        ]),
+      );
+      return html(res, boardPage({ rows, picks, health: h, leagues: known, filters, lockedBook, blocked, form }));
     }
 
     if (url.pathname === '/slips') {

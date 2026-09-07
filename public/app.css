@@ -522,3 +522,9 @@ button.link:hover { color: var(--under); text-decoration: underline; }
 .ou button.best { border-width: 2px; font-weight: 700; }
 .ou button.best.o.on { background: var(--over-bg); }
 .ou button.best.u.on { background: var(--under-bg); }
+
+/* Distance from the player's recent average to this book's line. Small and
+   adjacent to the number: one input among several, not a verdict. */
+.lean { font-family: var(--mono); font-size: 12px; font-weight: 500; }
+.lean.up { color: var(--over); }
+.lean.down { color: var(--under); }

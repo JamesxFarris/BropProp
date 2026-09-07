@@ -1,6 +1,7 @@
 import type { Movement, Health } from './queries.js';
 import type { PickRow, SlipSummary } from './picks.js';
 import type { MarketRow, PropHistory } from './boardq.js';
+import type { Projection } from './projection.js';
 
 export const esc = (s: unknown) =>
   String(s ?? '').replace(/[&<>"']/g, (c) =>
@@ -363,6 +364,34 @@ function lockNotice(locked: string | null, blocked: string | null): string {
   return '';
 }
 
+/**
+ * Recent form: what this player has actually totalled over the same map range.
+ *
+ * Sample size is shown next to the number and never hidden. Six series is a
+ * different claim from twenty, and a projection presented without its sample
+ * invites exactly the confidence it hasn't earned.
+ */
+function formCell(p: Projection | undefined): string {
+  if (!p) return '<span class="meta">—</span>';
+  return `<div class="fig sm">${p.mean.toFixed(1)}</div>
+    <div class="meta">${p.series} series${
+      p.hitRate !== null && p.series >= 4
+        ? ` · ${Math.round(p.hitRate * 100)}% over`
+        : ''
+    }</div>`;
+}
+
+/**
+ * How far this book's line sits from the player's average. Shown small and
+ * beside the line rather than as a verdict: it's one input, and with these
+ * sample sizes it is not yet a reason on its own.
+ */
+function leanMark(p: Projection | undefined): string {
+  if (!p || p.edge === null || p.series < 4) return '';
+  if (Math.abs(p.edge) < 0.5) return '';
+  return ` <span class="lean ${p.edge > 0 ? 'up' : 'down'}">${signed(p.edge)}</span>`;
+}
+
 // ------------------------------------------------------------------ board --
 
 /**
@@ -417,8 +446,13 @@ export function boardPage(o: {
   filters: Filters;
   lockedBook: string | null;
   blocked: string | null;
+  form?: Map<string, Projection>;
 }): string {
   const back = `/board${qs({}, o.filters)}`;
+  const proj = (r: MarketRow, line: number | null) =>
+    line === null
+      ? undefined
+      : o.form?.get(`${r.canon_handle}|${r.stat}|${r.map_start}|${r.map_end}|${line}`);
 
   // One app selected (by filter or by an open slip) means one column. Showing
   // the other app's line with live take buttons offered a pick that cannot
@@ -448,6 +482,7 @@ export function boardPage(o: {
         <thead><tr>
           <th>Player</th>
           <th>Market</th>
+          <th class="n">Form</th>
           ${showPP ? '<th class="n">PrizePicks</th>' : ''}
           <th class="c">${gapLabel}</th>
           ${showUD ? '<th class="n">Underdog</th>' : ''}
@@ -486,10 +521,11 @@ export function boardPage(o: {
               <div class="sub2">${esc(statLabel(r.stat))}</div>
               <div class="meta">${esc(maps(r.map_start, r.map_end))}</div>
             </td>
+            <td class="n">${formCell(proj(r, r.pp_line) ?? proj(r, r.ud_line))}</td>
             ${
               showPP
                 ? `<td class="n"><div class="bookcell">
-                <span class="fig${r.pp_line === null ? ' muted' : ''}">${num(r.pp_line)}</span>
+                <span class="fig${r.pp_line === null ? ' muted' : ''}">${num(r.pp_line)}${leanMark(proj(r, r.pp_line))}</span>
                 ${ouButtons(r.pp_prop_id, back, r.pp_side,
                   restrict ? bestSide('prizepicks', r.delta === null ? null : Number(r.delta)) : 'both',
                   bestSide('prizepicks', r.delta === null ? null : Number(r.delta)))}
@@ -500,7 +536,7 @@ export function boardPage(o: {
             ${
               showUD
                 ? `<td class="n"><div class="bookcell">
-                <span class="fig${r.ud_line === null ? ' muted' : ''}">${num(r.ud_line)}</span>
+                <span class="fig${r.ud_line === null ? ' muted' : ''}">${num(r.ud_line)}${leanMark(proj(r, r.ud_line))}</span>
                 ${ouButtons(r.ud_prop_id, back, r.ud_side,
                   restrict ? bestSide('underdog', r.delta === null ? null : Number(r.delta)) : 'both',
                   bestSide('underdog', r.delta === null ? null : Number(r.delta)))}
