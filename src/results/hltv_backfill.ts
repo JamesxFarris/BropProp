@@ -15,16 +15,20 @@ import { extractMatch, sleep, UA } from './hltv.js';
  * load per match, so it paces itself and — more importantly — skips matches
  * already stored, which makes the crawl resumable and every later run cheap.
  *
- * MEASURED YIELD, and the reason this is not the CS2 backfill: of 30 recent
- * results, exactly ONE carried per-map player stats, and none of its ten
- * players were on our board. HLTV only publishes stats for matches whose demos
- * it has parsed, which skews hard to bigger events, while the props we price
- * are mostly tier-C qualifiers. Crawling to any useful depth would cost
- * thousands of page loads at roughly a 3% hit rate.
+ * TWO MEASURED LIMITS, which together mean this cannot backfill history:
  *
- * It still earns its place as an accumulator: it is resumable, cheap on
- * re-runs, and catches the matches that do get stats. It will not build a
- * season of history. For that, a stats API is the honest answer.
+ *  1. Coverage. Of 30 recent results, exactly ONE carried per-map player
+ *     stats, and none of its ten players were on our board. HLTV publishes
+ *     stats only for matches whose demos it has parsed, which skews to bigger
+ *     events, while the props we price are mostly tier-C qualifiers.
+ *  2. Depth. Only the first results page is reachable at all — /results serves
+ *     fine but /results?offset=100 returns a Cloudflare challenge. There is no
+ *     way to walk backwards through the archive.
+ *
+ * So it is an accumulator, not a backfill: run it daily and it picks up the
+ * matches that appeared and got parsed since yesterday, for the players we
+ * price. Building a season of history needs a paid stats feed — PandaScore's
+ * free tier serves fixtures and rosters but 403s every stats endpoint.
  */
 
 const RESULTS = 'https://www.hltv.org/results';
@@ -50,7 +54,7 @@ async function trackedHandles(): Promise<Set<string>> {
   return new Set(rows.map((r) => r.canon_handle));
 }
 
-export async function backfillCs2(resultPages = 3): Promise<number> {
+export async function backfillCs2(resultPages = 1): Promise<number> {
   let chromium;
   try {
     ({ chromium } = await import('playwright'));
@@ -72,7 +76,17 @@ export async function backfillCs2(resultPages = 3): Promise<number> {
     for (let pageNo = 0; pageNo < resultPages; pageNo++) {
       if (pageNo > 0) await sleep(RESULTS_GAP_MS);
       const url = pageNo === 0 ? RESULTS : `${RESULTS}?offset=${pageNo * 100}`;
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+      const res = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+
+      // Cloudflare serves the first results page but challenges paginated ones,
+      // so anything past the first page comes back as an interstitial. Say so
+      // rather than reporting a page of zero matches as a quiet success.
+      if (res && res.status() === 403) {
+        console.warn(
+          `  results page ${pageNo + 1}: blocked by Cloudflare (only the first page is reachable) — stopping`,
+        );
+        break;
+      }
 
       const links: Link[] = await page.$$eval('.result-con a.a-reset', (els) =>
         els.map((e) => ({

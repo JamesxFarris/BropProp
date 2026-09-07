@@ -48,21 +48,32 @@ or run it from somewhere else. Nothing is wrong with the code.
 ### 3. CS2 history — measured, and HLTV is not the answer
 
 ```bash
-npm run backfill:cs2 3     # crawl 3 pages of HLTV results (~300 matches)
+npm run backfill:cs2       # one pass over HLTV's current results page
 ```
 
-Works, resumable, skips matches already stored. But **measure before you wait
-on it**: of 30 recent HLTV results, exactly one carried per-map player stats,
-and none of its players were on our board. HLTV publishes stats only for
-matches whose demos it parsed, which skews to big events, while the props we
-price are mostly tier-C qualifiers. Expect roughly a 3% hit rate.
+Resumable and cheap on re-runs, but it is an **accumulator, not a backfill**.
+Two measured limits:
 
-Run it as an accumulator if you like — it is cheap on re-runs and catches what
-does appear. It will not build a season of history.
+- **Coverage.** Of 30 recent results, one carried per-map player stats, and
+  none of its players were on our board. HLTV publishes stats only for matches
+  whose demos it parsed, which skews to big events; our props are mostly
+  tier-C qualifiers.
+- **Depth.** Only the first results page is reachable. `/results` serves fine,
+  `/results?offset=100` returns a Cloudflare challenge, so the archive can't be
+  walked backwards.
 
-**The honest fix is a stats API.** PandaScore has a free developer tier
-covering CS2 with player match stats; it needs an account and a key. That is
-the one outstanding decision for CS2 form.
+Run it daily and it collects what appeared since yesterday. It will not build
+a season.
+
+**PandaScore's free tier does not solve this** — tested 2026-09-07 with a real
+token. List endpoints work (matches, players, teams, both CS2 and LoL, 1000
+requests/hour) but every stats endpoint is 403: `/games/{id}`,
+`/matches/{id}`, `/players/{id}/stats`. Per-map player stats are a paid
+feature. The token is in `.env` as `PANDASCORE_TOKEN` and is fine for
+fixtures and rosters if we ever want them.
+
+**So CS2 form needs either a paid feed or patience** — the accumulator plus
+grading builds history for the teams we actually bet, just slowly.
 
 ### Older notes on CS2 history
 
