@@ -1,105 +1,73 @@
 /* BropProp
    ---------------------------------------------------------------------
-   The subject is a head-to-head between two books, so the board is built
-   like a scoreboard: one row per market, the two books paired, and the gap
-   between them as the thing the eye lands on. Boldness is spent on that gap
-   chip alone; everything around it stays quiet.
+   Colour carries exactly three meanings and nothing else:
 
-   League identity carries the colour (CS2 amber, LOL cyan). Semantic colour
-   (over / under) is separate from that and from the neutral primary action,
-   so hues never compete for the same meaning.
+     gold   this is worth your money   (brand, and the strength score)
+     green  over
+     red    under
 
-   Radius is spent by role: controls are rounded because they are pressable,
-   data rows are square because they are a table. */
+   Everything else — leagues, books, chrome — is neutral. Four competing
+   colour languages is what made the board hard to read; league identity
+   is now a labelled chip, because the label already says which game it is.
+
+   Dark is the default: this is a tool used at night, next to a stream. */
 
 :root {
-  color-scheme: light dark;
+  color-scheme: dark;
 
-  /* Near-neutral, barely warm. The league and semantic hues are the only
-     colour on the page, so the ground stays out of their way. */
-  --bg:        #f4f5f6;
-  --surface:   #ffffff;
-  --surface-2: #ecedef;
-  --raised:    #ffffff;
-  --line:      #dcdee1;
-  --line-2:    #bcc0c5;
+  --bg:        #101216;
+  --surface:   #171a1f;
+  --surface-2: #1f232a;
+  --raised:    #222730;
+  --line:      #2c313a;
+  --line-2:    #414855;
 
-  --text:      #14161a;
-  --text-2:    #4a4f56;
-  --text-3:    #737980;
+  --text:      #f2f4f7;
+  --text-2:    #b9c1cc;
+  --text-3:    #8b95a3;
 
-  --cs2:       #b8760e;
-  --cs2-bg:    #b8760e18;
-  --lol:       #14788f;
-  --lol-bg:    #14788f18;
+  /* Brand. A warm gold — the one thing on the page that means "good". */
+  --brand:     #f0b429;
+  --brand-dim: #f0b42926;
+  --brand-ink: #1a1d22;
 
-  --over:      #16815a;
-  --over-bg:   #16815a16;
-  --under:     #bf3a32;
-  --under-bg:  #bf3a3216;
+  --over:      #34d399;
+  --over-bg:   #34d39922;
+  --under:     #fb7185;
+  --under-bg:  #fb718522;
 
-  --live:      #1a7f57;
-  --focus:     #1f7fd4;
+  --live:      #34d399;
+  --focus:     #f0b429;
 
   --font: 'Barlow', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-  --r:  6px;   /* controls */
-  --r-s: 4px;  /* chips */
+  --r:  8px;
+  --r-s: 5px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg:        #131518;
-    --surface:   #1a1d21;
-    --surface-2: #22262b;
-    --raised:    #24282e;
-    --line:      #30353c;
-    --line-2:    #454b53;
-
-    --text:      #f1f3f5;
-    --text-2:    #b6bcc4;
-    --text-3:    #8a9199;
-
-    --cs2:       #f5a83f;
-    --cs2-bg:    #f5a83f24;
-    --lol:       #55cbe8;
-    --lol-bg:    #55cbe824;
-
-    --over:      #3fc98c;
-    --over-bg:   #3fc98c24;
-    --under:     #f06f66;
-    --under-bg:  #f06f6624;
-
-    --live:      #3fc98c;
-    --focus:     #4cc2e0;
-  }
-}
-
-[data-theme="dark"] {
-  --bg:        #131518;
-  --surface:   #1a1d21;
-  --surface-2: #22262b;
-  --raised:    #24282e;
-  --line:      #30353c;
-  --line-2:    #454b53;
-
-  --text:      #f1f3f5;
-  --text-2:    #b6bcc4;
-  --text-3:    #8a9199;
-
-  --cs2:       #f5a83f;
-  --cs2-bg:    #f5a83f24;
-  --lol:       #55cbe8;
-  --lol-bg:    #55cbe824;
-
-  --over:      #3fc98c;
-  --over-bg:   #3fc98c24;
-  --under:     #f06f66;
-  --under-bg:  #f06f6624;
-
-  --live:      #3fc98c;
-  --focus:     #4cc2e0;
+/* Light exists, but only if it is asked for. Following the system would mean
+   a machine set to light never sees the default this tool is designed in. */
+[data-theme="light"] {
+  color-scheme: light;
+  --bg:        #f3f4f6;
+  --surface:   #ffffff;
+  --surface-2: #eceef1;
+  --raised:    #ffffff;
+  --line:      #dcdfe4;
+  --line-2:    #b9bec7;
+  --text:      #12151a;
+  --text-2:    #495059;
+  --text-3:    #737b85;
+  --brand:     #a76a00;
+  --brand-dim: #a76a0018;
+  --brand-ink: #ffffff;
+  --over:      #0f8a5f;
+  --over-bg:   #0f8a5f16;
+  --under:     #c2334d;
+  --under-bg:  #c2334d16;
+  --live:      #0f8a5f;
+  --focus:     #a76a00;
 }
 
 * { box-sizing: border-box; }
@@ -109,7 +77,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font);
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
@@ -148,12 +116,12 @@ a { color: inherit; }
 
 .tabs { display: flex; gap: 4px; }
 .tabs a {
-  padding: 7px 15px; border-radius: var(--r);
-  font-size: 14px; font-weight: 600; color: var(--text-2);
+  padding: 8px 16px; border-radius: var(--r);
+  font-size: 15px; font-weight: 600; color: var(--text-2);
   text-decoration: none; white-space: nowrap;
 }
 .tabs a:hover { background: var(--surface-2); color: var(--text); }
-.tabs a[aria-current="page"] { background: var(--text); color: var(--surface); }
+.tabs a[aria-current="page"] { background: var(--brand); color: var(--brand-ink); }
 
 .top .grow { flex: 1 1 auto; }
 
@@ -193,28 +161,21 @@ a { color: inherit; }
 .seg { display: flex; gap: 5px; }
 .seg a {
   display: inline-flex; align-items: center; gap: 7px;
-  padding: 8px 16px; border-radius: var(--r);
+  padding: 9px 17px; border-radius: var(--r);
   border: 1px solid var(--line);
   background: var(--surface);
   color: var(--text-2);
-  font-size: 14px; font-weight: 600; text-decoration: none;
+  font-size: 15px; font-weight: 600; text-decoration: none;
   white-space: nowrap;
 }
 .seg a:hover { border-color: var(--line-2); color: var(--text); }
 .seg a[aria-current="page"] {
-  background: var(--text); border-color: var(--text); color: var(--surface);
+  background: var(--brand); border-color: var(--brand); color: var(--brand-ink);
 }
-.seg a.cs2[aria-current="page"] {
-  background: var(--cs2-bg); border-color: var(--cs2); color: var(--cs2);
+.seg a.cs2[aria-current="page"], .seg a.lol[aria-current="page"] {
+  background: var(--brand); border-color: var(--brand); color: var(--brand-ink);
 }
-.seg a.lol[aria-current="page"] {
-  background: var(--lol-bg); border-color: var(--lol); color: var(--lol);
-}
-.seg a .swatch {
-  width: 9px; height: 9px; border-radius: 2px; flex: none;
-}
-.seg a.cs2 .swatch { background: var(--cs2); }
-.seg a.lol .swatch { background: var(--lol); }
+
 
 .search { display: flex; gap: 6px; align-items: center; }
 .search input {
@@ -228,7 +189,7 @@ a { color: inherit; }
 /* ---- page ----------------------------------------------------------- */
 
 .page {
-  max-width: 1560px; margin: 0 auto; padding: 18px 22px 80px;
+  max-width: 1560px; margin: 0 auto; padding: 18px 16px 80px;
   display: grid; gap: 22px;
   grid-template-columns: minmax(0, 1fr);
 }
@@ -253,9 +214,9 @@ a { color: inherit; }
   border-bottom: 1px solid var(--line);
 }
 .card-head h2 {
-  margin: 0; font-size: 16px; font-weight: 700; letter-spacing: -.01em;
+  margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -.01em;
 }
-.card-head .sub { font-size: 13px; color: var(--text-3); margin-left: auto; }
+.card-head .sub { font-size: 14px; color: var(--text-3); margin-left: auto; }
 
 .scroll { overflow-x: auto; }
 
@@ -264,9 +225,9 @@ a { color: inherit; }
 table { width: 100%; border-collapse: collapse; }
 
 thead th {
-  font-size: 12px; font-weight: 600; color: var(--text-2);
+  font-size: 13px; font-weight: 600; color: var(--text-2);
   letter-spacing: .02em;
-  text-align: left; padding: 10px 11px;
+  text-align: left; padding: 10px 7px;
   background: var(--surface-2);
   border-bottom: 1px solid var(--line);
   white-space: nowrap;
@@ -275,7 +236,7 @@ th.n, td.n { text-align: right; }
 th.c, td.c { text-align: center; }
 
 tbody td {
-  padding: 10px 11px;
+  padding: 11px 7px;
   border-bottom: 1px solid var(--line);
   white-space: nowrap;
   vertical-align: middle;
@@ -287,11 +248,11 @@ tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--surface-2) 45
 tbody tr:nth-child(even):hover td { background: var(--surface-2); }
 
 .who { display: flex; align-items: center; gap: 10px; }
-.name { font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
+.name { font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
 .name a { text-decoration: none; }
 .name a:hover { text-decoration: underline; }
-.meta { font-size: 13px; color: var(--text-3); }
-.sub2 { font-size: 13px; color: var(--text-2); }
+.meta { font-size: 14px; color: var(--text-3); }
+.sub2 { font-size: 15px; color: var(--text-2); }
 
 /* Match names run long ("RED Canids Academy vs Bounty Hunters") and would
    otherwise push the columns after them out of view. Truncate the one cell
@@ -305,31 +266,31 @@ td.match .sub2 {
 /* Figures are the data: mono and tabular so columns align to the decimal. */
 .fig {
   font-family: var(--mono); font-variant-numeric: tabular-nums;
-  font-size: 17px; font-weight: 500;
+  font-size: 19px; font-weight: 500;
 }
-.fig.sm { font-size: 15px; }
+.fig.sm { font-size: 17px; }
 .fig.muted { color: var(--text-3); }
 
 /* League identity. An acronym badge, not a styled-caps label. */
 .lg {
-  display: inline-block; padding: 3px 8px; border-radius: var(--r-s);
-  font-size: 12px; font-weight: 700; letter-spacing: .02em;
+  display: inline-block; padding: 3px 9px; border-radius: var(--r-s);
+  font-size: 13px; font-weight: 700; letter-spacing: .02em;
   border: 1px solid transparent;
 }
-.lg.cs2 { color: var(--cs2); background: var(--cs2-bg); border-color: var(--cs2); }
-.lg.lol { color: var(--lol); background: var(--lol-bg); border-color: var(--lol); }
-.lg.other { color: var(--text-2); background: var(--surface-2); border-color: var(--line-2); }
+.lg.cs2, .lg.lol, .lg.other {
+  color: var(--text-2); background: var(--surface-2); border-color: var(--line-2);
+}
 
 .chip {
-  display: inline-block; padding: 3px 8px; border-radius: var(--r-s);
-  font-size: 12px; font-weight: 600; color: var(--text-2);
+  display: inline-block; padding: 3px 9px; border-radius: var(--r-s);
+  font-size: 13px; font-weight: 600; color: var(--text-2);
   background: var(--surface-2); border: 1px solid var(--line);
 }
 .chip.warn { color: var(--under); border-color: var(--under); background: var(--under-bg); }
 
 /* The gap between the two books — the one loud element on the page. */
 .gap-chip {
-  display: inline-block; min-width: 62px; padding: 5px 10px;
+  display: inline-block; min-width: 52px; padding: 5px 8px;
   border-radius: var(--r); text-align: center;
   font-family: var(--mono); font-variant-numeric: tabular-nums;
   font-size: 15px; font-weight: 600;
@@ -345,12 +306,12 @@ td.match .sub2 {
 
 /* ---- take buttons --------------------------------------------------- */
 
-.bookcell { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.bookcell { display: flex; align-items: center; justify-content: flex-end; gap: 7px; }
 
 .ou { display: flex; gap: 4px; }
 .ou button {
-  font-family: var(--font); font-size: 14px; font-weight: 700;
-  min-width: 33px; height: 32px; padding: 0 7px;
+  font-family: var(--font); font-size: 15px; font-weight: 700;
+  min-width: 32px; height: 34px; padding: 0 6px;
   border-radius: var(--r); cursor: pointer;
   background: var(--surface-2); color: var(--text-2);
   border: 1px solid var(--line);
@@ -419,9 +380,9 @@ button.rm:hover { color: var(--under); border-color: var(--under); background: v
 }
 
 button.go {
-  font-family: var(--font); font-size: 15px; font-weight: 700;
-  width: 100%; padding: 12px; border-radius: var(--r); cursor: pointer;
-  background: var(--text); color: var(--surface); border: 1px solid var(--text);
+  font-family: var(--font); font-size: 16px; font-weight: 700;
+  width: 100%; padding: 13px; border-radius: var(--r); cursor: pointer;
+  background: var(--brand); color: var(--brand-ink); border: 1px solid var(--brand);
 }
 button.go:hover { opacity: .88; }
 
@@ -481,11 +442,16 @@ button.link:hover { color: var(--under); text-decoration: underline; }
 
 .pending { color: var(--text-3); }
 
-/* With the slip rail alongside, the table runs out of room before "Starts"
-   does. Drop that column rather than leaving it clipped at the card edge —
-   kick-off time is the least load-bearing thing on the row. */
 @media (max-width: 1499px) {
   .hide-md { display: none; }
+}
+
+/* The Gap column is the first thing to go when space is short: the Take
+   column already names which app to use, and both lines are on the row, so
+   the difference between them is arithmetic the reader can see. Better a
+   dropped column than one clipped at the edge of the card. */
+@media (max-width: 1620px) {
+  .gapcol { display: none; }
 }
 
 @media (max-width: 860px) {
@@ -510,8 +476,8 @@ button.link:hover { color: var(--under); text-decoration: underline; }
 
 .seg-locked {
   display: inline-flex; align-items: center;
-  padding: 8px 16px; border-radius: var(--r);
-  background: var(--text); color: var(--surface);
+  padding: 9px 17px; border-radius: var(--r);
+  background: var(--brand); color: var(--brand-ink);
   font-size: 14px; font-weight: 600;
 }
 
@@ -540,9 +506,9 @@ button.link:hover { color: var(--under); text-decoration: underline; }
 /* The call. Direction is the loud part — it's the thing being decided; the
    app and line sit under it as the where. */
 .play { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
-.play .dir { font-size: 16px; font-weight: 700; letter-spacing: -.01em; }
+.play .dir { font-size: 18px; font-weight: 700; letter-spacing: -.01em; }
 .play .at {
-  font-family: var(--mono); font-size: 13px; font-weight: 500;
+  font-family: var(--mono); font-size: 15px; font-weight: 500;
   color: var(--text-2);
 }
 .play.o .dir { color: var(--over); }
@@ -558,19 +524,19 @@ button.link:hover { color: var(--under); text-decoration: underline; }
   display: inline-block; min-width: 1.9em; text-align: center;
 }
 .score.none { color: var(--text-3); font-size: 15px; }
-.score.hi  { font-size: 22px; font-weight: 700; }
-.score.mid { font-size: 19px; font-weight: 600; }
-.score.lo  { font-size: 16px; font-weight: 500; opacity: .75; }
-.score.o { color: var(--over); }
-.score.u { color: var(--under); }
+/* Gold means "worth your money". Strength is the size and weight; the
+   direction is the Take column's job, and colouring both said it twice. */
+.score.hi  { font-size: 26px; font-weight: 700; color: var(--brand); }
+.score.mid { font-size: 22px; font-weight: 600; color: var(--text); }
+.score.lo  { font-size: 18px; font-weight: 500; color: var(--text-3); }
 
 /* Player cell now carries the matchup, so the table no longer needs a wide
    trailing column that ran off the edge of the card. */
 .whobody { min-width: 0; }
 .matchline {
-  max-width: 20ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 15ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-@media (min-width: 1560px) { .matchline { max-width: 32ch; } }
+@media (min-width: 1560px) { .matchline { max-width: 30ch; } }
 
 /* Kick-off. Quiet until it matters — a market that has already started is
    the one thing here you cannot act on. */

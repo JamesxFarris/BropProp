@@ -120,12 +120,7 @@ function filterBar(path: string, f: Filters, leagues: string[], locked: string |
   const leagueBtns = [
     a(qs({ league: null }, f), 'All', f.league === null),
     ...leagues.map((l) =>
-      a(
-        qs({ league: l }, f),
-        `<span class="swatch"></span>${esc(l)}`,
-        f.league === l,
-        LEAGUE_CLASS[l] ?? '',
-      ),
+      a(qs({ league: l }, f), esc(l), f.league === l, LEAGUE_CLASS[l] ?? ''),
     ),
   ].join('');
 
@@ -186,6 +181,8 @@ function shell(o: {
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="theme-color" content="#101216">
 <link rel="stylesheet" href="/app.css">
 </head>
 <body>
@@ -469,8 +466,7 @@ function formCell(f: FormStats | undefined, play: Play | null): string {
 function scoreCell(play: Play | null): string {
   if (!play) return '<span class="score none">—</span>';
   const tier = play.score >= 50 ? 'hi' : play.score >= 25 ? 'mid' : 'lo';
-  const dir = play.side === 'over' ? 'o' : 'u';
-  return `<span class="score ${tier} ${dir}" title="Ranking score, not a win probability">${play.score}</span>`;
+  return `<span class="score ${tier}" title="How good this line looks, 1-99. A ranking, not a win probability.">${play.score}</span>`;
 }
 
 function playCell(
@@ -655,10 +651,10 @@ export function boardPage(o: {
           <th class="c">Score</th>
           <th>Player</th>
           <th>Market</th>
-          <th class="n">Form</th>
-          <th>Play</th>
+          <th class="n">Averages</th>
+          <th>Take</th>
           ${showPP ? '<th class="n">PrizePicks</th>' : ''}
-          <th class="c">${gapLabel}</th>
+          <th class="c gapcol">${gapLabel}</th>
           ${showUD ? '<th class="n">Underdog</th>' : ''}
         </tr></thead>
         <tbody>${ranked

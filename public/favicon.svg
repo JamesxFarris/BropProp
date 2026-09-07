@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="14" fill="#101216"/>
+  <!-- Money bag: tie at the neck, round body, currency mark. -->
+  <path d="M24 15h16l-4.5 6.5h-7z" fill="#f0b429"/>
+  <path d="M35.5 21.5h-7C20 25 14 33 14 41.5 14 49 20 54 32 54s18-5 18-12.5c0-8.5-6-16.5-14.5-20z" fill="#f0b429"/>
+  <text x="32" y="46" font-family="Barlow, Segoe UI, sans-serif" font-size="20" font-weight="700"
+        text-anchor="middle" fill="#101216">$</text>
+</svg>
