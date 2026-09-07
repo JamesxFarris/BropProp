@@ -15,17 +15,18 @@
 :root {
   color-scheme: light dark;
 
-  /* Light: a cool paper with a blue bias toward the interface hues. */
-  --bg:        #f4f6f8;
+  /* Near-neutral, barely warm. The league and semantic hues are the only
+     colour on the page, so the ground stays out of their way. */
+  --bg:        #f4f5f6;
   --surface:   #ffffff;
-  --surface-2: #eef1f5;
+  --surface-2: #ecedef;
   --raised:    #ffffff;
-  --line:      #dde3ea;
-  --line-2:    #c8d1db;
+  --line:      #dcdee1;
+  --line-2:    #bcc0c5;
 
-  --text:      #131c26;
-  --text-2:    #4f5c6b;
-  --text-3:    #7b8896;
+  --text:      #14161a;
+  --text-2:    #4a4f56;
+  --text-3:    #737980;
 
   --cs2:       #b8760e;
   --cs2-bg:    #b8760e18;
@@ -37,7 +38,7 @@
   --under:     #bf3a32;
   --under-bg:  #bf3a3216;
 
-  --live:      #16815a;
+  --live:      #1a7f57;
   --focus:     #1f7fd4;
 
   --font: 'Barlow', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -49,55 +50,55 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg:        #0f1621;
-    --surface:   #16202d;
-    --surface-2: #1b2735;
-    --raised:    #1d2a39;
-    --line:      #26313f;
-    --line-2:    #35424f;
+    --bg:        #131518;
+    --surface:   #1a1d21;
+    --surface-2: #22262b;
+    --raised:    #24282e;
+    --line:      #30353c;
+    --line-2:    #454b53;
 
-    --text:      #e9eef4;
-    --text-2:    #9dabbb;
-    --text-3:    #6f7d8c;
+    --text:      #f1f3f5;
+    --text-2:    #b6bcc4;
+    --text-3:    #8a9199;
 
-    --cs2:       #f2a03d;
-    --cs2-bg:    #f2a03d1f;
-    --lol:       #4cc2e0;
-    --lol-bg:    #4cc2e01f;
+    --cs2:       #f5a83f;
+    --cs2-bg:    #f5a83f24;
+    --lol:       #55cbe8;
+    --lol-bg:    #55cbe824;
 
-    --over:      #31b57e;
-    --over-bg:   #31b57e1f;
-    --under:     #e5645b;
-    --under-bg:  #e5645b1f;
+    --over:      #3fc98c;
+    --over-bg:   #3fc98c24;
+    --under:     #f06f66;
+    --under-bg:  #f06f6624;
 
-    --live:      #31b57e;
+    --live:      #3fc98c;
     --focus:     #4cc2e0;
   }
 }
 
 [data-theme="dark"] {
-  --bg:        #0f1621;
-  --surface:   #16202d;
-  --surface-2: #1b2735;
-  --raised:    #1d2a39;
-  --line:      #26313f;
-  --line-2:    #35424f;
+  --bg:        #131518;
+  --surface:   #1a1d21;
+  --surface-2: #22262b;
+  --raised:    #24282e;
+  --line:      #30353c;
+  --line-2:    #454b53;
 
-  --text:      #e9eef4;
-  --text-2:    #9dabbb;
-  --text-3:    #6f7d8c;
+  --text:      #f1f3f5;
+  --text-2:    #b6bcc4;
+  --text-3:    #8a9199;
 
-  --cs2:       #f2a03d;
-  --cs2-bg:    #f2a03d1f;
-  --lol:       #4cc2e0;
-  --lol-bg:    #4cc2e01f;
+  --cs2:       #f5a83f;
+  --cs2-bg:    #f5a83f24;
+  --lol:       #55cbe8;
+  --lol-bg:    #55cbe824;
 
-  --over:      #31b57e;
-  --over-bg:   #31b57e1f;
-  --under:     #e5645b;
-  --under-bg:  #e5645b1f;
+  --over:      #3fc98c;
+  --over-bg:   #3fc98c24;
+  --under:     #f06f66;
+  --under-bg:  #f06f6624;
 
-  --live:      #31b57e;
+  --live:      #3fc98c;
   --focus:     #4cc2e0;
 }
 
@@ -260,7 +261,8 @@ a { color: inherit; }
 table { width: 100%; border-collapse: collapse; }
 
 thead th {
-  font-size: 12px; font-weight: 600; color: var(--text-3);
+  font-size: 12px; font-weight: 600; color: var(--text-2);
+  letter-spacing: .02em;
   text-align: left; padding: 10px 14px;
   background: var(--surface-2);
   border-bottom: 1px solid var(--line);
@@ -277,6 +279,9 @@ tbody td {
 }
 tbody tr:last-child td { border-bottom: 0; }
 tbody tr:hover td { background: var(--surface-2); }
+/* Zebra banding: at this row count the eye loses the line across a wide table. */
+tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--surface-2) 45%, transparent); }
+tbody tr:nth-child(even):hover td { background: var(--surface-2); }
 
 .who { display: flex; align-items: center; gap: 10px; }
 .name { font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
