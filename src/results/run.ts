@@ -2,6 +2,7 @@ import { pathToFileURL } from 'node:url';
 import { pool, q } from '../db.js';
 import { canonHandle } from '../normalize.js';
 import { fetchLeaguepedia } from './leaguepedia.js';
+import { fetchHltv, teamHintsFrom } from './hltv.js';
 import { pendingPicks, gradePick, applyGrade, settleSlips } from './grade.js';
 import type { MapStat } from './types.js';
 
@@ -34,7 +35,26 @@ async function storeStats(stats: MapStat[]): Promise<number> {
 export async function runResults(): Promise<void> {
   console.log(`[${new Date().toISOString()}] results start`);
 
-  for (const [source, fetcher] of [['leaguepedia', fetchLeaguepedia]] as const) {
+  // Target the CS2 crawl at matches we actually hold picks on. HLTV is not a
+  // public API and every match page is a real page load, so opening the whole
+  // results list would be both slow and rude.
+  const cs2Titles = await q<{ title: string | null }>(
+    `SELECT DISTINCT m.title
+     FROM pick p
+     JOIN slip s  ON s.id = p.slip_id AND s.status <> 'open'
+     JOIN prop pr ON pr.id = p.prop_id AND pr.league = 'CS2'
+     LEFT JOIN match m ON m.id = pr.match_id
+     WHERE p.status = 'pending'`,
+  );
+  const hints = teamHintsFrom(cs2Titles.map((r) => r.title));
+
+  const sources: [string, () => Promise<{ stats: MapStat[] }>][] = [
+    ['leaguepedia', () => fetchLeaguepedia()],
+  ];
+  // Nothing pending for CS2 means nothing to crawl for.
+  if (hints.length > 0) sources.push(['hltv', () => fetchHltv({ teamHints: hints })]);
+
+  for (const [source, fetcher] of sources) {
     const run = await q<{ id: number }>(
       'INSERT INTO result_run (source) VALUES ($1) RETURNING id',
       [source],
