@@ -7,6 +7,9 @@ export const config = {
   databaseUrl:
     process.env.DATABASE_URL ?? 'postgres://bropprop:bropprop@localhost:5433/bropprop',
   pollCron: process.env.POLL_CRON ?? '*/15 * * * *',
+  // Results arrive well after lines settle, and the stat sources rate-limit
+  // much harder than the books, so this runs far less often than polling.
+  resultsCron: process.env.RESULTS_CRON ?? '17,47 * * * *',
   leagues: (process.env.LEAGUES ?? 'CS2,LOL')
     .split(',')
     .map((s) => s.trim().toUpperCase())

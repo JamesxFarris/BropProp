@@ -37,15 +37,34 @@ function gameNumber(gameId: string, matchId: string): number | null {
   return Number.isInteger(n) && n > 0 ? n : null;
 }
 
-export async function fetchLeaguepedia(sinceDays = 4): Promise<FetchStatsResult> {
+const PAGE = 500;      // Cargo's per-request maximum
+const MAX_PAGES = 6;   // 3000 rows ≈ 300 games; far more than a day of pro play
+
+export async function fetchLeaguepedia(sinceDays = 3): Promise<FetchStatsResult> {
   const since = new Date(Date.now() - sinceDays * 86400_000).toISOString().slice(0, 10);
+  const stats: MapStat[] = [];
+
+  // Paginate: a single 500-row page silently truncates a busy day, which shows
+  // up later as picks that can never be graded because their map is missing.
+  for (let page = 0; page < MAX_PAGES; page++) {
+    if (page > 0) await sleep(20_000); // stay well inside the rate limit
+    const rows = await fetchPage(since, page * PAGE);
+    stats.push(...rows);
+    if (rows.length < PAGE) break;
+  }
+
+  return { source: 'leaguepedia', stats };
+}
+
+async function fetchPage(since: string, offset: number): Promise<MapStat[]> {
   const params = new URLSearchParams({
     action: 'cargoquery',
     tables: 'ScoreboardPlayers',
     fields: 'Link,Team,Kills,Deaths,Assists,GameId,MatchId,DateTime_UTC',
     where: `ScoreboardPlayers.DateTime_UTC >= '${since}'`,
     order_by: 'ScoreboardPlayers.DateTime_UTC DESC',
-    limit: '500',
+    limit: String(PAGE),
+    offset: String(offset),
     format: 'json',
   });
 
@@ -65,7 +84,7 @@ export async function fetchLeaguepedia(sinceDays = 4): Promise<FetchStatsResult>
     await sleep(30_000 * (attempt + 1)); // 30s, 60s, 90s
   }
 
-  const stats: MapStat[] = [];
+  const out: MapStat[] = [];
   for (const entry of body.cargoquery ?? []) {
     const t = entry.title as Record<string, string>;
     const link = t.Link;
@@ -79,7 +98,7 @@ export async function fetchLeaguepedia(sinceDays = 4): Promise<FetchStatsResult>
       return Number.isFinite(n) ? n : null;
     };
 
-    stats.push({
+    out.push({
       source: 'leaguepedia',
       league: 'LOL',
       seriesKey,
@@ -96,5 +115,5 @@ export async function fetchLeaguepedia(sinceDays = 4): Promise<FetchStatsResult>
     });
   }
 
-  return { source: 'leaguepedia', stats };
+  return out;
 }

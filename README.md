@@ -136,9 +136,26 @@ same stat, same map range, different number).
 ## Roadmap
 
 - **Phase 1 — line logger.** *Done.* Both books, change-detected history.
-- **Phase 2 — result grader.** vlr.gg / HLTV scraper for final per-map stats;
-  join to logged props on `canon_handle` and grade over/under/push. This is the
-  piece that makes everything downstream learnable.
+- **Phase 2 — result grader.** *LoL done; CS2 source chosen but not wired.*
+  Per-map stat lines land in `map_stat`, and grading reads them separately so a
+  grading fix can be re-run without re-scraping. `npm run grade` runs it; the
+  worker also runs it on `RESULTS_CRON`.
+
+  Sources, probed before building: **Leaguepedia**'s Cargo API serves per-game
+  K/D/A for pro League and joins to book handles exactly (`Berserker`,
+  `Dhokla`, `Inspired` all match with no fuzzy matching). It has no
+  game-number column, but `GameId` is `MatchId + "_" + game number`, so the map
+  number is derived rather than guessed. Fandom rate-limits hard and reports it
+  as HTTP 200 with an error body, so the adapter backs off on that specifically
+  and paginates with long gaps. **HLTV** 403s any plain client but loads in a
+  real browser engine, so CS2 is reachable via Playwright — not wired up yet,
+  since it needs Chromium in the container. **bo3.gg** has an open API with
+  matches and per-map games for both leagues but no player stat lines.
+
+  The rules that decide money are tested directly: an unplayed map in the range
+  voids the prop rather than grading it short, a stat the source can't produce
+  is `ungradeable` rather than zero, combos are refused, and a pick with no
+  stat line yet stays pending so a late result still grades it.
 - **Phase 3 — dumb baselines.** Score naive strategies (always under, fade the
   move, take the Underdog side on disagreement) before modelling anything.
   Anything beating 54% here is real signal.
