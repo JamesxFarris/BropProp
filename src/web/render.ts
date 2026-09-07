@@ -21,6 +21,10 @@ const statLabel = (s: string) => STAT_LABEL[s] ?? s.replace(/_/g, ' ');
 const bookName = (b: string) => (b === 'prizepicks' ? 'PrizePicks' : 'Underdog');
 const otherBook = (b: string) => (b === 'prizepicks' ? 'underdog' : 'prizepicks');
 
+/** Stats a projection can be built from. Fantasy points use a scoring formula
+ *  the books don't publish, so deriving one would be a guess. */
+const PROJECTABLE = new Set(['kills', 'headshots', 'assists', 'deaths']);
+
 const LEAGUE_CLASS: Record<string, string> = { CS2: 'cs2', LOL: 'lol' };
 const leagueBadge = (l: string) =>
   `<span class="lg ${LEAGUE_CLASS[l] ?? 'other'}">${esc(l)}</span>`;
@@ -406,10 +410,19 @@ function lockNotice(locked: string | null, blocked: string | null): string {
  * different claim from twenty, and a projection shown without its sample
  * invites exactly the confidence it hasn't earned.
  */
-function formCell(f: FormStats | undefined): string {
+function formCell(f: FormStats | undefined, play: Play | null): string {
   if (!f) return '<span class="meta">—</span>';
-  return `<div class="fig sm">${f.mean.toFixed(1)}</div>
-    <div class="meta">${f.series} series</div>`;
+  // Show the number the call was actually made from, and say which it is.
+  if (play?.method === 'maps') {
+    return `<div class="fig sm">${(f.perMap ?? 0).toFixed(1)}</div>
+      <div class="meta">per map · ${f.mapValues.length} maps</div>`;
+  }
+  if (f.series > 0) {
+    return `<div class="fig sm">${f.mean.toFixed(1)}</div>
+      <div class="meta">${f.series} series</div>`;
+  }
+  return `<div class="fig sm">${(f.perMap ?? 0).toFixed(1)}</div>
+    <div class="meta">per map · ${f.mapValues.length} maps</div>`;
 }
 
 /**
@@ -441,19 +454,37 @@ function scoreCell(play: Play | null): string {
   return `<span class="score ${tier} ${dir}" title="Ranking score, not a win probability">${play.score}</span>`;
 }
 
-function playCell(play: Play | null, f: FormStats | undefined): string {
+function playCell(
+  play: Play | null,
+  f: FormStats | undefined,
+  r: { is_combo: boolean; stat: string },
+): string {
   if (!play) {
-    return `<span class="meta">${
-      !f ? 'no history' : f.series < 6 ? `${f.series} series` : 'no edge'
-    }</span>`;
+    // Say which kind of "no" this is. "No history" on a market that can never
+    // have a projection reads as a data gap someone could go and fix.
+    let why: string;
+    if (r.is_combo) why = 'combo — no single-player line';
+    else if (!PROJECTABLE.has(r.stat)) why = `${statLabel(r.stat)} — no scoring formula`;
+    else if (!f) why = 'no history';
+    else if (f.series >= 6 || f.mapValues.length >= 12) why = 'no edge';
+    else why = `only ${f.mapValues.length} maps`;
+    return `<span class="meta">${esc(why)}</span>`;
   }
   const dir = play.side === 'over' ? 'Over' : 'Under';
   const cls = play.side === 'over' ? 'o' : 'u';
+  const basis =
+    play.method === 'series'
+      ? `${Math.round(play.hitRate * 100)}% of ${play.series}`
+      : `${Math.round(play.hitRate * 100)}% modelled`;
   return `<div class="play ${cls}">
       <span class="dir">${dir}</span>
       <span class="at">${bookName(play.book) === 'PrizePicks' ? 'PP' : 'UD'} ${play.line.toFixed(1)}</span>
     </div>
-    <div class="meta">${signed(play.edge)} · ${Math.round(play.hitRate * 100)}% of ${play.series}</div>`;
+    <div class="meta">${signed(play.edge)} · ${basis}${
+      play.method === 'maps'
+        ? ` <span class="est" title="Estimated by resampling ${play.sample} single maps, because too few series played this exact map range">est</span>`
+        : ''
+    }</div>`;
 }
 
 // ------------------------------------------------------------------ board --
@@ -516,8 +547,13 @@ export function boardPage(o: {
   const formOf = (r: MarketRow) =>
     o.form?.get(`${r.canon_handle}|${r.stat}|${r.map_start}|${r.map_end}`);
   const playOf = (r: MarketRow) =>
-    recommend(formOf(r), r.pp_line === null ? null : Number(r.pp_line),
-              r.ud_line === null ? null : Number(r.ud_line));
+    recommend(
+      formOf(r),
+      r.pp_line === null ? null : Number(r.pp_line),
+      r.ud_line === null ? null : Number(r.ud_line),
+      r.map_end - r.map_start + 1,
+      `${r.canon_handle}|${r.stat}|${r.map_start}|${r.map_end}`,
+    );
 
   // Strongest calls first. The point of the board is to find the few markets
   // worth acting on, so making them the first thing on screen is the feature —
@@ -609,8 +645,8 @@ export function boardPage(o: {
               <div class="sub2">${esc(statLabel(r.stat))}</div>
               <div class="meta">${esc(maps(r.map_start, r.map_end))}</div>
             </td>
-            <td class="n">${formCell(formOf(r))}</td>
-            <td>${playCell(play, formOf(r))}</td>
+            <td class="n">${formCell(formOf(r), play)}</td>
+            <td>${playCell(play, formOf(r), r)}</td>
             ${
               showPP
                 ? `<td class="n"><div class="bookcell">

@@ -577,3 +577,11 @@ button.link:hover { color: var(--under); text-decoration: underline; }
 .whenline { display: flex; align-items: center; gap: 6px; }
 .when { color: var(--text-3); }
 .when.started { color: var(--under); font-weight: 600; }
+
+/* A call modelled from single maps rather than measured over the exact range.
+   Marked so it can never be mistaken for the stronger kind. */
+.est {
+  font-size: 10px; font-weight: 700; letter-spacing: .04em;
+  padding: 1px 4px; border-radius: 3px;
+  color: var(--text-2); border: 1px solid var(--line-2);
+}

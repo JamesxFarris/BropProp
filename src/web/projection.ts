@@ -30,12 +30,25 @@ export type Projection = {
   edge: number | null;   // mean minus line, in stat units
 };
 
-/** A player's totals over one map range, line-independent. */
+/**
+ * A player's output, held two ways.
+ *
+ * `totals` are real observed totals over the exact map range, from series that
+ * actually played every map in it — the truest measure, and the scarcest. A
+ * Bo3 that ends 2-0 contributes nothing to a "maps 1-3" sample, and a Bo1
+ * league contributes nothing at all.
+ *
+ * `mapValues` are single-map outputs from every series regardless of length.
+ * Far more data, and it can answer any map range including ones the books
+ * haven't offered yet — at the cost of assuming maps are interchangeable.
+ */
 export type FormStats = {
   series: number;
   mean: number;
   sd: number | null;
-  totals: number[];      // most recent first
+  totals: number[];      // most recent first, exact-range series only
+  mapValues: number[];   // most recent first, every map played
+  perMap: number | null; // mean of a single map
 };
 
 export type Play = {
@@ -48,10 +61,55 @@ export type Play = {
   series: number;
   strength: number;      // ranking score, not a probability
   score: number;         // strength on a 0-99 scale, for reading at a glance
+  method: 'series' | 'maps';  // measured over the exact range, or modelled from single maps
+  sample: number;        // series counted, or maps drawn from
 };
 
 const MIN_SERIES = 6;    // below this, form is noise wearing a number
+const MIN_MAPS = 12;     // single maps needed before modelling a range from them
 const MIN_EDGE = 0.5;    // half a kill is inside the rounding of a line
+const DRAWS = 4000;
+
+/** Deterministic PRNG, so the same board renders the same numbers every time. */
+function rng(seed: number) {
+  let x = seed >>> 0 || 1;
+  return () => {
+    x ^= x << 13; x >>>= 0;
+    x ^= x >> 17;
+    x ^= x << 5;  x >>>= 0;
+    return x / 4294967296;
+  };
+}
+
+function seedFrom(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+
+/**
+ * Totals for an n-map range, resampled from single-map outputs.
+ *
+ * A Bo3 that ends 2-0 tells you nothing about a three-map total directly, but
+ * it still tells you what this player does in a map. Drawing n maps at random
+ * and summing turns two maps of evidence into an estimate for any range —
+ * including ranges the books haven't offered yet.
+ *
+ * The assumption is that maps are interchangeable and independent. They aren't
+ * quite: a player having a good series tends to be good across all of it, so
+ * real totals swing wider than this produces. Calls built this way are
+ * therefore marked, and their score is damped rather than trusted equally.
+ */
+function resampleTotals(mapValues: number[], maps: number, seed: string): number[] {
+  const rand = rng(seedFrom(seed));
+  const out: number[] = [];
+  for (let d = 0; d < DRAWS; d++) {
+    let sum = 0;
+    for (let m = 0; m < maps; m++) sum += mapValues[Math.floor(rand() * mapValues.length)]!;
+    out.push(sum);
+  }
+  return out;
+}
 
 /**
  * Which side to take, on which app.
@@ -71,8 +129,27 @@ export function recommend(
   form: FormStats | undefined,
   ppLine: number | null,
   udLine: number | null,
+  maps = 1,
+  seed = '',
 ): Play | null {
-  if (!form || form.series < MIN_SERIES) return null;
+  if (!form) return null;
+
+  // Prefer real totals over the exact range. Fall back to modelling the range
+  // from single maps only when there aren't enough of them — more data, but
+  // one assumption further from what actually happened.
+  const useSeries = form.series >= MIN_SERIES;
+  const sample = useSeries
+    ? form.totals
+    : form.mapValues.length >= MIN_MAPS
+      ? resampleTotals(form.mapValues, maps, `${seed}|${maps}`)
+      : null;
+  if (!sample || sample.length === 0) return null;
+
+  const mean = sample.reduce((a, b) => a + b, 0) / sample.length;
+  const sd =
+    sample.length > 1
+      ? Math.sqrt(sample.reduce((a, b) => a + (b - mean) ** 2, 0) / (sample.length - 1))
+      : null;
 
   const lines: { book: 'prizepicks' | 'underdog'; line: number }[] = [];
   if (ppLine !== null) lines.push({ book: 'prizepicks', line: ppLine });
@@ -83,8 +160,8 @@ export function recommend(
   const forOver = lines.reduce((a, b) => (b.line < a.line ? b : a));
   const forUnder = lines.reduce((a, b) => (b.line > a.line ? b : a));
 
-  const overEdge = form.mean - forOver.line;
-  const underEdge = forUnder.line - form.mean;
+  const overEdge = mean - forOver.line;
+  const underEdge = forUnder.line - mean;
 
   const pick =
     overEdge >= underEdge
@@ -93,19 +170,22 @@ export function recommend(
 
   if (pick.edge < MIN_EDGE) return null;
 
-  const wins = form.totals.filter((t) =>
-    pick.side === 'over' ? t > pick.line : t < pick.line,
-  ).length;
-  const hitRate = wins / form.totals.length;
+  const wins = sample.filter((t) => (pick.side === 'over' ? t > pick.line : t < pick.line)).length;
+  const hitRate = wins / sample.length;
 
   // Relative to how much the player actually swings: two kills on a 30-kill
   // line is a smaller claim than two kills on a 5-kill line, and ranking them
   // the same would put noisy high-volume markets on top every time.
-  const edgeSd = form.sd && form.sd > 0 ? pick.edge / form.sd : null;
+  const edgeSd = sd && sd > 0 ? pick.edge / sd : null;
 
   // Hit rate carries the ranking, nudged by how big the edge is relative to
-  // the player's own variance. Sample size damps small-sample confidence.
-  const strength = (hitRate - 0.5) * 2 * (edgeSd ?? 0.5) * Math.min(1, form.series / 12);
+  // the player's own variance. Sample size damps small-sample confidence, and
+  // a modelled range is damped again — it rests on an assumption a measured
+  // total doesn't need.
+  const evidence = useSeries
+    ? Math.min(1, form.series / 12)
+    : 0.75 * Math.min(1, form.mapValues.length / 30);
+  const strength = (hitRate - 0.5) * 2 * (edgeSd ?? 0.5) * evidence;
 
   return {
     side: pick.side,
@@ -116,6 +196,8 @@ export function recommend(
     hitRate,
     series: form.series,
     strength,
+    method: useSeries ? 'series' : 'maps',
+    sample: useSeries ? form.series : form.mapValues.length,
     // A rank, not a probability. 60 is a better bet than 30; it is not a claim
     // that it wins 60% of the time — hit rate is shown separately for that.
     score: Math.max(1, Math.min(99, Math.round(strength * 100))),
@@ -249,19 +331,46 @@ export async function projectBoard(
       rows.map((r) => [`${r.canon_handle}|${r.league}|${r.map_start}|${r.map_end}`, r]),
     );
 
+    // Every single map this player has produced, whatever the series length.
+    // This is what lets a "maps 1-3" prop be projected from Bo1 and Bo2 play,
+    // and what will answer whatever map range the books invent next.
+    const mapRows = await q<{ canon_handle: string; league: string; vals: number[] }>(
+      `WITH want AS (
+         SELECT DISTINCT canon_handle, league
+         FROM unnest($1::text[], $2::text[]) AS t(canon_handle, league)
+       ),
+       m AS (
+         SELECT w.canon_handle, w.league, ms.${col} AS v, ms.played_at,
+                row_number() OVER (PARTITION BY w.canon_handle, w.league
+                                   ORDER BY ms.played_at DESC) AS rn
+         FROM want w
+         JOIN map_stat ms ON ms.canon_handle = w.canon_handle AND ms.league = w.league
+         WHERE ms.${col} IS NOT NULL
+       )
+       SELECT canon_handle, league, array_agg(v ORDER BY played_at DESC)::float[] AS vals
+       FROM m WHERE rn <= $3
+       GROUP BY canon_handle, league`,
+      [group.map((m) => m.canon_handle), group.map((m) => m.league), limit * 3],
+    );
+    const maps = new Map(mapRows.map((r) => [`${r.canon_handle}|${r.league}`, r.vals]));
+
     // Line-independent: the two books price the same market differently, and
     // the recommendation has to weigh both lines against one set of totals.
     for (const m of group) {
       const key = `${m.canon_handle}|${m.stat}|${m.map_start}|${m.map_end}`;
       if (out.has(key)) continue;
       const s = stats.get(`${m.canon_handle}|${m.league}|${m.map_start}|${m.map_end}`);
-      if (!s || !s.totals?.length) continue;
-      const totals = s.totals;
+      const mapValues = maps.get(`${m.canon_handle}|${m.league}`) ?? [];
+      const totals = s?.totals ?? [];
+      if (totals.length === 0 && mapValues.length === 0) continue;
       const n = totals.length;
-      const mean = totals.reduce((a, b) => a + b, 0) / n;
+      const mean = n ? totals.reduce((a, b) => a + b, 0) / n : 0;
       const sd =
         n > 1 ? Math.sqrt(totals.reduce((a, b) => a + (b - mean) ** 2, 0) / (n - 1)) : null;
-      out.set(key, { series: n, mean, sd, totals });
+      const perMap = mapValues.length
+        ? mapValues.reduce((a, b) => a + b, 0) / mapValues.length
+        : null;
+      out.set(key, { series: n, mean, sd, totals, mapValues, perMap });
     }
   }
 
