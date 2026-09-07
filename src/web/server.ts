@@ -8,7 +8,7 @@ import { movements, health, leagues } from './queries.js';
 import { markets, propHistory, siblingProps } from './boardq.js';
 import {
   openPicks, addPick, removePick, placeSlip, clearOpenSlip, slips, slipPicks,
-  openSlipBook, WrongBookError,
+  openSlipBook, WrongBookError, SideUnavailableError,
 } from './picks.js';
 import { boardPage, edgesPage, slipsPage, historyPage } from './render.js';
 import { projectBoard } from './projection.js';
@@ -121,6 +121,10 @@ const server = createServer(async (req, res) => {
             if (err instanceof WrongBookError) {
               const sep = back.includes('?') ? '&' : '?';
               return redirect(res, `${back}${sep}locked=${encodeURIComponent(err.locked)}`);
+            }
+            if (err instanceof SideUnavailableError) {
+              const sep = back.includes('?') ? '&' : '?';
+              return redirect(res, `${back}${sep}unavailable=${encodeURIComponent(err.side)}`);
             }
             throw err;
           }

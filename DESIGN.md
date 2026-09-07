@@ -108,6 +108,10 @@ The dashboard writes as well as reads. Rules that fell out of building it:
 - **The other app's number survives as the gap.** Narrowing drops the column
   but keeps the comparison, relabelled "vs Underdog" / "vs PrizePicks", because
   knowing your number is worse elsewhere is the reason this tool exists.
+- **A side the book doesn't list is not offered.** Every Underdog LoL assists
+  market is higher-only, and PrizePicks' promo projections are over-only — 105
+  of the markets on a typical board. Those buttons are disabled and the
+  recommendation never names an unplayable side.
 - **The payout multiplier is never asserted.** PrizePicks reprices correlated
   legs and demotes individual props, so a leg-count table is a hint, not a
   quote. The field starts empty with the standard rate as placeholder text, and

@@ -36,17 +36,35 @@ export class WrongBookError extends Error {
   }
 }
 
+export class SideUnavailableError extends Error {
+  constructor(public readonly side: string) {
+    super(`${side} is not offered on this market`);
+  }
+}
+
 /**
  * Copy the line as it stands right now onto the pick. Never join to the live
  * line later — the board moves, and a pick has to remember the number it was
  * actually taken at or every future backtest is measuring the wrong thing.
  */
 export async function addPick(propId: number, side: 'over' | 'under'): Promise<void> {
-  const line = await one<{ line: number; over_price: number | null; under_price: number | null; book: string }>(
-    `SELECT line, over_price, under_price, book FROM current_line WHERE prop_id = $1`,
+  const line = await one<{
+    line: number; over_price: number | null; under_price: number | null; book: string;
+    over_ok: boolean; under_ok: boolean;
+    over_multiplier: number | null; under_multiplier: number | null;
+  }>(
+    `SELECT line, over_price, under_price, book, over_ok, under_ok,
+            over_multiplier, under_multiplier
+     FROM current_line WHERE prop_id = $1`,
     [propId],
   );
   if (!line) throw new Error(`no current line for prop ${propId}`);
+
+  // Refuse a side the book doesn't list, for the same reason the UI hides it:
+  // a leg that can't be placed shouldn't reach a slip.
+  if ((side === 'over' && !line.over_ok) || (side === 'under' && !line.under_ok)) {
+    throw new SideUnavailableError(side);
+  }
 
   // Enforced here, not just hidden in the UI: a hidden button is still a
   // submittable form, and a mixed slip is not an entry that could ever be
@@ -56,13 +74,16 @@ export async function addPick(propId: number, side: 'over' | 'under'): Promise<v
 
   const slip = await openSlip();
   await q(
-    `INSERT INTO pick (slip_id, prop_id, side, line_at_pick, price_at_pick, book)
-     VALUES ($1,$2,$3,$4,$5,$6)
+    `INSERT INTO pick (slip_id, prop_id, side, line_at_pick, price_at_pick, book, payout_mult)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)
      ON CONFLICT (slip_id, prop_id) DO UPDATE
        SET side = EXCLUDED.side,
            line_at_pick = EXCLUDED.line_at_pick,
-           price_at_pick = EXCLUDED.price_at_pick`,
-    [slip.id, propId, side, line.line, side === 'over' ? line.over_price : line.under_price, line.book],
+           price_at_pick = EXCLUDED.price_at_pick,
+           payout_mult = EXCLUDED.payout_mult`,
+    [slip.id, propId, side, line.line,
+     side === 'over' ? line.over_price : line.under_price, line.book,
+     side === 'over' ? line.over_multiplier : line.under_multiplier],
   );
 }
 
@@ -91,6 +112,7 @@ export type PickRow = {
   status: string;
   current_line: number | null;
   match_id: number | null;
+  payout_mult: number | null;
 };
 
 /** Open picks, each showing whether the line has moved since it was taken. */
@@ -100,7 +122,8 @@ export async function openPicks(): Promise<PickRow[]> {
             d.handle, d.league, d.stat, d.map_start, d.map_end,
             d.match_title, d.scheduled_at, d.status,
             cl.line AS current_line,
-            pr.match_id
+            pr.match_id,
+            d.payout_mult
      FROM pick_detail d
      JOIN prop pr ON pr.id = d.prop_id
      LEFT JOIN current_line cl ON cl.prop_id = d.prop_id

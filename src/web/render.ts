@@ -2,7 +2,7 @@ import type { Movement, Health } from './queries.js';
 import type { PickRow, SlipSummary } from './picks.js';
 import type { MarketRow, PropHistory } from './boardq.js';
 import type { FormStats, Play } from './projection.js';
-import { recommend } from './projection.js';
+import { recommend, type LineOption } from './projection.js';
 
 export const esc = (s: unknown) =>
   String(s ?? '').replace(/[&<>"']/g, (c) =>
@@ -311,7 +311,11 @@ function slipRail(picks: PickRow[], back: string): string {
             drift !== 0
               ? ` <span class="move ${drift > 0 ? 'up' : 'down'}">${signed(drift)}</span>`
               : ''
-          }</div>
+          }</div>${
+            p.payout_mult !== null && Math.abs(Number(p.payout_mult) - 1) > 0.005
+              ? `<div class="meta"><span class="est" title="This leg pays ${Number(p.payout_mult).toFixed(2)}x a standard one">${Number(p.payout_mult).toFixed(2)}×</span></div>`
+              : ''
+          }
         </div>
         <form method="post" action="/pick/remove" class="inline">
           <input type="hidden" name="pick_id" value="${p.id}">
@@ -325,6 +329,14 @@ function slipRail(picks: PickRow[], back: string): string {
   const n = picks.length;
   const base = basePayout('power', n);
   const correlated = correlatedGroups(picks);
+
+  // Underdog attaches a payout multiplier to each side, and a discounted leg
+  // drags the whole slip down — four legs at ~0.87 turn a 10x into about 5.7x.
+  // That is published per leg, so the slip can work it out rather than asking.
+  const legMults = picks.map((p) => (p.payout_mult === null ? 1 : Number(p.payout_mult)));
+  const multProduct = legMults.reduce((a, b) => a * b, 1);
+  const discounted = legMults.filter((m) => Math.abs(m - 1) > 0.005).length;
+  const estimated = base === null ? null : base * multProduct;
 
   return `<div class="card">
     <div class="card-head">
@@ -351,7 +363,8 @@ function slipRail(picks: PickRow[], back: string): string {
         <div class="field">
           <label for="multiplier">Multiplier</label>
           <input name="multiplier" id="multiplier" inputmode="decimal"
-                 placeholder="${base ?? ''}" aria-describedby="multhint">
+                 placeholder="${estimated !== null ? estimated.toFixed(2) : (base ?? '')}"
+                 aria-describedby="multhint">
         </div>
       </div>
       <div class="row">
@@ -361,11 +374,13 @@ function slipRail(picks: PickRow[], back: string): string {
         </div>
       </div>
       <p class="hint" id="multhint">${
-        correlated > 0
-          ? `Legs from the same match are on this slip, so PrizePicks will likely reprice it. Copy the multiplier from your app.`
-          : base === null
-            ? `Copy the multiplier from your app.`
-            : `Standard is ${base}× for ${n} legs, but demoted or correlated props pay differently — copy what your app shows.`
+        discounted > 0 && estimated !== null
+          ? `${discounted} of ${n} legs pay below standard, so ${base}× becomes about <b>${estimated.toFixed(2)}×</b>. Check it against your app.`
+          : correlated > 0
+            ? `Legs from the same match are on this slip, so PrizePicks will likely reprice it. Copy the multiplier from your app.`
+            : base === null
+              ? `Copy the multiplier from your app.`
+              : `Standard is ${base}× for ${n} legs, but demoted or correlated props pay differently — copy what your app shows.`
       }</p>
       <div class="towin">
         <span class="k">To win</span>
@@ -501,11 +516,19 @@ function ouButtons(
   picked: string | null,
   offer: 'both' | 'over' | 'under' = 'both',
   better: 'both' | 'over' | 'under' = 'both',
+  available: { over: boolean; under: boolean } = { over: true, under: true },
 ): string {
   if (propId === null) {
     return `<div class="ou"><button disabled>O</button><button disabled>U</button></div>`;
   }
   const b = (side: 'over' | 'under', label: string, cls: string) => {
+    // The book doesn't list this side at all — every Underdog assists market
+    // is higher-only, and PrizePicks promo projections are over-only.
+    if (!available[side]) {
+      return `<button class="${cls}" disabled title="${
+        side === 'over' ? 'Higher' : 'Lower'
+      } isn't offered on this market">${label}</button>`;
+    }
     if (offer !== 'both' && offer !== side) {
       return `<button class="${cls}" disabled
         title="The ${side} is a better number on the other app">${label}</button>`;
@@ -546,11 +569,30 @@ export function boardPage(o: {
   const back = `/board${qs({}, o.filters)}`;
   const formOf = (r: MarketRow) =>
     o.form?.get(`${r.canon_handle}|${r.stat}|${r.map_start}|${r.map_end}`);
+  // Narrowing to one app must narrow the recommendation too. Filtering to
+  // PrizePicks and then being told to take it on Underdog is the filter not
+  // working, however good the number is.
+  const only = o.lockedBook ?? o.filters.book;
+  const optionsFor = (r: MarketRow): LineOption[] => {
+    const opts: LineOption[] = [];
+    if (r.pp_line !== null && only !== 'underdog') {
+      opts.push({
+        book: 'prizepicks', line: Number(r.pp_line),
+        overOk: r.pp_over_ok, underOk: r.pp_under_ok,
+      });
+    }
+    if (r.ud_line !== null && only !== 'prizepicks') {
+      opts.push({
+        book: 'underdog', line: Number(r.ud_line),
+        overOk: r.ud_over_ok, underOk: r.ud_under_ok,
+      });
+    }
+    return opts;
+  };
   const playOf = (r: MarketRow) =>
     recommend(
       formOf(r),
-      r.pp_line === null ? null : Number(r.pp_line),
-      r.ud_line === null ? null : Number(r.ud_line),
+      optionsFor(r),
       r.map_end - r.map_start + 1,
       `${r.canon_handle}|${r.stat}|${r.map_start}|${r.map_end}`,
     );
@@ -579,7 +621,6 @@ export function boardPage(o: {
   // One app selected (by filter or by an open slip) means one column. Showing
   // the other app's line with live take buttons offered a pick that cannot
   // join this entry.
-  const only = o.lockedBook ?? o.filters.book;
   const showPP = only === null || only === 'prizepicks';
   const showUD = only === null || only === 'underdog';
   const gapLabel = only ? `vs ${bookName(otherBook(only))}` : 'Gap';
@@ -653,7 +694,8 @@ export function boardPage(o: {
                 <span class="fig${r.pp_line === null ? ' muted' : ''}">${num(r.pp_line)}</span>
                 ${ouButtons(r.pp_prop_id, back, r.pp_side,
                   restrict ? bestSide('prizepicks', r.delta === null ? null : Number(r.delta)) : 'both',
-                  play?.book === 'prizepicks' ? play.side : 'both')}
+                  play?.book === 'prizepicks' ? play.side : 'both',
+                  { over: r.pp_over_ok, under: r.pp_under_ok })}
               </div></td>`
                 : ''
             }
@@ -664,7 +706,8 @@ export function boardPage(o: {
                 <span class="fig${r.ud_line === null ? ' muted' : ''}">${num(r.ud_line)}</span>
                 ${ouButtons(r.ud_prop_id, back, r.ud_side,
                   restrict ? bestSide('underdog', r.delta === null ? null : Number(r.delta)) : 'both',
-                  play?.book === 'underdog' ? play.side : 'both')}
+                  play?.book === 'underdog' ? play.side : 'both',
+                  { over: r.ud_over_ok, under: r.ud_under_ok })}
               </div></td>`
                 : ''
             }

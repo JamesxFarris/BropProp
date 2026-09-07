@@ -125,10 +125,16 @@ function resampleTotals(mapValues: number[], maps: number, seed: string): number
  * No call is made below MIN_SERIES or MIN_EDGE. A recommendation off four games
  * would be a coin flip wearing a decimal point.
  */
+export type LineOption = {
+  book: 'prizepicks' | 'underdog';
+  line: number;
+  overOk: boolean;
+  underOk: boolean;
+};
+
 export function recommend(
   form: FormStats | undefined,
-  ppLine: number | null,
-  udLine: number | null,
+  options: LineOption[],
   maps = 1,
   seed = '',
 ): Play | null {
@@ -151,24 +157,28 @@ export function recommend(
       ? Math.sqrt(sample.reduce((a, b) => a + (b - mean) ** 2, 0) / (sample.length - 1))
       : null;
 
-  const lines: { book: 'prizepicks' | 'underdog'; line: number }[] = [];
-  if (ppLine !== null) lines.push({ book: 'prizepicks', line: ppLine });
-  if (udLine !== null) lines.push({ book: 'underdog', line: udLine });
-  if (lines.length === 0) return null;
+  // Only sides that can actually be taken. Underdog lists every LoL assists
+  // market higher-only, and PrizePicks' promo projections are over-only —
+  // naming a side the book won't accept is as useless as naming the wrong one.
+  const overs = options.filter((o) => o.overOk);
+  const unders = options.filter((o) => o.underOk);
+  if (overs.length === 0 && unders.length === 0) return null;
 
   // An over wants the lowest number available; an under wants the highest.
-  const forOver = lines.reduce((a, b) => (b.line < a.line ? b : a));
-  const forUnder = lines.reduce((a, b) => (b.line > a.line ? b : a));
+  const forOver = overs.length ? overs.reduce((a, b) => (b.line < a.line ? b : a)) : null;
+  const forUnder = unders.length ? unders.reduce((a, b) => (b.line > a.line ? b : a)) : null;
 
-  const overEdge = mean - forOver.line;
-  const underEdge = forUnder.line - mean;
+  const overEdge = forOver ? mean - forOver.line : -Infinity;
+  const underEdge = forUnder ? forUnder.line - mean : -Infinity;
 
   const pick =
-    overEdge >= underEdge
-      ? { side: 'over' as const, ...forOver, edge: overEdge }
-      : { side: 'under' as const, ...forUnder, edge: underEdge };
+    overEdge >= underEdge && forOver
+      ? { side: 'over' as const, book: forOver.book, line: forOver.line, edge: overEdge }
+      : forUnder
+        ? { side: 'under' as const, book: forUnder.book, line: forUnder.line, edge: underEdge }
+        : null;
 
-  if (pick.edge < MIN_EDGE) return null;
+  if (!pick || pick.edge < MIN_EDGE) return null;
 
   const wins = sample.filter((t) => (pick.side === 'over' ? t > pick.line : t < pick.line)).length;
   const hitRate = wins / sample.length;

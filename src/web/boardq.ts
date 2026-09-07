@@ -23,6 +23,15 @@ export type MarketRow = {
   ud_over_price: number | null;
   ud_under_price: number | null;
 
+  // Some markets are listed one way only, and Underdog pays some legs less
+  // than a standard one. Both are published; both were being ignored.
+  pp_over_ok: boolean;
+  pp_under_ok: boolean;
+  ud_over_ok: boolean;
+  ud_under_ok: boolean;
+  ud_over_mult: number | null;
+  ud_under_mult: number | null;
+
   delta: number | null;
   match_title: string | null;
   scheduled_at: string | null;
@@ -79,7 +88,13 @@ export async function markets(opts: {
               max(c.prop_id) FILTER (WHERE c.book = 'underdog')      AS ud_prop_id,
               max(c.line)    FILTER (WHERE c.book = 'underdog')      AS ud_line,
               max(c.over_price)  FILTER (WHERE c.book = 'underdog')  AS ud_over_price,
-              max(c.under_price) FILTER (WHERE c.book = 'underdog')  AS ud_under_price
+              max(c.under_price) FILTER (WHERE c.book = 'underdog')  AS ud_under_price,
+              COALESCE(bool_or(c.over_ok)  FILTER (WHERE c.book = 'prizepicks'), false) AS pp_over_ok,
+              COALESCE(bool_or(c.under_ok) FILTER (WHERE c.book = 'prizepicks'), false) AS pp_under_ok,
+              COALESCE(bool_or(c.over_ok)  FILTER (WHERE c.book = 'underdog'), false)   AS ud_over_ok,
+              COALESCE(bool_or(c.under_ok) FILTER (WHERE c.book = 'underdog'), false)   AS ud_under_ok,
+              max(c.over_multiplier)  FILTER (WHERE c.book = 'underdog') AS ud_over_mult,
+              max(c.under_multiplier) FILTER (WHERE c.book = 'underdog') AS ud_under_mult
        FROM cl c
        GROUP BY c.canon_handle, c.league, c.stat, c.map_start, c.map_end, c.is_combo
      )
