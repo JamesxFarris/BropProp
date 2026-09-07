@@ -334,3 +334,19 @@ changed here: it decides money and deserves its own measurement.
   hand-written CSS. No framework and no component library, so nothing arrives
   with a default look that has to be fought. It's read-only tables over
   Postgres; a SPA would be machinery without a payoff.
+- **2026-09-07** — Measured whether kills-per-round and round count move
+  together before letting the CS2 kills projection resample them
+  independently, the same question combos already forced once: means add
+  under any dependence, but a resampled spread does not, and a player who
+  wins 13-4 has a high rate over few rounds. Over the 47,594 completed maps
+  with `rounds >= 13` (MR12's floor; 91 rows below it are forfeits and
+  abandonments, 90.8% KAST-consistent against 99.79% for the rest, and were
+  dropped), Pearson r between kills/round and rounds is **-0.0298** — with
+  all rows included, including those 91, it moves to -0.0595. Both are
+  negligible. Mean KPR by bucket is flat: 0.740 at 13-15 rounds (n=2,755),
+  0.690 at 16-19 (n=13,165), 0.676 at 20-24 (n=25,836), 0.684 at 25+
+  (n=5,838, genuine deep overtime, kept rather than clamped) — no
+  monotonic drift, no thin bucket. Unlike combos, this is a null result:
+  rate and round count may be drawn independently in the resample. Written
+  down so the next person doesn't re-measure it. See
+  `src/results/measure_rounds.ts`.
