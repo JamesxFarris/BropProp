@@ -5,6 +5,7 @@ import type { FormStats, Play, CallStatus, NoCall } from './projection.js';
 import { evaluate, edgeProgress, type LineOption } from './projection.js';
 import type { Entry } from './optimize.js';
 import { isComboHandle } from '../normalize.js';
+import { devig } from '../devig.js';
 
 export const esc = (s: unknown) =>
   String(s ?? '').replace(/[&<>"']/g, (c) =>
@@ -774,6 +775,34 @@ export function offeredSides(
   return restrict ? bestSide(book, delta) : 'both';
 }
 
+/**
+ * Our hit rate minus the probability Underdog's price implies.
+ *
+ * Positive means we are more optimistic than the market. Null means one of the
+ * two numbers does not exist — a market Underdog lists one way only cannot be
+ * devigged, and a player with no history has no hit rate. Zero means they
+ * agree, which is a different fact from either being missing and is kept
+ * distinguishable from it.
+ *
+ * Deliberately not folded into `strength`. Ranking on this would present the
+ * product of an uncalibrated frequency and a DFS book's risk management as an
+ * edge. It is shown so the rows where the two disagree can be looked at.
+ */
+export function marketDisagreement(
+  hitRate: number | null,
+  marketProb: number | null,
+): number | null {
+  if (hitRate === null || marketProb === null) return null;
+  return hitRate - marketProb;
+}
+
+/**
+ * How far apart our number and the market's must be before the row is worth a
+ * second look. Twenty points is wide enough that small-sample noise in our own
+ * hit rate does not light up half the board.
+ */
+const MARKET_GAP = 0.20;
+
 export function boardPage(o: {
   rows: MarketRow[];
   picks: PickRow[];
@@ -946,6 +975,7 @@ export function boardPage(o: {
           <th>Player</th>
           <th>Market</th>
           <th class="n">Averages</th>
+          <th class="n">Market %</th>
           <th>Take</th>
           ${showPP ? '<th class="n">PrizePicks</th>' : ''}
           <th class="c gapcol">${gapLabel}</th>
@@ -968,6 +998,13 @@ export function boardPage(o: {
                   : `<span class="gap-chip ${d > 0 ? 'up' : 'down'}">${signed(d)}</span>`;
             const moved = r.moved === null ? null : Number(r.moved);
             const histId = r.pp_prop_id ?? r.ud_prop_id;
+            // Underdog's own price for the side we are calling, margin removed. Only
+            // Underdog publishes odds, so this column is blank for a market it does
+            // not list — which is honest: there is no market probability, rather
+            // than a market that thinks the chance is zero.
+            const fair = devig(r.ud_over_price, r.ud_under_price);
+            const marketProb = fair === null ? null : play?.side === 'under' ? fair.under : fair.over;
+            const gapToMarket = marketDisagreement(play?.hitRate ?? null, marketProb);
             return `<tr data-search="${rowKey(r.handle, r.match_title, statLabel(r.stat), r.league)}">
             <td class="c">${scoreCell(play)}</td>
             <td>
@@ -997,6 +1034,11 @@ export function boardPage(o: {
               <div class="meta">${esc(maps(r.map_start, r.map_end))}</div>
             </td>
             <td class="n formcol">${formCell(formOf(r), play)}</td>
+            <td class="n"${
+              gapToMarket !== null && Math.abs(gapToMarket) >= MARKET_GAP
+                ? ` title="${Math.round(Math.abs(gapToMarket) * 100)} points from what we think — worth a second look"`
+                : ''
+            }>${marketProb === null ? '—' : `${Math.round(marketProb * 100)}%`}</td>
             <td>${playCell(play, statusOf(r).why, r)}</td>
             ${
               showPP

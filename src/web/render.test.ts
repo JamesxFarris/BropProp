@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { offeredSides } from './render.js';
+import { offeredSides, marketDisagreement } from './render.js';
 
 /**
  * Which sides a market offers, once an app has been chosen.
@@ -64,4 +64,33 @@ test('a market only one app lists withholds nothing', () => {
   // available neither side can be called worse, so both stand.
   assert.equal(offeredSides('prizepicks', null, true), 'both');
   assert.equal(offeredSides('underdog', null, true), 'both');
+});
+
+/**
+ * How far our own hit rate sits from what Underdog's price implies.
+ *
+ * Shown, never scored. Our hit rate is an empirical frequency over a dozen-odd
+ * series and Underdog is a DFS operator rather than a sharp book, so the gap
+ * between them is a prompt to look, not an edge to rank on.
+ */
+
+test('no market price means no disagreement to report', () => {
+  assert.equal(marketDisagreement(0.7, null), null);
+});
+
+test('no hit rate of our own means no disagreement to report', () => {
+  assert.equal(marketDisagreement(null, 0.5), null);
+});
+
+test('disagreement is our number minus the market, signed', () => {
+  // We think it hits 70% of the time; the market prices it at 50%.
+  assert.ok(Math.abs(marketDisagreement(0.7, 0.5)! - 0.2) < 1e-9);
+  // And the other way round, so the sign says who is higher.
+  assert.ok(Math.abs(marketDisagreement(0.4, 0.6)! - -0.2) < 1e-9);
+});
+
+test('agreement is zero, not absent', () => {
+  // A market we agree with is a real answer and must be distinguishable from
+  // one we could not price at all.
+  assert.equal(marketDisagreement(0.55, 0.55), 0);
 });

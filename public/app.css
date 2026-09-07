@@ -723,7 +723,7 @@ button.link:hover { color: var(--under); text-decoration: underline; }
 @media (min-width: 860px) {
   .board-table th:nth-child(2), .board-table td:nth-child(2) { width: 25%; }
   .board-table th:nth-child(3), .board-table td:nth-child(3) { width: 11%; }
-  .board-table th:nth-child(5), .board-table td:nth-child(5) { width: 15%; }
+  .board-table th:nth-child(6), .board-table td:nth-child(6) { width: 15%; }
 }
 
 /* Kick-off. Quiet until it matters — a market that has already started is
