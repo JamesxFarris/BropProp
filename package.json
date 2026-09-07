@@ -21,7 +21,8 @@
     "web": "tsx src/web/server.ts",
     "grade": "tsx src/results/run.ts",
     "backfill": "tsx src/results/backfill.ts",
-    "oe": "tsx src/results/oracleselixir.ts"
+    "oe": "tsx src/results/oracleselixir.ts",
+    "backfill:cs2": "tsx src/results/hltv_backfill.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.7",

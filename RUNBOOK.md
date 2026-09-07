@@ -45,7 +45,26 @@ the fight, so reach for this only for something Oracle's Elixir lacks.
 If it fails with "exceeded your rate limit", that's the cooldown — wait it out
 or run it from somewhere else. Nothing is wrong with the code.
 
-### 3. CS2 history — not solved yet
+### 3. CS2 history — measured, and HLTV is not the answer
+
+```bash
+npm run backfill:cs2 3     # crawl 3 pages of HLTV results (~300 matches)
+```
+
+Works, resumable, skips matches already stored. But **measure before you wait
+on it**: of 30 recent HLTV results, exactly one carried per-map player stats,
+and none of its players were on our board. HLTV publishes stats only for
+matches whose demos it parsed, which skews to big events, while the props we
+price are mostly tier-C qualifiers. Expect roughly a 3% hit rate.
+
+Run it as an accumulator if you like — it is cheap on re-runs and catches what
+does appear. It will not build a season of history.
+
+**The honest fix is a stats API.** PandaScore has a free developer tier
+covering CS2 with player match stats; it needs an account and a key. That is
+the one outstanding decision for CS2 form.
+
+### Older notes on CS2 history
 
 HLTV serves per-map kills to a real browser, and `npm run grade` already uses
 that for matches you hold picks on. But **player history is another matter**:

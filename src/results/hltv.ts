@@ -15,10 +15,55 @@ import { canonHandle } from '../normalize.js';
  * rather than scoring it from a guess.
  */
 
-const UA =
+export const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Pull every map's player lines out of an open HLTV match page.
+ *
+ * Shared with the history crawler so the two can't drift: the same page shape
+ * feeds live grading and backfill, and a parsing fix should land in both.
+ */
+export async function extractMatch(page: {
+  evaluate: (script: string) => Promise<unknown>;
+}): Promise<{ played: string | null; maps: { id: string; rows: { handle: string; kd: string }[] }[] }> {
+  return (await page.evaluate(`(() => {
+    var el = document.querySelector('.timeAndEvent .date, .time');
+    var played = el ? el.getAttribute('data-unix') : null;
+
+    // Each played map has its own stats-content div keyed by HLTV's
+    // mapstatsid; "all-content" is the series total and must be skipped or
+    // it would double-count every map.
+    var divs = Array.prototype.slice
+      .call(document.querySelectorAll('.stats-content'))
+      .filter(function (d) { return d.id && d.id !== 'all-content'; });
+
+    return {
+      played: played,
+      maps: divs.map(function (d) {
+        return {
+          id: d.id.replace('-content', ''),
+          // totalstats is the full map; ctstats/tstats are half-splits of it.
+          rows: Array.prototype.slice.call(d.querySelectorAll('table.totalstats tr'))
+            .map(function (tr) {
+              var nameCell = tr.querySelector('td.players');
+              var kdCell = tr.querySelector('td.kd.traditional-data') || tr.querySelector('td.kd');
+              if (!nameCell || !kdCell) return null;
+              // The nickname is the quoted part; the cell repeats it after
+              // the full name, e.g. "Santiago 'rzk' Puchetarzk".
+              var quoted = (nameCell.textContent || '').match(/'([^']+)'/);
+              var handle = quoted ? quoted[1] : (nameCell.textContent || '').trim();
+              return { handle: handle, kd: (kdCell.textContent || '').trim() };
+            })
+            .filter(Boolean),
+        };
+      }),
+    };
+  })()`)) as never;
+}
+
 
 type MatchLink = { href: string; id: string; text: string };
 
@@ -70,42 +115,9 @@ export async function fetchHltv(opts: HltvOptions = {}): Promise<FetchStatsResul
         timeout: 45_000,
       });
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const parsed: any = await page.evaluate(`(() => {
-        var el = document.querySelector('.timeAndEvent .date, .time');
-        var played = el ? el.getAttribute('data-unix') : null;
+      const parsed = await extractMatch(page);
 
-        // Each played map has its own stats-content div keyed by HLTV's
-        // mapstatsid; "all-content" is the series total and must be skipped or
-        // it would double-count every map.
-        var divs = Array.prototype.slice
-          .call(document.querySelectorAll('.stats-content'))
-          .filter(function (d) { return d.id && d.id !== 'all-content'; });
-
-        return {
-          played,
-          maps: divs.map((d) => ({
-            id: d.id.replace('-content', ''),
-            // totalstats is the full map; ctstats/tstats are half-splits of it.
-            rows: Array.prototype.slice.call(d.querySelectorAll('table.totalstats tr'))
-              .map(function (tr) {
-                var nameCell = tr.querySelector('td.players');
-                var kdCell = tr.querySelector('td.kd.traditional-data') || tr.querySelector('td.kd');
-                if (!nameCell || !kdCell) return null;
-                // The nickname is the quoted part; the cell repeats it after
-                // the full name, e.g. "Santiago 'rzk' Puchetarzk".
-                var quoted = (nameCell.textContent || '').match(/'([^']+)'/);
-                var handle = quoted ? quoted[1] : (nameCell.textContent || '').trim();
-                return { handle: handle, kd: (kdCell.textContent || '').trim() };
-              })
-              .filter(Boolean),
-          })),
-        };
-      })()`);
-
-      const playedAt = parsed.played
-        ? new Date(Number(parsed.played)).toISOString()
-        : null;
+      const playedAt = parsed.played ? new Date(Number(parsed.played)).toISOString() : null;
 
       parsed.maps.forEach((m: any, idx: number) => {
         for (const row of m.rows as { handle: string; kd: string }[]) {
