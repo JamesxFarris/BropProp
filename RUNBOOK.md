@@ -201,6 +201,24 @@ Pinnacle's own web client ships a fixed guest key. Using it to get past that
 401 was deliberately **not** done — reading an open endpoint is one thing,
 presenting a lifted credential to defeat an auth check is another.
 
+### Modelling ideas that were measured and failed
+
+All walk-forward over CS2 maps-1-2 series, scoring only on history that
+existed before the series being predicted. Recorded so they are not retried.
+
+| Idea | Result |
+|---|---|
+| **Opponent strength** | Worse. MAE 6.56 vs 6.49 flat; correlation between the opponent effect and the residual it should explain was **r = 0.018** over 4,403 predictions. Kills are close to conserved in CS2. |
+| **Recency weighting** | Worse, and monotonically. Flat Brier 0.2415; half-life 20 → 0.2417, half-life 10 → 0.2428, half-life 5 → 0.2463, half-life 3 → **0.2523, worse than a coin flip**. Chasing recent form is fitting noise. |
+| **Magnitude (kernel-smoothed CDF)** | Better, but by 0.0005 Brier, and the bandwidth is scale-dependent. Not shipped — see the note in `projection.ts`. |
+| **More history (20 → 30 series)** | Shipped. Same Brier, better MAE on the total (6.37 vs 6.43). Past 40 the gain is gone. |
+
+The pattern across all four: **a CS2 player's own flat long-run average is
+hard to beat, and the book knows it too.** Every estimator tried lands
+between Brier 0.2410 and 0.2427 against 0.25 for a coin flip. Projection is
+not where an edge lives. Line disagreement between books is — which is the
+argument for more books, and against more modelling.
+
 ### Dead ends — do not re-test
 
 - **PandaScore free**: fixtures only; every stats endpoint 403s. Paid

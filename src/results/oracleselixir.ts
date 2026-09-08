@@ -103,6 +103,27 @@ export async function loadSeason(year: string): Promise<number> {
   const res = await fetch(url(id));
   if (!res.ok || !res.body) throw new Error(`oracleselixir ${year}: HTTP ${res.status}`);
 
+  /**
+   * Google Drive says no with a 200.
+   *
+   * A file this heavily shared hits Drive's public download quota, and the
+   * refusal arrives as `200 text/html` with a "Quota exceeded" page — not a
+   * 403, not a 429. The stream then yields no CSV rows, the loader stored
+   * nothing, and it printed "done: 0 stat lines" as though the season were
+   * simply empty. A whole backfill can fail this way and look like a success,
+   * which is the same trap Fandom sets and this file already knew about.
+   *
+   * The content type is the tell, so it is checked before a byte is parsed.
+   */
+  const kind = res.headers.get('content-type') ?? '';
+  if (/text\/html/i.test(kind)) {
+    const body = await res.text();
+    const why = /quota/i.test(body)
+      ? 'Drive download quota exceeded — it resets, usually within a day'
+      : 'Drive returned an HTML page instead of the CSV';
+    throw new Error(`oracleselixir ${year}: ${why}`);
+  }
+
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buf = '';
@@ -161,6 +182,14 @@ export async function loadSeason(year: string): Promise<number> {
   }
   await flush();
 
+  // A season file is well over a hundred thousand player rows. Scanning none
+  // of them means we were handed something that was not a season, whatever the
+  // status code said — belt and braces behind the content-type check above.
+  if (seen === 0) {
+    throw new Error(
+      `oracleselixir ${year}: downloaded but no CSV rows parsed — the file id in FILES is probably stale`,
+    );
+  }
   console.log(`  ${year}: ${seen} rows scanned, ${stored} stored for tracked players`);
   return stored;
 }
