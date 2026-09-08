@@ -895,12 +895,20 @@ export function boardPage(o: {
   const optionsFor = (r: MarketRow): LineOption[] => {
     const opts: LineOption[] = [];
     if (r.pp_line !== null && only !== 'underdog') {
+      // Underdog's devigged read counts as a read on PrizePicks' number only
+      // when it IS the same number. A probability is the chance of clearing
+      // the line it was quoted against, so lending 30.5's answer to 28.5 would
+      // anchor to a different question.
+      const sameLine = r.ud_line !== null && Number(r.ud_line) === Number(r.pp_line);
+      const fair = sameLine ? devig(r.ud_over_price, r.ud_under_price) : null;
       opts.push({
         book: 'prizepicks', line: Number(r.pp_line),
         overOk: r.pp_over_ok, underOk: r.pp_under_ok,
         // No per-side price to read, so the bar comes from the entry this leg
         // would join. See ppBreakEven above.
         breakEven: ppBreakEven,
+        anchorOver: fair?.over ?? null,
+        anchorUnder: fair?.under ?? null,
       });
     }
     if (r.ud_line !== null && only !== 'prizepicks') {
@@ -1031,7 +1039,22 @@ export function boardPage(o: {
    * something. Honest, and still noise. It appears when a book that prices
    * both sides is on screen and stays away when none is.
    */
-  const showEv = only !== 'prizepicks';
+  /**
+   * EV is computed and stored, and deliberately not shown.
+   *
+   * The arithmetic was never wrong — p x profit − (1 − p) is what it is — but
+   * every EV it produced inherited a win probability measured on the same
+   * history that chose the side, so the column printed things like "+42.0%"
+   * beside a market the book itself prices at 50%. A 25-point disagreement
+   * with a real market is not an edge, it is a bug in the confidence.
+   *
+   * A backtest could not settle it either way: only ten or so independent
+   * matches have both a pre-match line and a settled result so far, and props
+   * inside one match move together, so a single short series drags every leg
+   * under at once. The number returns when a graded record can support it.
+   * `Play.ev` stays populated so that record accumulates in the meantime.
+   */
+  const showEv = false;
   const gapLabel = only ? `vs ${bookName(otherBook(only))}` : 'Gap';
   // Restrict sides only when an app is selected and best-price filtering is on.
   const restrict = Boolean(only) && o.filters.best;

@@ -1,7 +1,7 @@
 import { q } from '../db.js';
 import { comboParts } from '../normalize.js';
 import { foldCombo, type ComboStatRow } from '../combo.js';
-import { americanToProb } from '../devig.js';
+import { americanToProb, devig } from '../devig.js';
 
 /**
  * What a player has actually done over the same map range, and how that sits
@@ -176,6 +176,16 @@ export type LineOption = {
    * and passes it in. Used only when there is no per-side price.
    */
   breakEven?: number | null;
+  /**
+   * A market probability for THIS line, when the book itself publishes none.
+   *
+   * PrizePicks quotes no odds, but the same market often exists on Underdog at
+   * the same number — and when the numbers match, that devigged probability is
+   * a read on this line too. The caller supplies it only in that case; see
+   * `anchorFor`.
+   */
+  anchorOver?: number | null;
+  anchorUnder?: number | null;
 };
 
 /**
@@ -307,12 +317,45 @@ export function evaluate(o: Evaluation): CallStatus {
    * six is an observed 100% and is not a 100% chance; against a prior of ten
    * coin flips it reports 73%, which is a claim the sample can carry.
    */
-  const rateAt = (line: number, side: 'over' | 'under') => {
+  const rateAt = (line: number, side: 'over' | 'under', anchor: number | null) => {
     const wins = sample.filter((t) => (side === 'over' ? t > line : t < line)).length;
     const settled = sample.filter((t) => t !== line).length;
     if (settled === 0) return null;
     const raw = wins / settled;
-    return (raw * observations + 0.5 * prior) / (observations + prior);
+    // Shrink toward the market where there is one, toward a coin flip where
+    // there isn't. See the note on `anchorFor`.
+    return (raw * observations + (anchor ?? 0.5) * prior) / (observations + prior);
+  };
+
+  /**
+   * What to shrink toward: the market's own opinion, when it has one.
+   *
+   * This used to be 0.5 — the assumption that, absent evidence, a side is a
+   * coin flip. But a priced market is not an absence of evidence; it is
+   * somebody else's estimate, made with more information than twenty of a
+   * player's past series, and on average a better one. Shrinking to 0.5 threw
+   * that away and then reported the difference as an edge: the board would say
+   * 75% beside a market pricing the same side at 50%, which is a claim to have
+   * out-read the market by twenty-five points on a tier-C CS2 prop.
+   *
+   * Anchored at the market, the same twenty series move the number a few
+   * points instead of thirty, and a call now means "our history disagrees with
+   * this price, and there is enough of it to say so" — which is the only thing
+   * that was ever worth betting.
+   *
+   * Only ever the price for THIS line. A devigged probability is the chance of
+   * clearing the number it was quoted against; borrowing Underdog's 30.5 to
+   * anchor PrizePicks' 28.5 would anchor to a different question. Lines that
+   * differ fall back to the coin flip, which is the honest "we have no market
+   * read on this number".
+   */
+  const anchorFor = (o: LineOption, side: 'over' | 'under'): number | null => {
+    const fair = devig(o.overPrice, o.underPrice);
+    if (fair) return side === 'over' ? fair.over : fair.under;
+    if (typeof o.anchorOver === 'number' && typeof o.anchorUnder === 'number') {
+      return side === 'over' ? o.anchorOver : o.anchorUnder;
+    }
+    return null;
   };
 
   /**
@@ -345,7 +388,8 @@ export function evaluate(o: Evaluation): CallStatus {
    * MIN_P, and the slip panel is where leg count gets priced.
    */
   const assess = (o: LineOption, side: 'over' | 'under') => {
-    const p = rateAt(o.line, side);
+    const anchor = anchorFor(o, side);
+    const p = rateAt(o.line, side, anchor);
     if (p === null) return null;
     const price = side === 'over' ? o.overPrice : o.underPrice;
     // A quoted price wins; a flat-multiplier break-even is the fallback.

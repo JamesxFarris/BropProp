@@ -385,19 +385,76 @@ const priced = (
   underPrice: number | null,
 ): LineOption => ({ book, line, overOk: true, underOk: true, overPrice, underPrice });
 
-test('a price the view cannot clear is refused, and says so as a price', () => {
-  // Twelve straight overs shrink to ~85%, comfortably past MIN_P. At -170 the
-  // bar is 63.0% and it clears; at -2000 the bar is 95.2% and it does not.
-  const cheap = evaluate({ form: flat(40), options: [priced('underdog', 30, -170, 140)] });
-  assert.equal(cheap.play?.side, 'over');
+/** Eight of twelve series clear the line: a real lean, not a sweep. */
+const leaning = (line: number, over = 8, n = 12) =>
+  form({
+    series: n, mean: line, sd: 10,
+    totals: [...Array(over).fill(line + 10), ...Array(n - over).fill(line - 10)],
+    mapValues: [], perMap: line,
+  });
 
-  const dear = evaluate({ form: flat(40), options: [priced('underdog', 30, -2000, 1500)] });
+test('a price the view cannot clear is refused, and says so as a price', () => {
+  // -160 both ways: the market calls it even and charges 61.5% to take either
+  // side. Eight of twelve is a 67% raw read, which the market anchor pulls to
+  // about 59% — a genuine lean, and still short of what the price demands.
+  const dear = evaluate({ form: leaning(20), options: [priced('underdog', 20, -160, -160)] });
   assert.equal(dear.play, null);
   assert.equal(dear.why?.kind, 'priced-out');
   if (dear.why?.kind !== 'priced-out') throw new Error('unreachable');
-  // The refusal reports the bar it failed, so the row can name the price.
-  assert.ok(Math.abs(dear.why.breakEven - 2000 / 2100) < 1e-9);
-  assert.ok(dear.why.p > 0.55, 'still a real view — this is a price refusal, not a thin one');
+  assert.ok(Math.abs(dear.why.breakEven - 160 / 260) < 1e-9);
+  assert.ok(dear.why.p > 0.55, 'still a real view — a price refusal, not a thin one');
+
+  // The same read at a cheap price is a call: nothing about the player
+  // changed, only what it costs to back them.
+  const cheap = evaluate({ form: leaning(20), options: [priced('underdog', 20, -105, -105)] });
+  assert.equal(cheap.play?.side, 'over');
+});
+
+test('the shrink pulls toward the market, not toward a coin flip', () => {
+  // The whole point: a priced market is somebody else's estimate made with
+  // more than twelve of a player's past series, so it is what "no evidence"
+  // should mean. Anchoring at 0.5 instead reported the gap as an edge — the
+  // board would say 75% beside a market pricing the same side at 50%.
+  const f = leaning(20, 12, 12); // a clean sweep: raw 100%
+  const noPrice = evaluate({ form: f, options: [both('underdog', 20)] });
+  // +200 / -260 devigs to about 32% for the over: the market thinks this side
+  // is unlikely, and says so in a way -110/-110 cannot (that devigs to exactly
+  // 0.5, which IS the fallback, so it would prove nothing).
+  const doubted = evaluate({ form: f, options: [priced('underdog', 20, 200, -260)] });
+
+  assert.ok(noPrice.play && doubted.play);
+  assert.ok(
+    doubted.play!.hitRate < noPrice.play!.hitRate,
+    `anchored ${doubted.play!.hitRate} should sit below unanchored ${noPrice.play!.hitRate}`,
+  );
+  // And it still lands above the market, because twelve for twelve is real
+  // evidence — shrinking toward the market is not deferring to it.
+  assert.ok(doubted.play!.hitRate > 0.4);
+});
+
+test('a market anchor is only borrowed for the line it was quoted against', () => {
+  // A devigged probability answers "will it clear THIS number". Lending
+  // Underdog's answer for 30.5 to PrizePicks' 28.5 would answer a different
+  // question, so the caller only passes it when the numbers match — and the
+  // engine ignores an anchor it was not given.
+  const f = leaning(20, 12, 12);
+  const anchored = evaluate({
+    form: f,
+    options: [{ book: 'prizepicks', line: 20, overOk: true, underOk: true,
+                anchorOver: 0.5, anchorUnder: 0.5 }],
+  });
+  const bare = evaluate({ form: f, options: [both('prizepicks', 20)] });
+  // With a 50/50 anchor the two agree, since the fallback anchor IS 0.5.
+  assert.ok(anchored.play && bare.play);
+  assert.ok(Math.abs(anchored.play!.hitRate - bare.play!.hitRate) < 1e-9);
+
+  // A confident market anchor moves it.
+  const confident = evaluate({
+    form: f,
+    options: [{ book: 'prizepicks', line: 20, overOk: true, underOk: true,
+                anchorOver: 0.9, anchorUnder: 0.1 }],
+  });
+  assert.ok(confident.play!.hitRate > bare.play!.hitRate);
 });
 
 test('priced-out is a different answer from fair, because a price can move', () => {
