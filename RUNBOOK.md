@@ -80,6 +80,31 @@ Free, no key, no browser, no rate limit. **This is the CS2 equivalent of
 Oracle's Elixir** and it is wired into the scheduled runs, so the manual
 command is for backfilling depth rather than for keeping current.
 
+**A deep backfill is a ~6 hour job, and must be detached.** Measured
+2026-09-08 on `npm run bo3 730`: 20,000 matches found, 13,102 of them parsed
+and worth fetching, and about 364 minutes projected from the first 200. Run it
+in the ssh foreground and it dies with the session — three attempts, three
+different stdout arrangements, two dead inside twenty minutes. `setsid` is
+what works:
+
+```bash
+railway ssh --project <id> --environment production --service bropprop-logger \
+  "cd /app && setsid nohup npm run bo3 730 > /tmp/bo3.log 2>&1 < /dev/null & sleep 3; echo launched"
+```
+
+Then `tail /tmp/bo3.log` from any later session. Expect **no output at all for
+the first five minutes** — `finishedMatches()` pages the whole match list
+before fetching anything, and prints nothing while it does. Expect `0 rows`
+for a long while after that too: a re-run skips maps already stored, and there
+were 15,371 of those.
+
+**`maxMatches` caps how far back 730 days can actually reach.** The CLI passes
+20,000, matches are fetched newest-first, and the list is then truncated to
+that cap — so a two-year request that finds 20,000 matches is silently keeping
+the 20,000 *newest* and cannot reach the far end of its own window. Raise the
+cap in `bo3.ts` if genuine 2024 history is the goal; the run gets
+proportionally longer.
+
 `GET /games/{game_id}/players_stats` returns one row per player per map:
 kills, deaths, assists, **headshots**, ADR, KAST, first kills, clutches.
 
