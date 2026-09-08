@@ -278,6 +278,8 @@ export async function fetchBo3(opts: Bo3Options = {}): Promise<FetchStatsResult>
   let matchesDone = 0;
   for (const m of parsed) {
     const forMatch: MapStat[] = [];
+    /** Whether this match cost a request at all — see the sleep guard below. */
+    let fetched = false;
     for (const g of m.games ?? []) {
       // A map we already have. Note this only recognises maps that produced a
       // row, so a match where nobody was on our board is re-checked each run —
@@ -286,6 +288,7 @@ export async function fetchBo3(opts: Bo3Options = {}): Promise<FetchStatsResult>
       if (done.has(`bo3:${m.id}#${g.number ?? 1}`)) { skipped++; continue; }
       maps++;
       let rows: Bo3PlayerStat[];
+      fetched = true;
       try {
         rows = await getJson<Bo3PlayerStat[]>(`${API}/games/${g.id}/players_stats`);
       } catch (err) {
@@ -315,7 +318,12 @@ export async function fetchBo3(opts: Bo3Options = {}): Promise<FetchStatsResult>
       matchesDone, matchesTotal: parsed.length,
       maps, skipped, written, playedAt: m.end_date,
     });
-    await sleep(GAP_MS);
+    // Only pause if this match actually cost a request. A deep backfill
+    // re-walks everything already stored, and being polite between matches we
+    // never contacted is pure waiting — about seventeen minutes of it across a
+    // two-year run. The gap exists to be kind to bo3.gg; a skipped match asks
+    // it for nothing.
+    if (fetched) await sleep(GAP_MS);
   }
 
   console.log(
