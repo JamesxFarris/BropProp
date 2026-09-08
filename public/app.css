@@ -1549,7 +1549,10 @@ body.searching .tick { display: none; }
    agrees with the mover about 6.5 to 1.
    Bordered rather than filled: it is evidence to weigh, not a verdict. */
 .stale {
-  display: inline-flex; align-items: baseline; gap: 6px; flex-wrap: wrap;
+  /* A block that sizes to its content, not inline-flex: inline let the lean
+     text flow straight onto the end of it, so a row read "UD moved -1.0 PP
+     still 14.0no edge +1.8" with no break between two separate statements. */
+  display: flex; width: fit-content; align-items: baseline; gap: 6px; flex-wrap: wrap;
   margin-bottom: 5px; padding: 3px 8px;
   border-radius: var(--r-chip);
   border: 1px solid currentColor;
