@@ -129,7 +129,24 @@ export type Scorecard = {
   buckets: Array<{ band: string; n: number; won: number; claimedEv: number; realEv: number }>;
 };
 
-export async function scoreCalls(): Promise<Scorecard> {
+/**
+ * Which `map_stat` column settles each stat. Mirrors `STAT_COLUMN` in
+ * `projection.ts` — a stat with no column here cannot be graded, which is why
+ * LoL `fantasy_points` is absent rather than guessed at.
+ */
+const SETTLES: Record<string, string> = {
+  kills: 'kills', headshots: 'headshots', assists: 'assists', deaths: 'deaths',
+};
+
+/** SQL that totals whichever column the market's stat settles against. */
+const TOTAL_SQL = `sum(CASE l.stat
+       WHEN 'kills'     THEN ms.kills
+       WHEN 'headshots' THEN ms.headshots
+       WHEN 'assists'   THEN ms.assists
+       WHEN 'deaths'    THEN ms.deaths
+     END)`;
+
+export async function scoreCalls(league = 'CS2'): Promise<Scorecard> {
   const markets = await q<Mkt>(`
     WITH lines AS (
       SELECT pr.id AS prop_id, p.canon_handle, pr.stat, pr.map_start, pr.map_end,
@@ -142,8 +159,8 @@ export async function scoreCalls(): Promise<Scorecard> {
         JOIN book b ON b.id = pr.book_id
         JOIN match m ON m.id = pr.match_id
         JOIN prop_snapshot ps ON ps.prop_id = pr.id
-       WHERE pr.league = 'CS2' AND pr.is_combo = false AND pr.variant = 'standard'
-         AND pr.stat IN ('kills', 'headshots')
+       WHERE pr.league = $1 AND pr.is_combo = false AND pr.variant = 'standard'
+         AND pr.stat IN ('kills', 'headshots', 'assists', 'deaths')
          -- The last line seen BEFORE kick-off. A snapshot taken after the
          -- match started has the result leaking into it.
          AND ps.observed_at < m.scheduled_at
@@ -156,17 +173,17 @@ export async function scoreCalls(): Promise<Scorecard> {
            -- every player in one series shares its length, its overtime and
            -- its pace, so their props rise and fall together.
            min(ms.series_key) AS series_key,
-           sum(CASE WHEN l.stat = 'kills' THEN ms.kills ELSE ms.headshots END)::text AS total
+           ${TOTAL_SQL}::text AS total
       FROM lines l
       JOIN map_stat_dedup ms
-        ON ms.canon_handle = l.canon_handle AND ms.league = 'CS2'
+        ON ms.canon_handle = l.canon_handle AND ms.league = $1
        AND ms.played_at BETWEEN l.scheduled_at - interval '${SETTLE_EARLY}'
                             AND l.scheduled_at + interval '${SETTLE_LATE}'
        AND ms.map_number BETWEEN l.map_start AND l.map_end
      GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9
     -- Every map in the range must have been played, or the prop voided.
     HAVING count(*) = (l.map_end - l.map_start + 1)
-       AND sum(CASE WHEN l.stat = 'kills' THEN ms.kills ELSE ms.headshots END) IS NOT NULL`);
+       AND ${TOTAL_SQL} IS NOT NULL`, [league]);
 
   const empty: Scorecard = {
     settled: 0, calls: 0, pushes: 0, series: 0, days: 0,
@@ -181,10 +198,12 @@ export async function scoreCalls(): Promise<Scorecard> {
   const hist = await q<{
     canon_handle: string; series_key: string; map_number: number;
     played_at: string; kills: number | null; headshots: number | null;
+    assists: number | null; deaths: number | null;
   }>(
-    `SELECT canon_handle, series_key, map_number, played_at, kills, headshots
-       FROM map_stat_dedup WHERE league = 'CS2' AND canon_handle = ANY($1)`,
-    [handles],
+    `SELECT canon_handle, series_key, map_number, played_at,
+            kills, headshots, assists, deaths
+       FROM map_stat_dedup WHERE league = $2 AND canon_handle = ANY($1)`,
+    [handles, league],
   );
 
   const byPlayer = new Map<string, typeof hist>();
@@ -204,7 +223,9 @@ export async function scoreCalls(): Promise<Scorecard> {
   function formBefore(
     handle: string, stat: string, ms: number, me: number, cutoff: number,
   ): FormStats {
-    const col = stat === 'kills' ? 'kills' : 'headshots';
+    // Falls back to kills only so the type stays a string; the query already
+    // excluded any stat without a column, so the fallback is unreachable.
+    const col = SETTLES[stat] ?? 'kills';
     const rows = (byPlayer.get(handle) ?? [])
       .filter((r) => new Date(r.played_at).getTime() < cutoff);
 
@@ -490,12 +511,29 @@ export async function storeScore(s: Scorecard, league = 'CS2'): Promise<void> {
   );
 }
 
+/**
+ * Leagues worth scoring separately.
+ *
+ * Not combined: CS2 and LoL are different games with different line
+ * behaviour, and averaging 500 CS2 legs with 180 LoL ones would let the
+ * larger one speak for both. `model_score` is keyed by league for the same
+ * reason.
+ */
+export const LEAGUES = ['CS2', 'LOL'] as const;
+
 export async function main(): Promise<void> {
-  const s = await scoreCalls();
-  report(s);
-  if (process.argv.includes('--store')) {
-    await storeScore(s);
-    console.log('\nstored to model_score.');
+  const store = process.argv.includes('--store');
+  for (const league of LEAGUES) {
+    const s = await scoreCalls(league);
+    console.log(`\n${'='.repeat(60)}\n${league}\n${'='.repeat(60)}`);
+    report(s);
+    // A league with nothing settled gets no row. An empty scorecard stored
+    // daily would draw a flat line through the chart that looks like a
+    // measurement of zero rather than an absence of one.
+    if (store && s.settled > 0) {
+      await storeScore(s, league);
+      console.log(`stored ${league} to model_score.`);
+    }
   }
 }
 

@@ -4,7 +4,7 @@ import { pollOnce } from './poll.js';
 import { runResults } from './results/run.js';
 import { fetchBo3 } from './results/bo3.js';
 import { storeStats } from './results/store_stats.js';
-import { scoreCalls, storeScore } from './results/validate_calls.js';
+import { scoreCalls, storeScore, LEAGUES } from './results/validate_calls.js';
 
 console.log(`BropProp logger up — schedule "${config.pollCron}", leagues ${config.leagues.join(',')}`);
 
@@ -90,17 +90,20 @@ async function scoreTick() {
   if (scoring) return;
   scoring = true;
   try {
-    const s = await scoreCalls();
-    if (s.settled === 0) {
-      console.log('model score: nothing settled yet');
-      return;
-    }
-    await storeScore(s);
     const pc = (v: number | null) => (v === null ? '—' : `${(100 * v).toFixed(1)}%`);
-    console.log(
-      `model score: ${s.calls} calls / ${s.series} series — realised ${pc(s.realised)}, ` +
-      `claimed ${pc(s.claimed)}, AUC ${s.auc === null ? '—' : s.auc.toFixed(3)}, ` +
-      `always-under ${pc(s.alwaysUnder)}`);
+    for (const league of LEAGUES) {
+      const s = await scoreCalls(league);
+      if (s.settled === 0) {
+        console.log(`model score ${league}: nothing settled yet`);
+        continue;
+      }
+      await storeScore(s, league);
+      console.log(
+        `model score ${league}: ${s.calls} calls / ${s.series} series — ` +
+        `realised ${pc(s.realised)}, claimed ${pc(s.claimed)}, ` +
+        `AUC ${s.auc === null ? '—' : s.auc.toFixed(3)}, ` +
+        `always-under ${pc(s.alwaysUnder)}`);
+    }
   } catch (err) {
     // Scoring is reporting, not collection. It must never take the logger down.
     console.warn('model score skipped:', (err as Error).message.slice(0, 120));

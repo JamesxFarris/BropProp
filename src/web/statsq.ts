@@ -99,15 +99,15 @@ export type ScoreRow = {
  * every settled market and every stat row for the players in them, which is a
  * scheduled job's work, not a page load's.
  */
-export async function scoreHistory(limit = 60): Promise<ScoreRow[]> {
+export async function scoreHistory(limit = 60, league = 'CS2'): Promise<ScoreRow[]> {
   return q(
     `SELECT to_char(scored_at, 'YYYY-MM-DD') AS day,
             calls, series, days, realised, claimed, auc,
             always_over, always_under, series_ahead, series_judged, series_p
        FROM model_score
-      WHERE league = 'CS2'
+      WHERE league = $2
       ORDER BY scored_at DESC
       LIMIT $1`,
-    [limit],
+    [limit, league],
   );
 }
