@@ -1078,7 +1078,13 @@ button.link:hover { color: var(--under); text-decoration: underline; }
   .sheet-body .card {
     border: 0; border-radius: 0; box-shadow: none; background: transparent;
   }
-  .sheet-body .card-head { display: none; }
+  /* The card header is redundant in the sheet — the bar above already says
+     whose slip this is and how long it is — but it now carries Clear all, and
+     that is the one control that must not be hard to find on a phone. Keep
+     the row, drop the words. */
+  .sheet-body .card-head { display: flex; padding: 10px 14px; }
+  .sheet-body .card-head h2, .sheet-body .card-head .sub { display: none; }
+  .sheet-body .card-head .clear-all { min-height: 38px; }
   .sheet-body .slip-legs > .leg:first-child { border-top: 0; }
 
   /* Room for the bar, so the last row and the footer are never under it. */
@@ -1313,12 +1319,36 @@ button.link:hover { color: var(--under); text-decoration: underline; }
   .seg { gap: 4px; }
   .seg a { min-height: 44px; padding: 0 14px; font-size: 15px; }
   .seg-locked { min-height: 44px; }
-  .search { width: 100%; }
+  /* Search and the Filters disclosure share a line. Full-width search pushed
+     the disclosure onto a third row, so the chrome was three rows deep before
+     the first prop — which is what the fold-away was meant to prevent. */
+  .search { flex: 1 1 auto; width: auto; min-width: 0; }
   .search input { width: 100%; min-height: 46px; padding: 10px 12px; font-size: 16px; }
+  .more { flex: 0 0 auto; }
+  .more > summary { min-height: 46px; }
+  /* Opened, the panel is a row of its own rather than a squeezed column. */
+  .more[open] { flex: 1 1 100%; }
   .search-go { min-height: 46px; }
 
   .page { padding-top: 12px; }
-  .banner { font-size: 13px; padding: 10px 12px; }
+  /* The banner explains why the board is narrowed, which is worth reading
+     once and not on every load. Three lines of prose was the single largest
+     thing between the header and the first prop on a phone; two lines carry
+     the point, and the rest is one tap away. */
+  .banner {
+    font-size: 13px; padding: 10px 12px;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
+  .banner:active, .banner:focus-within { -webkit-line-clamp: unset; }
+
+  /* Same for the board's own subtitle, which lists every reason a market is
+     quiet. The counts matter; the sentence explaining the app filter does not
+     need to be on screen above the board it describes. */
+  .card-head .sub {
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
   .card-head { padding: 12px 14px; flex-wrap: wrap; gap: 4px 10px; }
   .card-head .sub { margin-left: 0; }
   .hist-head { padding: 14px; }
@@ -1333,7 +1363,16 @@ button.link:hover { color: var(--under); text-decoration: underline; }
   button.link { min-height: 44px; }
 
   /* A name in a row is a small target for a thumb. The hit area is grown
-     with a pseudo-element so nothing on the card actually moves. */
+     with a pseudo-element so nothing on the card actually moves.
+     The pseudo alone was not enough once the card became a flex row: hit
+     testing started landing on the cell rather than on the overlay, and the
+     audit measured the anchor's own 26px box. Padding with a matching
+     negative margin grows the ANCHOR to 44px, which nothing can stack over,
+     and cancels itself in layout so the card does not get taller. */
+  /* Width as well as height: a two-letter handle like "jL" is a 14px target
+     however tall it is. min-width pads the box out to the same 44px without
+     touching the type. */
+  .name a { padding: 9px 0; margin: -9px 0; min-width: 44px; }
   .name a, .brand a, a.meta { position: relative; display: inline-block; }
   .name a::after, .brand a::after, a.meta::after {
     content: ''; position: absolute; top: -13px; bottom: -13px;
@@ -1450,3 +1489,53 @@ body.searching .tick { display: none; }
   .board-table tbody tr.live:has(.play.o) { box-shadow: inset 3px 0 0 var(--over); }
   .board-table tbody tr.live:has(.play.u) { box-shadow: inset 3px 0 0 var(--under); }
 }
+
+/* ---- the filter disclosure ----------------------------------------------
+   League and search stay out; app, show and the price toggles fold away.
+   Eleven controls across four labelled groups used to sit between the header
+   and the first prop, which on a phone was most of a screen of chrome before
+   anything worth reading. */
+.more { position: relative; }
+.more > summary {
+  list-style: none; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 7px;
+  min-height: 38px; padding: 0 13px;
+  border: 1px solid var(--line); border-radius: var(--r-control);
+  background: var(--surface-2); color: var(--text-2);
+  font-size: 14px; font-weight: 600; white-space: nowrap;
+}
+.more > summary::-webkit-details-marker { display: none; }
+.more > summary:hover { color: var(--text); border-color: var(--line-2); }
+.more[open] > summary { color: var(--text); border-color: var(--line-2); }
+/* How many non-default filters are on. A filter you cannot see is a filter
+   you forget you set, and this one is now behind a fold by design. */
+.more .dot {
+  display: inline-grid; place-items: center;
+  min-width: 18px; height: 18px; padding: 0 5px;
+  border-radius: var(--r-pill);
+  background: var(--nav); color: var(--nav-ink);
+  font-size: 12px; font-weight: 700;
+}
+.more-in {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+  margin-top: 10px; padding: 12px 14px;
+  border: 1px solid var(--line); border-radius: var(--r-panel);
+  background: var(--surface);
+}
+
+/* Clear all, in the slip header. */
+.clear-all {
+  font: inherit; font-size: 13px; font-weight: 600;
+  padding: 5px 10px; cursor: pointer;
+  color: var(--text-2); background: transparent;
+  border: 1px solid var(--line-2); border-radius: var(--r-control);
+}
+.clear-all:hover { color: var(--under); border-color: var(--under); background: var(--under-bg); }
+
+.foot-link {
+  display: inline-flex; align-items: center;
+  min-height: 44px; min-width: 44px;   /* a thumb target, not a 21px line of text */
+  color: var(--text-2); font-weight: 600; text-decoration: none;
+  box-shadow: inset 0 -1px 0 var(--line-2);
+}
+.foot-link:hover { color: var(--text); border-color: var(--text); }

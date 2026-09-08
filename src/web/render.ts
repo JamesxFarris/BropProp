@@ -165,24 +165,30 @@ function filterBar(path: string, f: Filters, leagues: string[], locked: string |
         a(qs({ book: 'both' }, f), 'Both', f.book === null),
       ].join('');
 
+  /**
+   * Everything except league and search folds away.
+   *
+   * There were eleven controls across four labelled groups above the board,
+   * and on a phone they filled the screen before a single prop appeared —
+   * which is the wrong thing at the top of a page whose whole job is to put
+   * the best bets in front of you. League and search are the two anyone
+   * touches often; app, show and the price toggles are set once and then left
+   * alone, so they live behind a disclosure.
+   *
+   * A `<details>`, so it costs no JavaScript and survives scripts being
+   * blocked like every other control here. The summary counts what is active,
+   * because a filter you cannot see is a filter you forget you set.
+   */
+  const changed = [
+    f.book !== 'prizepicks' ? 1 : 0,
+    f.show !== 'all' ? 1 : 0,
+    f.best === false ? 1 : 0,
+    f.matched ? 1 : 0,
+  ].reduce((x: number, y: number) => x + y, 0);
+
   return `
   <div class="filters">
-    <div class="group"><span class="lab">League</span><nav class="seg">${leagueBtns}</nav></div>
-    <div class="group"><span class="lab">App</span><nav class="seg">${bookBtns}</nav>${
-      locked ? '<span class="lab">set by your slip</span>' : ''
-    }</div>
-    <div class="group"><span class="lab">Show</span><nav class="seg">
-      ${a(qs({ show: 'all' }, f), 'All', f.show === 'all')}
-      ${a(qs({ show: 'live' }, f), 'Priced', f.show === 'live')}
-      ${a(qs({ show: 'calls' }, f), 'With a call', f.show === 'calls')}
-    </nav></div>
-    <div class="group"><nav class="seg">
-      ${
-        f.book
-          ? a(qs({ best: !f.best }, f), 'Best price only', f.best)
-          : a(qs({ matched: !f.matched }, f), 'On both apps', f.matched)
-      }
-    </nav></div>
+    <nav class="seg">${leagueBtns}</nav>
     <form class="search" method="get" action="${esc(path)}"
           data-live data-q="${esc(f.search ?? '')}">
       ${f.league ? `<input type="hidden" name="league" value="${esc(f.league)}">` : ''}
@@ -195,6 +201,30 @@ function filterBar(path: string, f: Filters, leagues: string[], locked: string |
              aria-label="Search players, matches or stats">
       <button class="search-go" type="submit" aria-label="Search">Search</button>
     </form>
+    <!-- Never open by default, even with filters active. Auto-opening put the
+         whole panel back above the board — 342px of it on a phone — which is
+         the thing folding it away was for. The count on the summary is the
+         signal; expanding is the reader's choice. -->
+    <details class="more">
+      <summary>Filters${changed ? ` <span class="dot">${changed}</span>` : ''}</summary>
+      <div class="more-in">
+        <div class="group"><span class="lab">App</span><nav class="seg">${bookBtns}</nav>${
+          locked ? '<span class="lab">set by your slip</span>' : ''
+        }</div>
+        <div class="group"><span class="lab">Show</span><nav class="seg">
+          ${a(qs({ show: 'all' }, f), 'All', f.show === 'all')}
+          ${a(qs({ show: 'live' }, f), 'Priced', f.show === 'live')}
+          ${a(qs({ show: 'calls' }, f), 'With a call', f.show === 'calls')}
+        </nav></div>
+        <div class="group"><nav class="seg">
+          ${
+            f.book
+              ? a(qs({ best: !f.best }, f), 'Best price only', f.best)
+              : a(qs({ matched: !f.matched }, f), 'On both apps', f.matched)
+          }
+        </nav></div>
+      </div>
+    </details>
   </div>`;
 }
 
@@ -285,7 +315,6 @@ function shell(o: {
     <span class="grow"></span>
     ${freshness(o.health.last_ok_poll)}
     <button type="button" class="icon-btn" id="theme">Theme</button>
-    <a class="icon-btn" href="/logout">Sign out</a>
   </div>
 </header>
 
@@ -312,6 +341,10 @@ ${o.rail ? '<input type="checkbox" id="slipsheet" class="sheet-toggle" aria-labe
       ? new Date(o.health.logging_since).toISOString().slice(0, 16).replace('T', ' ')
       : '—'
   }</b></span>
+  <span class="grow"></span>
+  <!-- Signing out is a once-a-month action; in the masthead it was a
+       full-width row of its own on a phone, above the board it belongs to. -->
+  <a class="foot-link" href="/logout">Sign out</a>
 </footer>
 
 <script>
@@ -525,6 +558,15 @@ function slipRail(picks: PickRow[], back: string): string {
     <div class="card-head">
       <h2>Your slip</h2>
       <span class="sub">${n} leg${n === 1 ? '' : 's'}</span>
+      <span class="grow"></span>
+      <!-- In the header, not under the Place button. It used to sit below the
+           payout form, which on a phone is past the fold of an already
+           scrolling sheet: the way out of a slip you did not mean to build
+           was the one control you had to go looking for. -->
+      <form method="post" action="/slip/clear" class="inline">
+        <input type="hidden" name="back" value="${esc(back)}">
+        <button class="clear-all" title="Remove every leg">Clear all</button>
+      </form>
     </div>
     <div class="slip-legs">${legs}</div>
     <form method="post" action="/slip/place" class="payout" id="slipform">
@@ -570,10 +612,6 @@ function slipRail(picks: PickRow[], back: string): string {
         <span class="big" id="towin">—</span>
       </div>
       <button class="go">Place slip</button>
-    </form>
-    <form method="post" action="/slip/clear" style="padding:0 14px 12px">
-      <input type="hidden" name="back" value="${esc(back)}">
-      <button class="link">Clear all legs</button>
     </form>
   </div></div>`;
 }
