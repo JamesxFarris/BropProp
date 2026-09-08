@@ -314,6 +314,39 @@ buy or scrape. Anything found here can only be confirmed *forward*, by
 letting the logger accumulate more series. That is a structural constraint on
 this whole line of work, not a temporary gap.
 
+### The scorecard runs itself, daily
+
+The replay above is not a thing to remember to run. It is on a schedule, and
+one row per day lands in `model_score`:
+
+```bash
+npm run validate:calls           # print it
+npm run validate:calls -- --store  # print it and store today's row
+```
+
+`SCORE_CRON` (default `47 5 * * *`) runs it in the logger, just after the
+daily CS2 sweep so it scores against results the sweep has only just landed.
+The Stats page reads the table rather than recomputing — the replay touches
+every settled market and every stat row for the players in them, which is far
+too slow for a page load.
+
+The page leads with **AUC**, not the hit rate, and prints both no-model
+baselines beside it, because a hit rate means nothing until you know what
+doing nothing would have scored. Watch the gap between the dashed
+"predicted" line and the solid "realised" one: that gap is the
+overconfidence, and it is the thing that should shrink if the model ever
+starts working.
+
+To see the page without a database, render it from fixtures:
+
+```bash
+npx tsx raw/harness/genstats.ts    # writes raw/shots/stats*.html
+npx tsx raw/harness/shootscore.ts  # screenshots, checks for overflow
+```
+
+That covers the two states production hides for weeks — the empty table, and
+the single stored day where no polyline can be drawn.
+
 ### Modelling ideas that were measured and failed
 
 All walk-forward over CS2 maps-1-2 series, scoring only on history that

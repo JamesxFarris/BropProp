@@ -509,3 +509,66 @@ changed here: it decides money and deserves its own measurement.
   count as a model feature; what failed was one specific way of using it, and
   it failed for a reason now written down so nobody rebuilds it from the same
   argument.
+- **2026-09-08** — Asked the two questions the board had been quietly assuming
+  the answers to, and both came back no.
+
+  **Does the stale side win?** The board leads with "one book moved, the other
+  hasn't", added on the strength of a real measurement: when the lagging book
+  responds, it agrees with the mover about 6.5 to 1. Nobody had checked
+  whether *taking* the stale number wins, because that needs settled outcomes.
+  It came out **41-41, exactly 50.0%**. Taking the same direction at the
+  mover's own new number was worse, 41.7%. So the signal predicts what the
+  other book will print, not what the player will do — two different claims,
+  and only the first survived. The cell stays, because a standing 1.0-unit gap
+  is worth knowing when choosing *where* to place a bet you were making
+  anyway, but the doc comment no longer calls it "the better evidence" and the
+  tooltip quotes the record instead of hinting at value. `npm run
+  validate:stale`.
+
+  **Does the board's own Take win?** The walk-forward replay was sitting in
+  gitignored scratch, which is the wrong home for the most important
+  measurement in the project, so it is now `npm run validate:calls`. Promoting
+  it exposed that it had been feeding the model 20 series and 60 maps against
+  production's 30 and 90, and that it had no baseline to beat. Fixed both. The
+  answer: model **52.0%**, always-take-the-under **58.1%**, always-over 41.9%;
+  claimed 60.3% against 52.0% realised; **AUC 0.495**.
+
+  AUC is the number that matters and it is the one that kills the flattering
+  reading. Being eight points overconfident is a calibration problem and
+  shrinking every probability toward 0.5 fixes it. AUC 0.495 says there is no
+  ordering to calibrate — a call the model rates 75% wins no more often than
+  one it rates 56%.
+
+  **And then the correction to my own correction.** The 58% under baseline
+  looked like a real DFS shading edge at z = 5.11. It is not, or at least
+  nothing here can show it is: those 520 legs come from **17 series across 3
+  days**. Every player in a series shares its length, its overtime and its
+  pace, so one long map sends every leg over at once. Asked once per series
+  the lean is 12 of 16, two-sided p = 0.077, and the model's own calls led in
+  8 of 17, p = 1.000. The map-3 slice that looked strongest — 73% over, +3.13
+  against the line — is **three series**, and its mechanism is visible in the
+  data: map 3 only happens at 1-1 and those maps ran a median 28 rounds
+  against 19, so everyone inflates together.
+
+  This is the third time this project has been fooled by treating correlated
+  legs as a sample, after 271 markets from ~10 matches and the same-match leg
+  correlation that made the optimizer direction-constrained. So leg-level
+  z-scores were removed from the script's output **entirely** rather than
+  annotated — a number that is wrong in a predictable direction should not be
+  printed next to a caveat, it should not be printed. What replaces them is
+  the series count and an exact sign test.
+
+  A structural constraint fell out of this and is worth stating plainly: book
+  lines exist in the database only from the day the logger started, and there
+  is no historical line data to buy or scrape. **Any line-shade finding can
+  only ever be confirmed forward, never backtested.** Logging time is the only
+  thing that moves it.
+
+  **What shipped as a result.** Not a model change — there is nothing here
+  that earned one. Instead the scorecard became a tracked series: `model_score`
+  takes one row a day from `SCORE_CRON`, and the Stats page leads with AUC and
+  both no-model baselines, with a note in plain words that leg counts are not
+  sample sizes. The user asked for something showing the model learning, to
+  show off. The honest version of that is a scoreboard that would make it
+  obvious if it never does, and the same page is what proves it when it
+  finally moves.
