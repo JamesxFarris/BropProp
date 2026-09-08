@@ -343,10 +343,16 @@ changed here: it decides money and deserves its own measurement.
   abandonments, 90.8% KAST-consistent against 99.79% for the rest, and were
   dropped), Pearson r between kills/round and rounds is **-0.0298** — with
   all rows included, including those 91, it moves to -0.0595. Both are
-  negligible. Mean KPR by bucket is flat: 0.740 at 13-15 rounds (n=2,755),
-  0.690 at 16-19 (n=13,165), 0.676 at 20-24 (n=25,836), 0.684 at 25+
-  (n=5,838, genuine deep overtime, kept rather than clamped) — no
-  monotonic drift, no thin bucket. Unlike combos, this is a null result:
+  negligible. Mean KPR by bucket does not drift monotonically: 0.740 at
+  13-15 rounds (n=2,755), 0.690 at 16-19 (n=13,165), 0.676 at 20-24
+  (n=25,836), 0.684 at 25+ (n=5,838, genuine deep overtime, kept rather
+  than clamped) — no thin bucket anywhere. The shortest bucket does sit
+  about 9% above the middle two, which is not nothing and is worth saying
+  rather than calling the line flat: a one-sided map concentrates the
+  fragging. But it does not continue — the longest bucket ticks back up,
+  and that is exactly why the correlation lands near zero and why scaling
+  the rate by round length would be fitting noise rather than a trend.
+  Unlike combos, this is a null result:
   rate and round count may be drawn independently in the resample. Written
   down so the next person doesn't re-measure it. See
   `src/results/measure_rounds.ts`.
