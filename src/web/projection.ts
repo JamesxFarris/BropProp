@@ -71,6 +71,10 @@ export type Play = {
    */
   rawWins: number | null;
   rawOf: number | null;
+  /** Our estimate after anchoring toward the line — what the board shows. */
+  anchored: number;
+  /** The player's own unanchored average, for saying why the two differ. */
+  rawMean: number;
   series: number;
   strength: number;      // ranking score, not a probability
   score: number;         // strength on a 0-99 scale, for reading at a glance
@@ -146,6 +150,21 @@ const DRAWS = 4000;
  * all — not another pass over the same numbers.
  */
 export const HISTORY = 30;
+
+/**
+ * Blend a player's own average with the book's line, by how much history there
+ * is behind the average.
+ *
+ * Exported so the validator scores the estimate the board actually makes.
+ * Recomputing the same blend there by hand would let the two drift apart, and
+ * the whole point of the validator is that it measures what ships.
+ */
+export function anchorToLine(
+  mean: number, line: number, observations: number, prior = PRIOR,
+): number {
+  const w = observations / (observations + prior);
+  return w * mean + (1 - w) * line;
+}
 
 /** Deterministic PRNG, so the same board renders the same numbers every time. */
 function rng(seed: number) {
@@ -356,6 +375,13 @@ export function evaluate(o: Evaluation): CallStatus {
   const prior = useSeries ? PRIOR : PRIOR * 2;
 
   /**
+   * How much of our own history to keep when locating the distribution, with
+   * the rest coming from the book's line. Same shrink as the probability, and
+   * deliberately the same prior — see the note in `rateAt`.
+   */
+  const lineWeight = observations / (observations + prior);
+
+  /**
    * The share of this player's own history that would have won a side, shrunk
    * toward a coin flip by how little history there is.
    *
@@ -388,9 +414,33 @@ export function evaluate(o: Evaluation): CallStatus {
    * refund as half a bet.
    */
   const rateAt = (line: number, side: 'over' | 'under', anchor: number | null) => {
-    const wins = sample.filter((t) => (side === 'over' ? t > line : t < line)).length;
+    // Recentre this player's history between their own mean and the book's
+    // number before reading it. Measured 2026-09-08 over 823 settled CS2
+    // markets, the line is the better estimate of what a player actually
+    // does — MAE 5.01 against our 5.25, and our mean runs +1.16 high — so a
+    // thin sample should not be trusted to out-locate it.
+    //
+    // The shift is a translation, so the SHAPE of the distribution is still
+    // entirely the player's: only where it sits moves. Weight is the same
+    // sample-size shrink the probability already uses, and `LINE_PRIOR` is
+    // set equal to `PRIOR` on principle rather than tuned — three days of
+    // settled data cannot fit a parameter without fitting its noise.
+    //
+    // At zero history the sample lands centred on the line, which reads as
+    // 50/50 and makes no call. That is the correct answer to "we know
+    // nothing", and it is what the old code got wrong: it reported the gap
+    // between an unanchored six-game average and the line as edge.
+    const effLine = line + (1 - lineWeight) * (mean - line);
+    // A push is defined by the BOOK's number, not by our shifted one: a total
+    // landing exactly on 20 against a line of 20 is refunded whatever we think
+    // the player's true level is. Testing equality against `effLine` instead
+    // scored those as wins or losses and silently undid the push handling —
+    // caught by `projection.test.ts`, which is why that test exists.
     const settled = sample.filter((t) => t !== line).length;
     if (settled === 0) return null;
+    const wins = sample.filter(
+      (t) => t !== line && (side === 'over' ? t > effLine : t < effLine),
+    ).length;
     const raw = wins / settled;
     // Shrink toward the market where there is one, toward a coin flip where
     // there isn't. See the note on `anchorFor`.
@@ -517,9 +567,15 @@ export function evaluate(o: Evaluation): CallStatus {
   };
   const pick = candidates.reduce(better);
 
+  // Our estimate after anchoring — the number the board should show, because
+  // it is the one the call was actually made from. The player's raw average
+  // is kept separately for the tooltip: "they average 19.6, we say 17.2
+  // because eight series is thin" is the honest sentence.
+  const anchored = lineWeight * mean + (1 - lineWeight) * pick.line;
+
   // Still reported in stat units, because "the number is 2.4 kills light" is
   // what a person reads, while the probability is what the model acts on.
-  const edge = pick.side === 'over' ? mean - pick.line : pick.line - mean;
+  const edge = pick.side === 'over' ? anchored - pick.line : pick.line - anchored;
 
   // Evaluated and honest. Both numbers are reported: the stat-unit gap is what
   // the row shows, and the probability is what decides whether it is a call.
@@ -557,6 +613,8 @@ export function evaluate(o: Evaluation): CallStatus {
       // Only where they count real series — see the note on the type.
       rawWins: useSeries ? pick.rawWins : null,
       rawOf: useSeries ? pick.rawOf : null,
+      anchored,
+      rawMean: mean,
       series: form.series,
       strength,
       method: useSeries ? 'series' : 'maps',

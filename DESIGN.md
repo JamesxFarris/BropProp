@@ -572,3 +572,64 @@ changed here: it decides money and deserves its own measurement.
   show off. The honest version of that is a scoreboard that would make it
   obvious if it never does, and the same page is what proves it when it
   finally moves.
+- **2026-09-08 (later)** — Anchored the projection to the book's line, because
+  we measured that the line is the better estimate.
+
+  Earlier the same day, scoring every settled market showed our central
+  estimate losing to the number we were betting against: MAE 5.25 against the
+  line's 5.01 over 823 CS2 markets, with our average running **+1.16 high**
+  against the line's +0.43. The board was printing that difference as "+3.6 in
+  your favour" — advertising our own over-projection as edge.
+
+  The standard response to "a better estimate exists" is to shrink toward it,
+  which is what `evaluate()` already did with probabilities. But it anchored to
+  a devigged market probability, and that is available on about 5% of the
+  board: PrizePicks publishes no per-side price at all (0 of 365 markets) and
+  91.5% of Underdog's are flat −112/−112, which devigs to exactly 0.500. The
+  **line**, by contrast, exists on every market. So the anchor moved from a
+  probability that is almost never there to a number that always is.
+
+  `rateAt` now reads the player's distribution against `line + (1 - w)(mean -
+  line)`, with `w = n / (n + PRIOR)`. It is a translation, so the *shape* stays
+  entirely the player's; only where it sits moves. At zero history the sample
+  lands centred on the line and reads 50/50, which is the correct answer to
+  "we know nothing" and precisely what the old code got wrong — it reported the
+  gap between an unanchored six-game average and the line as an edge.
+
+  **`LINE_PRIOR` was not tuned.** It is set equal to `PRIOR`, on principle.
+  Every settled market comes from three days, so any value fitted here would be
+  fitted to its own noise; that mistake has been made three times in this
+  project already and each time the fitted parameter turned out to be
+  scale-dependent.
+
+  Measured, CS2, walked forward:
+
+  | | before | after |
+  |---|---|---|
+  | calls made | 491 | 462 |
+  | realised | 50.5% | **52.4%** |
+  | claimed − realised | 8.3 pts | **6.5 pts** |
+  | our MAE | 5.25 | **5.13** |
+  | our bias | +1.16 | **+0.95** |
+  | AUC | 0.538 | 0.526 |
+
+  Better calibrated, better located, fewer and better-evidenced calls. **It
+  does not create skill** — AUC moved from 0.538 to 0.526 and both are inside
+  noise on 28 series. Nothing on this data could create skill. What it fixes is
+  a measured defect in the number the board shows, and the line is still the
+  closer estimate even after anchoring (5.13 against 5.01), which the Stats
+  page now says out loud.
+
+  LoL moved the other way (raw 4.79 → anchored 5.01) because there the raw
+  average happened to beat the line. That is 3 series and reads as noise; the
+  parameter is not being split per league on the strength of it.
+
+  **A test caught a real bug in the first cut.** Shifting the comparison point
+  also shifted the push test, so a total landing exactly on the book's line was
+  being scored as a win or a loss instead of a refund. Pushes are defined by
+  the book's number, not ours. `projection.test.ts` failed on exactly that,
+  which is the second time that suite has caught a push regression.
+
+  The board shows the anchored figure now, with the raw average beside it —
+  "Ours 17.5, 8 series, avg 12.5" — because showing 12.5 next to a lean
+  computed from 17.5 would print a gap the model never acted on.

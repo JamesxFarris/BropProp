@@ -664,6 +664,12 @@ function formNote(f: FormStats | undefined, play: Play | null): string {
   if (play?.method === 'maps' || f.series === 0) {
     return `per map, ${f.mapValues.length} maps`;
   }
+  // Where the shown number has been pulled toward the line, say by how much
+  // and from what. Otherwise "17.2 from 8 series" reads as their average when
+  // their average is 19.6, and the reader has no way to tell.
+  if (play && Math.abs(play.anchored - play.rawMean) >= 0.05) {
+    return `${f.series} series, avg ${play.rawMean.toFixed(1)}`;
+  }
   return `${f.series} series`;
 }
 
@@ -1218,11 +1224,19 @@ export function boardPage(o: {
             // should not have to hold one in their head to reach the other.
             const theirLine = play ? play.line : (only === 'underdog' ? r.ud_line : r.pp_line);
             const f = formOf(r);
-            const ours = !f
-              ? null
-              : play?.method === 'maps' || f.series === 0
-                ? f.perMap
-                : f.mean;
+            // When there is a call, show the number the call was made from —
+            // the average anchored toward the line, not the raw one. Showing
+            // the raw mean beside a lean computed from the anchored figure
+            // would print a gap the model never acted on, which is how the
+            // board came to advertise "+3.6 in your favour" when a third of
+            // that was our own measured over-projection.
+            const ours = play
+              ? play.anchored
+              : !f
+                ? null
+                : f.series === 0
+                  ? f.perMap
+                  : f.mean;
             // Rows the model has no opinion on are dimmed rather than removed.
             // They still belong here — a line move turns a fair one into a call,
             // and hiding them would hide why the board is quiet — but giving them

@@ -1,6 +1,8 @@
 import { pathToFileURL } from 'node:url';
 import { pool, q } from '../db.js';
-import { evaluate, HISTORY, type FormStats, type LineOption } from '../web/projection.js';
+import {
+  evaluate, HISTORY, anchorToLine, type FormStats, type LineOption,
+} from '../web/projection.js';
 
 /**
  * Would the board have been right?
@@ -139,6 +141,13 @@ export type Scorecard = {
   oursBias: number | null;
   lineBias: number | null;
   estN: number;
+  /**
+   * The unanchored average, kept only as a diagnostic. `oursMae` above is the
+   * anchored blend, because that is the number the board prints and therefore
+   * the one that has to answer for itself.
+   */
+  rawMae: number | null;
+  rawBias: number | null;
   byRange: Array<{ range: string; under: number; n: number; margin: number }>;
   buckets: Array<{ band: string; n: number; won: number; claimedEv: number; realEv: number }>;
 };
@@ -206,6 +215,7 @@ export async function scoreCalls(league = 'CS2'): Promise<Scorecard> {
     underSeries: 0, underSeriesJudged: 0, underSeriesP: 1,
     claimedEv: null, realisedEv: null,
     oursMae: null, lineMae: null, oursBias: null, lineBias: null, estN: 0,
+    rawMae: null, rawBias: null,
     byRange: [], buckets: [],
   };
   if (markets.length === 0) return empty;
@@ -287,6 +297,9 @@ export async function scoreCalls(league = 'CS2'): Promise<Scorecard> {
   // only the called ones — "Ours" is printed on every row, so it should be
   // judged on every row.
   let oursErr = 0, oursAbs = 0, lineErr = 0, lineAbs = 0, estN = 0;
+  // The anchored estimate is what the board now prints, so it is the one that
+  // has to justify itself against both the raw mean and the line.
+  let ancErr = 0, ancAbs = 0;
 
   const model = arm();
   const alwaysOver = arm();
@@ -339,6 +352,9 @@ export async function scoreCalls(league = 'CS2'): Promise<Scorecard> {
       oursAbs += Math.abs(form.mean - total);
       lineErr += line - total;
       lineAbs += Math.abs(line - total);
+      const anc = anchorToLine(form.mean, line, form.series);
+      ancErr += anc - total;
+      ancAbs += Math.abs(anc - total);
     }
 
     const opt: LineOption = {
@@ -407,11 +423,13 @@ export async function scoreCalls(league = 'CS2'): Promise<Scorecard> {
     underSeriesP: signTest(underSeries, leans.length),
     claimedEv: priced ? claimedSum / priced : null,
     realisedEv: priced ? realSum / priced : null,
-    oursMae: estN ? oursAbs / estN : null,
+    oursMae: estN ? ancAbs / estN : null,
     lineMae: estN ? lineAbs / estN : null,
-    oursBias: estN ? oursErr / estN : null,
+    oursBias: estN ? ancErr / estN : null,
     lineBias: estN ? lineErr / estN : null,
     estN,
+    rawMae: estN ? oursAbs / estN : null,
+    rawBias: estN ? oursErr / estN : null,
     byRange: [...underByRange]
       .sort()
       .map(([range, v]) => ({ range, under: v.won, n: v.n, margin: v.margin / v.n })),
@@ -456,13 +474,18 @@ export function report(s: Scorecard): void {
   if (s.oursMae !== null && s.lineMae !== null) {
     const sign = (v: number | null) => (v === null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(2)}`);
     console.log(`\nhow close each estimate got to the actual total (${s.estN} markets):`);
-    console.log(`  "Ours"      MAE ${s.oursMae.toFixed(2)}   bias ${sign(s.oursBias)}`);
-    console.log(`  book's line MAE ${s.lineMae.toFixed(2)}   bias ${sign(s.lineBias)}`);
+    if (s.rawMae !== null) {
+      console.log(`  raw average  MAE ${s.rawMae.toFixed(2)}   bias ${sign(s.rawBias)}` +
+                  `   (unanchored, diagnostic only)`);
+    }
+    console.log(`  book's line  MAE ${s.lineMae.toFixed(2)}   bias ${sign(s.lineBias)}`);
+    console.log(`  "Ours"       MAE ${s.oursMae.toFixed(2)}   bias ${sign(s.oursBias)}` +
+                `   <- anchored, what the board shows`);
     console.log(
       s.oursMae <= s.lineMae
-        ? `  -> our projection is the closer estimate, by ${(s.lineMae - s.oursMae).toFixed(2)}.`
-        : `  -> the BOOK's line is closer, by ${(s.oursMae - s.lineMae).toFixed(2)}. ` +
-          `The "in your favour" gap is measuring our error, not an edge.`);
+        ? `  -> our estimate is the closer one, by ${(s.lineMae - s.oursMae).toFixed(2)}.`
+        : `  -> the BOOK's line is still closer, by ${(s.oursMae - s.lineMae).toFixed(2)}. ` +
+          `The "in your favour" gap is partly our error, not an edge.`);
   }
 
   console.log(`\nthe model PREDICTED an average of ${p1(s.claimed)}`);

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { evaluate, recommend, edgeProgress, flatBreakEven, type FormStats, type LineOption } from './projection.js';
+import { anchorToLine, evaluate, recommend, edgeProgress, flatBreakEven, type FormStats, type LineOption } from './projection.js';
 import { foldCombo, type ComboStatRow } from '../combo.js';
 
 /**
@@ -166,8 +166,19 @@ test('a combo projects from joint totals and calls the side its members support'
 
   const s = evaluate({ form: f, options: [both('prizepicks', 35)], maps: 2, handle: 'A + B' });
   assert.equal(s.play?.side, 'over');
-  assert.equal(s.play?.edge, 5);
   assert.equal(s.play?.method, 'series');
+
+  // The edge is NOT the raw 40 - 35. Since 2026-09-08 the projection is
+  // anchored toward the book's line by sample size, because the line was
+  // measured to be the better estimate of what a player actually does. Eight
+  // series against a prior of ten keeps 8/18 of our own distance from the
+  // line, so a five-unit disagreement is reported as about 2.2.
+  assert.equal(s.play?.anchored, anchorToLine(40, 35, 8));
+  assert.ok(
+    s.play!.edge > 0 && s.play!.edge < 5,
+    `anchoring must damp the raw gap of 5, got ${s.play?.edge}`,
+  );
+  assert.ok(Math.abs(s.play!.edge - (anchorToLine(40, 35, 8) - 35)) < 1e-9);
 });
 
 test('the combo mean is the sum of the members means — that part IS independent of correlation', () => {
