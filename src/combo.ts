@@ -96,7 +96,7 @@ export function foldCombo(
   rows: ComboStatRow[],
   mapStart: number,
   mapEnd: number,
-  limit = 20,
+  limit = 30,
 ): { totals: number[]; mapValues: number[] } {
   if (parts.length < 2) return { totals: [], mapValues: [] };
   const need = new Set(parts);
