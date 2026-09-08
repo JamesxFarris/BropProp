@@ -1560,3 +1560,62 @@ body.searching .tick { display: none; }
 .stale.u { color: var(--under); background: var(--under-bg); }
 .stale-k { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .stale-v { color: var(--text-2); font-weight: 500; }
+
+/* ---- stats -----------------------------------------------------------
+   A page about the archive rather than about profit. The honest headline of
+   this project is a year of per-map history nobody sells; four failed
+   experiments say it is not an edge yet. The layout follows that: what has
+   been collected is the loud part, the graded record is the quiet one. */
+.stat-row {
+  display: flex; flex-wrap: wrap; gap: 10px;
+  padding: 16px 18px;
+}
+.stat {
+  flex: 1 1 140px; min-width: 0;
+  padding: 12px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-panel);
+}
+.stat-n {
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+  font-size: 26px; font-weight: 700; letter-spacing: -.02em;
+  color: var(--text); line-height: 1.15;
+}
+.stat-n.good { color: var(--over); }
+.stat-n.bad  { color: var(--under); }
+.stat-k { font-size: 14px; font-weight: 600; color: var(--text-2); margin-top: 2px; }
+
+.card-body { padding: 16px 18px; }
+.note {
+  margin: 0 0 14px; max-width: 68ch;
+  font-size: 14px; color: var(--text-2); line-height: 1.55;
+}
+
+/* The chart is bars and nothing else — no gridlines, no axis furniture.
+   Structural devices should encode information, and a gridline behind a
+   growth curve encodes nothing you cannot read from the bars. */
+.chart { display: block; }
+.chart svg { width: 100%; height: 120px; display: block; overflow: visible; }
+.chart .bar { fill: var(--model); opacity: .85; }
+.chart .bar:hover { opacity: 1; }
+.chart-x {
+  display: flex; justify-content: space-between;
+  margin-top: 6px; font-size: 12px; color: var(--text-3);
+  font-family: var(--mono);
+}
+
+.meter-row { margin-bottom: 14px; }
+.meter-row:last-child { margin-bottom: 0; }
+.meter-top {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 12px; margin-bottom: 5px;
+  font-size: 14px; color: var(--text-2);
+}
+.meter-n { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--text-3); }
+.meter-n b { color: var(--text); font-weight: 700; }
+.meter {
+  height: 8px; border-radius: 99px; overflow: hidden;
+  background: var(--surface-2); border: 1px solid var(--line);
+}
+.meter-fill { height: 100%; background: var(--over); }

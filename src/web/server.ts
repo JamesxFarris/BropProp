@@ -13,7 +13,9 @@ import {
   openPicks, addPick, removePick, placeSlip, clearOpenSlip, slips, slipPicks,
   openSlipBook, WrongBookError, SideUnavailableError,
 } from './picks.js';
-import { boardPage, edgesPage, slipsPage, historyPage, buildPage, loginPage } from './render.js';
+import { boardPage, edgesPage, slipsPage, historyPage, buildPage, loginPage, statsPage } from './render.js';
+import { counters, historyByWeek, coverage, record, sources } from './statsq.js';
+import { clv } from './clv.js';
 import { buildEntries } from './optimize.js';
 import { projectMarkets } from './projection.js';
 
@@ -374,6 +376,15 @@ const server = createServer(async (req, res) => {
       const [picks, h] = await Promise.all([openPicks(), health(filters.league)]);
       const entries = buildEntries(rows, form, book);
       return html(res, buildPage({ entries, book, lockedBook, picks, health: h }));
+    }
+
+    if (url.pathname === '/stats') {
+      const [h, ctr, weeks, cov, rec, src, value] = await Promise.all([
+        health(null), counters(), historyByWeek(), coverage(), record(), sources(), clv(),
+      ]);
+      return html(res, statsPage({
+        health: h, counters: ctr, weeks, coverage: cov, record: rec, sources: src, clv: value,
+      }));
     }
 
     if (url.pathname === '/slips') {

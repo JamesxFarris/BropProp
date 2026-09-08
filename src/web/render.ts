@@ -4,6 +4,8 @@ import type { MarketRow, PropHistory, PlayerGame } from './boardq.js';
 import type { FormStats, Play, CallStatus, NoCall } from './projection.js';
 import { evaluate, edgeProgress, type LineOption, flatBreakEven } from './projection.js';
 import { staleLine } from './stale.js';
+import type { Counters } from './statsq.js';
+import type { ClvSummary } from './clv.js';
 import type { Entry } from './optimize.js';
 import { isComboHandle } from '../normalize.js';
 import { devig } from '../devig.js';
@@ -277,7 +279,7 @@ function freshness(lastOk: string | null): string {
 
 function shell(o: {
   title: string;
-  active: 'board' | 'signal' | 'slips' | 'build' | 'none';
+  active: 'board' | 'signal' | 'slips' | 'build' | 'stats' | 'none';
   health: Health;
   filters?: string;
   rail?: string;
@@ -312,6 +314,7 @@ function shell(o: {
       ${tab('/build', 'Build', o.active === 'build')}
       ${tab('/', 'Edges', o.active === 'signal')}
       ${tab('/slips', 'Slips', o.active === 'slips')}
+      ${tab('/stats', 'Stats', o.active === 'stats')}
     </nav>
     <span class="grow"></span>
     ${freshness(o.health.last_ok_poll)}
@@ -1849,4 +1852,187 @@ export function loginPage(o: { next: string; error?: string }): string {
   </main>
 </body>
 </html>`;
+}
+
+// ------------------------------------------------------------------ stats --
+
+/**
+ * A bar chart as inline SVG.
+ *
+ * No chart library, for the same reason there is no framework here: a
+ * dependency arrives with a default look that then has to be fought, and this
+ * is a dozen rectangles. Bars are drawn against the largest value rather than
+ * a rounded axis, because the shape of the growth is the point and a tidy
+ * axis would flatten it.
+ */
+function barChart(
+  data: Array<{ label: string; value: number }>,
+  o: { height?: number; label?: string } = {},
+): string {
+  if (data.length === 0) return '<div class="empty">Nothing recorded yet.</div>';
+  const h = o.height ?? 120;
+  const max = Math.max(...data.map((d) => d.value), 1);
+  const w = 100 / data.length;
+  const bars = data
+    .map((d, i) => {
+      const bh = (d.value / max) * h;
+      return `<g><title>${esc(d.label)}: ${d.value.toLocaleString()}</title>
+        <rect x="${(i * w).toFixed(3)}%" y="${(h - bh).toFixed(2)}"
+              width="${(w * 0.78).toFixed(3)}%" height="${Math.max(bh, 0.5).toFixed(2)}"
+              rx="1" class="bar"/></g>`;
+    })
+    .join('');
+  const first = data[0]!.label;
+  const last = data[data.length - 1]!.label;
+  return `<div class="chart">
+    <svg viewBox="0 0 100 ${h}" preserveAspectRatio="none" role="img"
+         aria-label="${esc(o.label ?? 'chart')}: ${data.length} points, peak ${max.toLocaleString()}">
+      ${bars}
+    </svg>
+    <div class="chart-x"><span>${esc(first)}</span><span>${esc(last)}</span></div>
+  </div>`;
+}
+
+/** A labelled proportion bar — ready against total, that kind of thing. */
+function meter(done: number, total: number, label: string): string {
+  const pct = total > 0 ? Math.round((100 * done) / total) : 0;
+  return `<div class="meter-row">
+    <div class="meter-top"><span>${esc(label)}</span>
+      <span class="meter-n"><b>${done}</b> of ${total}</span></div>
+    <div class="meter"><div class="meter-fill" style="width:${pct}%"></div></div>
+  </div>`;
+}
+
+export function statsPage(o: {
+  health: Health;
+  counters: Counters;
+  weeks: Array<{ week: string; league: string; n: number }>;
+  coverage: Array<{ league: string; total: number; ready: number }>;
+  record: Array<{ status: string; n: number }>;
+  sources: Array<{ source: string; league: string; n: number }>;
+  clv: ClvSummary;
+}): string {
+  const c = o.counters;
+
+  // Weeks come back split by league; the growth chart is about the archive as
+  // a whole, so they are summed back together here.
+  const byWeek = new Map<string, number>();
+  for (const w of o.weeks) byWeek.set(w.week, (byWeek.get(w.week) ?? 0) + w.n);
+  const weekData = [...byWeek.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([week, n]) => ({ label: week, value: n }));
+
+  const stat = (n: number, k: string, sub = '') =>
+    `<div class="stat"><div class="stat-n">${n.toLocaleString()}</div>
+      <div class="stat-k">${esc(k)}</div>${sub ? `<div class="meta">${esc(sub)}</div>` : ''}</div>`;
+
+  const graded = o.record.filter((r) => r.status !== 'pending').reduce((a, r) => a + r.n, 0);
+  const won = o.record.find((r) => r.status === 'won')?.n ?? 0;
+
+  const clvBody = o.clv.picks === 0
+    ? `<div class="empty">No pick has been placed on a market that kept moving yet.
+        This fills in on its own — every placed leg gets compared against the last
+        line before kick-off.</div>`
+    : `<div class="stat-row">
+        ${stat(o.clv.picks, 'picks measured')}
+        ${stat(Math.round(o.clv.beatRate * 100), 'beat the close', `${o.clv.beat} of ${o.clv.picks}`)}
+        <div class="stat"><div class="stat-n ${o.clv.meanClv >= 0 ? 'good' : 'bad'}">${
+          o.clv.meanClv >= 0 ? '+' : ''
+        }${o.clv.meanClv.toFixed(2)}</div>
+          <div class="stat-k">mean CLV</div><div class="meta">stat units per pick</div></div>
+      </div>
+      <div class="scroll"><table class="board-table">
+        <thead><tr><th scope="col">Player</th><th scope="col">Market</th>
+          <th scope="col" class="c">Took</th><th scope="col" class="c">Closed</th>
+          <th scope="col" class="c">CLV</th><th scope="col">Result</th></tr></thead>
+        <tbody>${o.clv.rows
+          .slice(0, 25)
+          .map(
+            (r) => `<tr>
+            <td><div class="name">${esc(r.handle)}</div></td>
+            <td><div class="statname">${esc(statLabel(r.stat))}</div>
+                <div class="meta">${esc(r.side)} on ${esc(bookName(r.book))}</div></td>
+            <td class="c"><span class="chip-num book">${r.taken.toFixed(1)}</span></td>
+            <td class="c"><span class="chip-num model">${r.closing.toFixed(1)}</span></td>
+            <td class="c"><span class="ev ${r.clv >= 0 ? 'pos' : 'neg'}">${
+              r.clv >= 0 ? '+' : ''
+            }${r.clv.toFixed(1)}</span></td>
+            <td><span class="meta">${esc(r.status)}</span></td>
+          </tr>`,
+          )
+          .join('')}</tbody>
+      </table></div>`;
+
+  const body = `
+  <div class="card">
+    <div class="card-head"><h2>What has been collected</h2>
+      <span class="sub">${esc(c.oldest ?? '—')} to ${esc(c.newest ?? '—')}</span></div>
+    <div class="stat-row">
+      ${stat(c.statLines, 'stat lines', 'one player, one map')}
+      ${stat(c.series, 'series')}
+      ${stat(c.players, 'players')}
+      ${stat(c.lineChanges, 'line changes', 'every move, timestamped')}
+      ${stat(c.props, 'markets logged')}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2>History collected, by week</h2>
+      <span class="sub">per-map results, the thing everything else rests on</span></div>
+    <div class="card-body">${barChart(weekData, { label: 'stat lines per week' })}</div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2>Closing line value</h2>
+      <span class="sub">did the market move toward the number you took</span></div>
+    <div class="card-body">
+      <p class="note">Win rate needs hundreds of settled bets to mean anything —
+        props inside one match move together, so a single short series drags every
+        leg with it. CLV needs dozens, because it scores each pick against what the
+        market decided next rather than against one noisy result. Beating the close
+        is what being sharp looks like before the results arrive.</p>
+      ${clvBody}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2>How much of the board the model can speak to</h2>
+      <span class="sub">a player under six series gets no call, however good the engine</span></div>
+    <div class="card-body">
+      ${o.coverage.map((x) => meter(x.ready, x.total, `${x.league} players with enough history`)).join('')}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2>Where the history comes from</h2></div>
+    <div class="scroll"><table class="board-table">
+      <thead><tr><th scope="col">Source</th><th scope="col">Game</th>
+        <th scope="col" class="c">Stat lines</th></tr></thead>
+      <tbody>${o.sources
+        .map(
+          (s) => `<tr><td><div class="statname">${esc(s.source)}</div></td>
+          <td>${leagueBadge(s.league)}</td>
+          <td class="c"><span class="prob">${s.n.toLocaleString()}</span></td></tr>`,
+        )
+        .join('')}</tbody>
+    </table></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2>Graded record</h2>
+      <span class="sub">${graded === 0 ? 'nothing settled yet' : `${won} of ${graded} settled picks won`}</span></div>
+    <div class="card-body">
+      ${
+        graded === 0
+          ? `<div class="empty">Picks grade automatically once results land — CS2 stats
+              arrive 7 to 33 hours after a match ends, so a pick taken tonight settles
+              tomorrow.</div>`
+          : `<div class="stat-row">${o.record.map((r) => stat(r.n, r.status)).join('')}</div>
+             <p class="note">Far too few to read anything into. This is the number that
+               eventually matters, and the one that takes longest to earn.</p>`
+      }
+    </div>
+  </div>`;
+
+  return shell({ title: 'Stats', active: 'stats', health: o.health, body });
 }
