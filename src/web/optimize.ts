@@ -86,7 +86,6 @@ export function candidatesFor(
   rows: MarketRow[],
   form: Map<string, FormStats>,
   book: 'prizepicks' | 'underdog',
-  roundPool: number[] = [],
 ): Candidate[] {
   const out: Candidate[] = [];
   const now = Date.now();
@@ -114,13 +113,7 @@ export function candidatesFor(
 
     const maps = r.map_end - r.map_start + 1;
     const f = form.get(`${r.canon_handle}|${r.stat}|${r.map_start}|${r.map_end}`);
-    // Same league and pool the board evaluates with, so a market cannot be
-    // priced one way here and another way there — the league is per-row,
-    // never assumed, because /build mixes leagues the same as /board does.
-    const play = recommend(
-      f, options, maps, `${r.canon_handle}|${r.stat}|${r.map_start}|${r.map_end}`,
-      r.league, roundPool,
-    );
+    const play = recommend(f, options, maps, `${r.canon_handle}|${r.stat}|${r.map_start}|${r.map_end}`);
     if (!play) continue;
 
     const p = shrink(play.hitRate, evidenceCount(play, maps));
@@ -199,10 +192,9 @@ export function buildEntries(
   rows: MarketRow[],
   form: Map<string, FormStats>,
   book: 'prizepicks' | 'underdog',
-  roundPool: number[] = [],
   sizes = [3, 4, 5, 6],
 ): Entry[] {
-  const cands = candidatesFor(rows, form, book, roundPool);
+  const cands = candidatesFor(rows, form, book);
   return sizes
     .map((n) => bestEntry(cands, n, book))
     .filter((e): e is Entry => e !== null);

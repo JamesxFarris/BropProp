@@ -51,14 +51,6 @@ export type FormStats = {
   totals: number[];      // most recent first, exact-range series only
   mapValues: number[];   // most recent first, every map played
   perMap: number | null; // mean of a single map
-  /**
-   * Kills per round, most recent first. CS2 only, and only from maps that
-   * carried a round count — a map without one is left out rather than
-   * assumed, so this array is often shorter than mapValues.
-   */
-  kpr: number[];
-  /** How many maps contributed a rate. The threshold for trusting them. */
-  roundsSeen: number;
 };
 
 export type Play = {
@@ -71,7 +63,7 @@ export type Play = {
   series: number;
   strength: number;      // ranking score, not a probability
   score: number;         // strength on a 0-99 scale, for reading at a glance
-  method: 'series' | 'maps' | 'kpr';  // measured over the exact range, modelled from single maps, or from a rate
+  method: 'series' | 'maps';  // measured over the exact range, or modelled from single maps
   sample: number;        // series counted, or maps drawn from
 };
 
@@ -79,8 +71,6 @@ const MIN_SERIES = 6;    // below this, form is noise wearing a number
 export const MIN_MAPS = 12;     // single maps needed before modelling a range from them
 const MIN_EDGE = 0.5;    // half a kill is inside the rounding of a line
 const DRAWS = 4000;
-/** Rounds-bearing maps needed before a rate is worth more than the totals. */
-export const MIN_KPR_MAPS = 12;
 
 /** Deterministic PRNG, so the same board renders the same numbers every time. */
 function rng(seed: number) {
@@ -121,81 +111,6 @@ export function resampleTotals(mapValues: number[], maps: number, seed: string):
     out.push(sum);
   }
   return out;
-}
-
-/**
- * Totals for an n-map range, drawn from a rate and a length separately.
- *
- * The existing resampler draws whole per-map kill totals, which bakes in the
- * round lengths that happened to occur in the player's sample. This draws the
- * two apart: a kills-per-round from the player, and a round count from the
- * matches.
- *
- * Rounds come from the match pool and never from the player. Round count is a
- * property of how a match went, not of who was in it, and drawing a player's
- * own past round counts would put back exactly the sample-mix bias this
- * exists to remove.
- *
- * One round count is drawn per map rather than one for the range, because a
- * three-map series is three separate lengths and collapsing them would
- * understate the spread.
- *
- * Task 6 measured the correlation this independence assumes away: Pearson
- * r(kills-per-round, rounds) = -0.03 over 47,626 CS2 maps, and mean
- * kills-per-round barely moves across round-length buckets (0.740 / 0.690 /
- * 0.676 / 0.684 for 13-15 / 16-19 / 20-24 / 25+ rounds). That is negligible
- * and non-monotonic, so rate and length are drawn independently rather than
- * as re-weighted joint pairs.
- */
-export function resampleFromRates(
-  rates: number[],
-  roundPool: number[],
-  maps: number,
-  seed: string,
-): number[] {
-  if (rates.length === 0 || roundPool.length === 0) return [];
-  const rand = rng(seedFrom(seed));
-  const out: number[] = [];
-  for (let d = 0; d < DRAWS; d++) {
-    let sum = 0;
-    for (let m = 0; m < maps; m++) {
-      sum += rates[Math.floor(rand() * rates.length)]!
-           * roundPool[Math.floor(rand() * roundPool.length)]!;
-    }
-    out.push(sum);
-  }
-  return out;
-}
-
-/**
- * Round counts actually observed, to draw a match length from.
- *
- * Pooled across the league rather than conditioned on the upcoming match's
- * tier. Props come from PrizePicks and Underdog, neither of which publishes a
- * tier, and an upcoming match is not necessarily linked to a bo3 match yet —
- * so conditioning would refuse far more often than it would sharpen. Round
- * length varies much less between tiers than between a stomp and a grinder,
- * which is the difference this is here to capture.
- *
- * `rounds >= 13` because CS2 is MR12 — first to 13 — so a completed map
- * cannot run fewer than 13 rounds. The 87-91 rows below that in the backfill
- * are abandoned or forfeited games (90.8% KAST-consistent against 99.79% for
- * everything else), not short games: a 1-round map with 2 kills implies a
- * rate of 2.0 and would distort the pool badly. This is the same refusal
- * grading already makes when it voids a range that didn't complete.
- *
- * No high-end cutoff: 46-60 round maps are genuine deep overtime, 100%
- * KAST-consistent, and belong in the pool as much as any other real game.
- */
-export async function roundLengthPool(league: string, limit = 5000): Promise<number[]> {
-  const rows = await q<{ rounds: number }>(
-    `SELECT rounds FROM map_stat_dedup
-      WHERE league = $1 AND rounds IS NOT NULL AND rounds >= 13
-      ORDER BY played_at DESC NULLS LAST
-      LIMIT $2`,
-    [league, limit],
-  );
-  return rows.map((r) => r.rounds);
 }
 
 /**
@@ -255,10 +170,6 @@ export type Evaluation = {
   stat?: string;
   /** The market's handle, so an unsplittable combo is named as such. */
   handle?: string;
-  /** Canonical league. Only CS2 has rounds; every other league skips the rate path. */
-  league?: string;
-  /** Observed round counts to draw a map length from. */
-  roundPool?: number[];
 };
 
 /** How close a `fair` market is to being a call — 1.0 means it is at MIN_EDGE. */
@@ -269,10 +180,8 @@ export function recommend(
   options: LineOption[],
   maps = 1,
   seed = '',
-  league?: string,
-  roundPool?: number[],
 ): Play | null {
-  return evaluate({ form, options, maps, seed, league, roundPool }).play;
+  return evaluate({ form, options, maps, seed }).play;
 }
 
 export function evaluate(o: Evaluation): CallStatus {
@@ -284,25 +193,15 @@ export function evaluate(o: Evaluation): CallStatus {
   }
   if (!form) return { play: null, why: { kind: 'none' } };
 
-  // Kills per round, scaled by how long maps actually run, beats a mean of
-  // per-map totals whenever we have enough rated maps — the totals carry the
-  // round lengths of whatever sample the player happens to have. CS2 only:
-  // League has no rounds and must not be modelled as though it did.
-  const pool = o.roundPool ?? [];
-  const useKpr =
-    o.league === 'CS2' && form.kpr.length >= MIN_KPR_MAPS && pool.length > 0;
-
   // Prefer real totals over the exact range. Fall back to modelling the range
   // from single maps only when there aren't enough of them — more data, but
   // one assumption further from what actually happened.
   const useSeries = form.series >= MIN_SERIES;
-  const sample = useKpr
-    ? resampleFromRates(form.kpr, pool, maps, `${seed}|kpr|${maps}`)
-    : useSeries
-      ? form.totals
-      : form.mapValues.length >= MIN_MAPS
-        ? resampleTotals(form.mapValues, maps, `${seed}|${maps}`)
-        : null;
+  const sample = useSeries
+    ? form.totals
+    : form.mapValues.length >= MIN_MAPS
+      ? resampleTotals(form.mapValues, maps, `${seed}|${maps}`)
+      : null;
   if (!sample || sample.length === 0) {
     return form.series === 0 && form.mapValues.length === 0
       ? { play: null, why: { kind: 'none' } }
@@ -353,14 +252,10 @@ export function evaluate(o: Evaluation): CallStatus {
   // Hit rate carries the ranking, nudged by how big the edge is relative to
   // the player's own variance. Sample size damps small-sample confidence, and
   // a modelled range is damped again — it rests on an assumption a measured
-  // total doesn't need. The kpr path sits between the two: it rests on one
-  // assumption fewer than the maps path — real observed rates rather than
-  // interchangeable map totals — but more than a measured whole-range total.
-  const evidence = useKpr
-    ? 0.9 * Math.min(1, form.kpr.length / 24)
-    : useSeries
-      ? Math.min(1, form.series / 12)
-      : 0.75 * Math.min(1, form.mapValues.length / 30);
+  // total doesn't need.
+  const evidence = useSeries
+    ? Math.min(1, form.series / 12)
+    : 0.75 * Math.min(1, form.mapValues.length / 30);
   const strength = (hitRate - 0.5) * 2 * (edgeSd ?? 0.5) * evidence;
 
   return {
@@ -374,8 +269,8 @@ export function evaluate(o: Evaluation): CallStatus {
       hitRate,
       series: form.series,
       strength,
-      method: useKpr ? 'kpr' : useSeries ? 'series' : 'maps',
-      sample: useKpr ? form.kpr.length : useSeries ? form.series : form.mapValues.length,
+      method: useSeries ? 'series' : 'maps',
+      sample: useSeries ? form.series : form.mapValues.length,
       // A rank, not a probability. 60 is a better bet than 30; it is not a claim
       // that it wins 60% of the time — hit rate is shown separately for that.
       score: Math.max(1, Math.min(99, Math.round(strength * 100))),
@@ -533,38 +428,6 @@ export async function projectBoard(
     );
     const maps = new Map(mapRows.map((r) => [`${r.canon_handle}|${r.league}`, r.vals]));
 
-    // Kills per round, most recent first — only `kills` has a meaningful
-    // per-round rate. `rounds >= 13` because CS2 is MR12 (first to 13): a map
-    // that ended short of that didn't complete, so its rows are abandoned or
-    // forfeited games rather than short ones, and a 1-round map with 2 kills
-    // would imply a rate of 2.0 and poison the sample. No high-end cutoff —
-    // deep overtime is a real game and belongs in it. See `roundLengthPool`
-    // for the same refusal on the round-length side of this.
-    const rateRows =
-      col === 'kills'
-        ? await q<{ canon_handle: string; league: string; rates: number[] }>(
-            `WITH want AS (
-               SELECT DISTINCT canon_handle, league
-               FROM unnest($1::text[], $2::text[]) AS t(canon_handle, league)
-             ),
-             m AS (
-               SELECT w.canon_handle, w.league,
-                      (ms.${col}::float / ms.rounds) AS rate,
-                      ms.played_at,
-                      row_number() OVER (PARTITION BY w.canon_handle, w.league
-                                         ORDER BY ms.played_at DESC) AS rn
-               FROM want w
-               JOIN map_stat_dedup ms ON ms.canon_handle = w.canon_handle AND ms.league = w.league
-               WHERE ms.${col} IS NOT NULL AND ms.rounds IS NOT NULL AND ms.rounds >= 13
-             )
-             SELECT canon_handle, league, array_agg(rate ORDER BY played_at DESC)::float[] AS rates
-             FROM m WHERE rn <= $3
-             GROUP BY canon_handle, league`,
-            [group.map((m) => m.canon_handle), group.map((m) => m.league), limit * 3],
-          )
-        : [];
-    const rates = new Map(rateRows.map((r) => [`${r.canon_handle}|${r.league}`, r.rates]));
-
     // Line-independent: the two books price the same market differently, and
     // the recommendation has to weigh both lines against one set of totals.
     for (const m of group) {
@@ -573,7 +436,6 @@ export async function projectBoard(
       const s = stats.get(`${m.canon_handle}|${m.league}|${m.map_start}|${m.map_end}`);
       const mapValues = maps.get(`${m.canon_handle}|${m.league}`) ?? [];
       const totals = s?.totals ?? [];
-      const kpr = rates.get(`${m.canon_handle}|${m.league}`) ?? [];
       if (totals.length === 0 && mapValues.length === 0) continue;
       const n = totals.length;
       const mean = n ? totals.reduce((a, b) => a + b, 0) / n : 0;
@@ -582,7 +444,7 @@ export async function projectBoard(
       const perMap = mapValues.length
         ? mapValues.reduce((a, b) => a + b, 0) / mapValues.length
         : null;
-      out.set(key, { series: n, mean, sd, totals, mapValues, perMap, kpr, roundsSeen: kpr.length });
+      out.set(key, { series: n, mean, sd, totals, mapValues, perMap });
     }
   }
 
@@ -670,10 +532,7 @@ export async function projectCombos(
     const perMap = mapValues.length
       ? mapValues.reduce((a, b) => a + b, 0) / mapValues.length
       : null;
-    // Combos don't get the rate path — a joint kills-per-round across two
-    // players who don't share a round count isn't one number, so these stay
-    // on the totals/maps path same as before.
-    out.set(key, { series: n, mean, sd, totals, mapValues, perMap, kpr: [], roundsSeen: 0 });
+    out.set(key, { series: n, mean, sd, totals, mapValues, perMap });
   }
 
   return out;

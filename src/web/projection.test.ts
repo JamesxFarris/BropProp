@@ -4,7 +4,6 @@ import {
   evaluate,
   recommend,
   edgeProgress,
-  resampleFromRates,
   type FormStats,
   type LineOption,
 } from './projection.js';
@@ -25,8 +24,7 @@ import { foldCombo, type ComboStatRow } from '../combo.js';
  */
 
 const form = (o: Partial<FormStats> = {}): FormStats => ({
-  series: 0, mean: 0, sd: null, totals: [], mapValues: [], perMap: null,
-  kpr: [], roundsSeen: 0, ...o,
+  series: 0, mean: 0, sd: null, totals: [], mapValues: [], perMap: null, ...o,
 });
 
 /** A form built from twelve identical whole-range series, so the mean is exact. */
@@ -144,7 +142,7 @@ function comboForm(all: ComboStatRow[], mapStart: number, mapEnd: number): FormS
     ? Math.sqrt(totals.reduce((x, y) => x + (y - mean) ** 2, 0) / (n - 1))
     : null;
   const perMap = mapValues.length ? mapValues.reduce((x, y) => x + y, 0) / mapValues.length : null;
-  return { series: n, mean, sd, totals, mapValues, perMap, kpr: [], roundsSeen: 0 };
+  return { series: n, mean, sd, totals, mapValues, perMap };
 }
 
 test('a combo projects from joint totals and calls the side its members support', () => {
@@ -213,110 +211,3 @@ test('a combo whose members never played together makes no call', () => {
   assert.equal(evaluate({ form: f, options: [both('prizepicks', 5)], handle: 'A + B' }).play, null);
 });
 
-test('a round pool of one value produces that value every draw', () => {
-  // Degenerate but load-bearing: it proves the pool is being sampled at all,
-  // rather than a mean being taken behind the scenes.
-  const totals = resampleFromRates([0.8], [20], 1, 'seed');
-  assert.ok(totals.every((t) => Math.abs(t - 16) < 1e-9));
-});
-
-test('a range of n maps draws n round counts, not one scaled by n', () => {
-  // Two maps of 20 rounds at 0.8 kills per round is 32 kills. If the
-  // implementation drew one round count and multiplied, a pool with spread
-  // would produce a narrower distribution than reality.
-  const totals = resampleFromRates([0.8], [10, 30], 2, 'seed');
-  const distinct = new Set(totals.map((t) => t.toFixed(4)));
-  // 10+10, 10+30, 30+10, 30+30 -> three distinct sums (8, 16, 24 kills).
-  assert.ok(distinct.size >= 3, `expected several distinct totals, got ${distinct.size}`);
-});
-
-test('rates and rounds are drawn independently of each other', () => {
-  const totals = resampleFromRates([0.5, 1.0], [10, 20], 1, 'seed');
-  const sums = new Set(totals.map((t) => t.toFixed(4)));
-  // 0.5*10, 0.5*20, 1.0*10, 1.0*20 -> 5, 10, 10, 20 -> three distinct values.
-  assert.ok(sums.size >= 3, `expected the cross product, got ${[...sums].join(',')}`);
-});
-
-test('the same seed gives the same draws', () => {
-  const a = resampleFromRates([0.5, 1.0], [10, 20], 2, 'fixed');
-  const b = resampleFromRates([0.5, 1.0], [10, 20], 2, 'fixed');
-  assert.deepEqual(a, b);
-});
-
-// --------------------------------------------------------- kills per round --
-
-test('a blowout-heavy sample is not projected low for a normal-length match', () => {
-  // The defect, stated directly. Both players average 0.8 kills per round.
-  // One happened to play short maps, the other long ones. Today the first is
-  // projected far lower purely because of the maps they drew.
-  const shortMaps = form({
-    kpr: Array(20).fill(0.8),
-    roundsSeen: 20,
-    mapValues: Array(20).fill(0.8 * 16),  // 12.8 kills a map
-    series: 0,
-  });
-  const longMaps = form({
-    kpr: Array(20).fill(0.8),
-    roundsSeen: 20,
-    mapValues: Array(20).fill(0.8 * 26),  // 20.8 kills a map
-    series: 0,
-  });
-  const pool = [16, 20, 26];
-  // 0.8 kpr against a pool averaging 20.67 rounds projects to about 16.5 —
-  // so the line sits well clear of it at 14.5, rather than on top of it,
-  // to give both players an unambiguous call rather than a coin-flip edge.
-  const opts: LineOption[] = [
-    { book: 'underdog', line: 14.5, overOk: true, underOk: true },
-  ];
-  const a = evaluate({ form: shortMaps, options: opts, maps: 1, league: 'CS2', roundPool: pool, seed: 'a' });
-  const b = evaluate({ form: longMaps, options: opts, maps: 1, league: 'CS2', roundPool: pool, seed: 'a' });
-  assert.ok(a.play, 'short-map player should still be evaluated');
-  assert.ok(b.play, 'long-map player should still be evaluated');
-  // Identical rate and identical round pool must give an identical call.
-  assert.equal(a.play.side, b.play.side);
-  assert.ok(
-    Math.abs(a.play.edge - b.play.edge) < 0.01,
-    `same rate should project the same: ${a.play.edge} vs ${b.play.edge}`,
-  );
-});
-
-test('a CS2 call built from rates says so', () => {
-  const f = form({ kpr: Array(20).fill(0.8), roundsSeen: 20, series: 0, mapValues: [] });
-  const r = evaluate({
-    form: f, options: [{ book: 'underdog', line: 10.5, overOk: true, underOk: true }],
-    maps: 1, league: 'CS2', roundPool: [20], seed: 's',
-  });
-  assert.equal(r.play?.method, 'kpr');
-});
-
-test('LoL never uses the rate path, even with rates present', () => {
-  // Rounds do not exist in League. If a stray value ever reached this field,
-  // it must be ignored rather than quietly modelled.
-  const f = form({ kpr: [0.5], roundsSeen: 1, series: 8, totals: Array(8).fill(12) });
-  const r = evaluate({
-    form: f, options: [{ book: 'underdog', line: 8.5, overOk: true, underOk: true }],
-    maps: 1, league: 'LOL', roundPool: [20], seed: 's',
-  });
-  assert.notEqual(r.play?.method, 'kpr');
-});
-
-test('too few rounds-bearing maps falls back rather than pretending', () => {
-  const f = form({
-    kpr: [0.8, 0.9], roundsSeen: 2,
-    mapValues: Array(20).fill(16), series: 0,
-  });
-  const r = evaluate({
-    form: f, options: [{ book: 'underdog', line: 10.5, overOk: true, underOk: true }],
-    maps: 1, league: 'CS2', roundPool: [20], seed: 's',
-  });
-  assert.notEqual(r.play?.method, 'kpr');
-});
-
-test('an empty round pool falls back rather than dividing by nothing', () => {
-  const f = form({ kpr: Array(20).fill(0.8), roundsSeen: 20, mapValues: Array(20).fill(16), series: 0 });
-  const r = evaluate({
-    form: f, options: [{ book: 'underdog', line: 10.5, overOk: true, underOk: true }],
-    maps: 1, league: 'CS2', roundPool: [], seed: 's',
-  });
-  assert.notEqual(r.play?.method, 'kpr');
-});

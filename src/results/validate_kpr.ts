@@ -1,6 +1,57 @@
 import { pathToFileURL } from 'node:url';
 import { pool, q } from '../db.js';
-import { resampleTotals, resampleFromRates, MIN_MAPS, MIN_KPR_MAPS } from '../web/projection.js';
+import { resampleTotals, MIN_MAPS } from '../web/projection.js';
+
+/**
+ * Frozen copy of the rate-based method this script measured and rejected.
+ *
+ * `resampleFromRates`, `MIN_KPR_MAPS`, and the seeded-PRNG helpers below are
+ * not shipping code — they were deleted from `projection.ts` once the result
+ * came back negative (see DESIGN.md). They are kept here, verbatim, only so
+ * this validation stays reproducible. Do not import these from anywhere else,
+ * and do not "clean this up" by re-exporting the production versions: there
+ * are no production versions any more, on purpose.
+ */
+
+const DRAWS = 4000;
+/** Rounds-bearing maps needed before a rate is worth more than the totals. */
+const MIN_KPR_MAPS = 12;
+
+function rng(seed: number) {
+  let x = seed >>> 0 || 1;
+  return () => {
+    x ^= x << 13; x >>>= 0;
+    x ^= x >> 17;
+    x ^= x << 5;  x >>>= 0;
+    return x / 4294967296;
+  };
+}
+
+function seedFrom(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+
+function resampleFromRates(
+  rates: number[],
+  roundPool: number[],
+  maps: number,
+  seed: string,
+): number[] {
+  if (rates.length === 0 || roundPool.length === 0) return [];
+  const rand = rng(seedFrom(seed));
+  const out: number[] = [];
+  for (let d = 0; d < DRAWS; d++) {
+    let sum = 0;
+    for (let m = 0; m < maps; m++) {
+      sum += rates[Math.floor(rand() * rates.length)]!
+           * roundPool[Math.floor(rand() * roundPool.length)]!;
+    }
+    out.push(sum);
+  }
+  return out;
+}
 
 /**
  * Does the kills-per-round rate path actually beat the old per-map path on
