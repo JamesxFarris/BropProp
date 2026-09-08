@@ -2211,7 +2211,14 @@ export function statsPage(o: {
     <div class="card-head"><h2>How much of the board the model can speak to</h2>
       <span class="sub">a player under six series gets no call, however good the engine</span></div>
     <div class="card-body">
-      ${o.coverage.map((x) => meter(x.ready, x.total, `${x.league} players with enough history`)).join('')}
+      ${
+        o.coverage.length === 0
+          ? `<div class="empty">No upcoming matches are priced right now, so there is
+              no board to measure. This fills back in as soon as the books post lines.</div>`
+          : o.coverage
+              .map((x) => meter(x.ready, x.total, `${x.league} players with enough history`))
+              .join('')
+      }
     </div>
   </div>
 

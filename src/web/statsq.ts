@@ -52,13 +52,20 @@ export async function historyByWeek(): Promise<Array<{ week: string; league: str
  * six-series threshold gets no call however good the engine is.
  */
 export async function coverage(): Promise<Array<{ league: string; total: number; ready: number }>> {
+  // Only players the board is pricing now. Counting everyone who ever had a
+  // prop answers a different question and answers it badly: after the LoL
+  // backfill of 2026-09-08 that denominator read 69 of 480 (14%) while every
+  // player actually on the board had history — 19 of 19. The heading says
+  // "the board", so the query has to mean the board.
   return q(`WITH per AS (
               SELECT p.canon_handle, pr.league,
                      count(DISTINCT ms.series_key)::int s
                 FROM player p
                 JOIN prop pr ON pr.player_id = p.id
+                JOIN match m ON m.id = pr.match_id
                 LEFT JOIN map_stat_dedup ms
                   ON ms.canon_handle = p.canon_handle AND ms.league = pr.league
+               WHERE m.scheduled_at > now() AND pr.is_combo = false
                GROUP BY 1, 2)
             SELECT league, count(*)::int total,
                    count(*) FILTER (WHERE s >= 6)::int ready

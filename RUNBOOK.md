@@ -43,12 +43,13 @@ curl -s "https://drive.usercontent.google.com/download?id=<FILES id>&export=down
   | sed 's/<[^>]*>/ /g' | head -c 200
 ```
 
-`Google Drive - Quota exceeded` means wait. Checked **2026-09-08**, more than
-a day after first hitting it, and 2025 and 2024 were both still exhausted — so
-the "resets within a day" guess in earlier notes is wrong. This is a per-file
-quota shared across everyone downloading a popular public file, so it is not
-about our usage and cannot be waited out reliably. If LoL coverage becomes
-urgent before it clears, the answer is a different source, not a retry loop.
+`Google Drive - Quota exceeded` means wait, and **the wait is unpredictable
+rather than fixed**. On 2026-09-08 it was still exhausted more than a day
+after first hitting it — and then cleared roughly half a day later, with all
+five seasons downloadable. It is a per-file quota shared across everyone
+pulling a popular public file, so it has nothing to do with our usage and no
+schedule can be inferred from it. Probe before assuming either way; the check
+above costs one request.
 
 This is why LoL is the starving half of the board: **39 of 68 LoL players**
 clear the projection threshold against **259 of 373** for CS2.
