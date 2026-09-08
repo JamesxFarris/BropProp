@@ -25,7 +25,8 @@
     "backfill:cs2": "tsx src/results/hltv_backfill.ts",
     "bo3": "tsx src/results/bo3.ts",
     "bo3:rounds": "tsx src/results/bo3_rounds.ts",
-    "validate:stale": "tsx src/results/validate_stale.ts"
+    "validate:stale": "tsx src/results/validate_stale.ts",
+    "validate:calls": "tsx src/results/validate_calls.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.7",

@@ -255,6 +255,65 @@ Re-run it as outcomes accumulate — 49 matches is thin:
 npm run validate:stale
 ```
 
+### Does the board's own "Take" win? No — and the honest n is tiny
+
+```bash
+npm run validate:calls
+```
+
+Replays every market we logged a pre-match line for through the real
+`evaluate()`, using only the stat history that existed before that match
+started, then scores it against what happened. Run 2026-09-08 over 527
+settled markets:
+
+| | Record | |
+|---|---|---|
+| **The model's own picks** | 168/323 | **52.0%** |
+| baseline: always take the over | 218/520 | 41.9% |
+| baseline: always take the under | 302/520 | 58.1% |
+
+It claimed an average of 60.3% and delivered 52.0% — **8.3 points of
+overconfidence**, and claimed EV of 13.9% per bet against 1.1% realised.
+
+**The decisive number is AUC 0.495.** That is the chance a winning call
+carried a higher predicted probability than a losing one, and 0.500 is no
+skill at all. This is not miscalibration — miscalibration is fixable by
+shrinking every number toward 0.5. It says the ranking carries no information:
+a call the model rates 75% wins no more often than one it rates 56%. The
+calibration table shows the same thing from the other side, with the 75-80%
+bucket realising 38%.
+
+**But do not act on the 58% under baseline either.** Those 520 legs come from
+**17 series across 3 days**. Every player in a series shares its length, its
+overtime and its pace, so a single long map sends everyone over at once —
+the legs are not independent trials and a leg-level z-score is meaningless
+here. Asked once per series, the under lean is **12 of 16 series, two-sided
+p = 0.077**: suggestive, not significant. The model's own calls led in **8 of
+17 series, p = 1.000**.
+
+This is the third time this project has been fooled by treating correlated
+legs as a sample. Leg-level z-scores were removed from the script's output
+for that reason; it prints the series count and an exact sign test instead.
+
+The map-range split is worth keeping in view, because the shade is not one
+direction:
+
+| Map range | Under rate | mean(total − line) | Series behind it |
+|---|---|---|---|
+| maps 1-2 | 61.9% | −1.51 | 17 |
+| map 3 only | 26.8% | **+3.13** | **3** |
+
+Map 3 running hard over has an obvious mechanism — map 3 is only played when
+the series is 1-1, and those maps ran a median 28 rounds against 19 for maps
+1-2, so everyone's kill total inflates together. That also means the 56 legs
+behind it are close to 3 observations. Do not build on it yet.
+
+**A shade like this can never be backtested.** Book lines only exist in our
+database from the day the logger started; there is no historical line data to
+buy or scrape. Anything found here can only be confirmed *forward*, by
+letting the logger accumulate more series. That is a structural constraint on
+this whole line of work, not a temporary gap.
+
 ### Modelling ideas that were measured and failed
 
 All walk-forward over CS2 maps-1-2 series, scoring only on history that
