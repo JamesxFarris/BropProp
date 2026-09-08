@@ -204,3 +204,67 @@ test('a combo whose members never played together makes no call', () => {
   assert.equal(f.mapValues.length, 0);
   assert.equal(evaluate({ form: f, options: [both('prizepicks', 5)], handle: 'A + B' }).play, null);
 });
+
+/**
+ * A total landing exactly on the line is a push, not a loss.
+ *
+ * Fifteen percent of PrizePicks lines are whole numbers, and across those
+ * markets' history 7.4% of series land exactly on the number. The grader has
+ * always known this — `grade.ts` returns `push` and the leg is refunded — but
+ * the projection was counting the same total as a loss for both sides, which
+ * understated hit rate on every whole-number market and pushed it down a board
+ * that ranks on hit rate. Two places, one question, two answers.
+ */
+
+test('a total exactly on the line is excluded, not counted as a loss', () => {
+  // Ten series: 4 over, 3 under, 3 landing exactly on 20. Taking the over,
+  // the honest hit rate is 4 of the 7 that could be settled, not 4 of 10.
+  // The totals sit well clear of the line so the call survives MIN_EDGE and
+  // the hit rate is actually reached — mean 21.0 against a line of 20.
+  const f = form({
+    series: 10,
+    totals: [30, 28, 26, 24, 20, 20, 20, 15, 14, 13],
+    mean: 21,
+    sd: 6,
+  });
+  const r = evaluate({
+    form: f,
+    options: [{ book: 'prizepicks', line: 20, overOk: true, underOk: true }],
+    maps: 1,
+  });
+  assert.ok(r.play, 'should make a call');
+  assert.ok(
+    Math.abs(r.play.hitRate - 4 / 7) < 1e-9,
+    `pushes must leave the denominator: got ${r.play.hitRate}, wanted ${4 / 7}`,
+  );
+});
+
+test('a half-point line has no pushes and is unaffected', () => {
+  // The common case must not change: nothing can land on 20.5.
+  const f = form({
+    series: 8,
+    totals: [25, 24, 23, 22, 15, 14, 13, 12],
+    mean: 18.5,
+    sd: 5,
+  });
+  const r = evaluate({
+    form: f,
+    options: [{ book: 'prizepicks', line: 20.5, overOk: true, underOk: true }],
+    maps: 1,
+  });
+  assert.ok(r.play);
+  assert.ok(Math.abs(r.play.hitRate - 4 / 8) < 1e-9, `got ${r.play.hitRate}`);
+});
+
+test('a market that only ever pushed reports no hit rate rather than dividing by zero', () => {
+  // Degenerate, but it is the one input that would produce NaN and put a
+  // silently broken number on the board.
+  const f = form({ series: 6, totals: [20, 20, 20, 20, 20, 20], mean: 20, sd: 0 });
+  const r = evaluate({
+    form: f,
+    options: [{ book: 'prizepicks', line: 20, overOk: true, underOk: true }],
+    maps: 1,
+  });
+  // Every series pushed, so there is no edge either way and no call to make.
+  assert.equal(r.play, null);
+});

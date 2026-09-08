@@ -241,8 +241,22 @@ export function evaluate(o: Evaluation): CallStatus {
   // of them is worth watching.
   if (pick.edge < MIN_EDGE) return { play: null, why: { kind: 'fair', edge: pick.edge } };
 
+  // A total landing exactly on the line is a push: the book refunds the leg
+  // rather than losing it, and `grade.ts` has always recorded it that way. So
+  // it leaves the denominator instead of counting against the side.
+  //
+  // This is not a corner case. 15% of PrizePicks lines are whole numbers —
+  // Underdog posts none — and across those markets' history 7.4% of series
+  // land exactly on the number. Counting those as losses understated hit rate
+  // on every one of them, and hit rate is what the board ranks on, so the
+  // markets where a push is even possible were being pushed down the page for
+  // outcomes that would have been handed back.
   const wins = sample.filter((t) => (pick.side === 'over' ? t > pick.line : t < pick.line)).length;
-  const hitRate = wins / sample.length;
+  const settled = sample.filter((t) => t !== pick.line).length;
+  // Every observation pushed. There is no rate to report and nothing to rank,
+  // rather than a NaN wearing a percent sign.
+  if (settled === 0) return { play: null, why: { kind: 'fair', edge: pick.edge } };
+  const hitRate = wins / settled;
 
   // Relative to how much the player actually swings: two kills on a 30-kill
   // line is a smaller claim than two kills on a 5-kill line, and ranking them
