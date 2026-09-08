@@ -675,6 +675,10 @@ function noCallText(why: NoCall, r: { stat: string; handle: string }): string {
       // The number matters: 0.4 off is one line move from a call and 2.0 off
       // is not, and a single flat "no edge" hid that difference on every row.
       return `no edge · ${signed(why.edge)}`;
+    case 'priced-out':
+      // Names the price, not the model, because that is what has to move. We
+      // think it wins; the odds want more than we think.
+      return `priced out — needs ${(why.breakEven * 100).toFixed(0)}%, we say ${(why.p * 100).toFixed(0)}%`;
   }
 }
 
@@ -837,6 +841,10 @@ export function boardPage(o: {
       opts.push({
         book: 'underdog', line: Number(r.ud_line),
         overOk: r.ud_over_ok, underOk: r.ud_under_ok,
+        // Only Underdog publishes these. PrizePicks charges through a flat
+        // multiplier, so it has no per-side price to clear.
+        overPrice: r.ud_over_price === null ? null : Number(r.ud_over_price),
+        underPrice: r.ud_under_price === null ? null : Number(r.ud_under_price),
       });
     }
     return opts;
@@ -879,8 +887,11 @@ export function boardPage(o: {
   const started = (r: MarketRow) =>
     r.scheduled_at !== null && new Date(r.scheduled_at).getTime() < Date.now();
 
+  // A priced-out row sits directly under the calls: we have a view worth
+  // acting on and only the odds are stopping it, so it is the row a price
+  // move turns live. `fair` needs the line itself to move, which is slower.
   const TIER: Record<NoCall['kind'], number> = {
-    fair: 1, unavailable: 2, thin: 3, none: 4, unreadable: 4, unsupported: 5,
+    'priced-out': 1, fair: 2, unavailable: 3, thin: 4, none: 5, unreadable: 5, unsupported: 6,
   };
   const tier = (r: MarketRow) => {
     const s = statusOf(r);

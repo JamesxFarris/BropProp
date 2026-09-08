@@ -1,6 +1,7 @@
 import { q } from '../db.js';
 import { comboParts } from '../normalize.js';
 import { foldCombo, type ComboStatRow } from '../combo.js';
+import { americanToProb } from '../devig.js';
 
 /**
  * What a player has actually done over the same map range, and how that sits
@@ -65,6 +66,10 @@ export type Play = {
   score: number;         // strength on a 0-99 scale, for reading at a glance
   method: 'series' | 'maps';  // measured over the exact range, or modelled from single maps
   sample: number;        // series counted, or maps drawn from
+  /** What this price needs to win to return nothing. Null where the book publishes none. */
+  breakEven: number | null;
+  /** Expected profit per 1 staked at that price, null when there is no price. */
+  ev: number | null;
 };
 
 const MIN_SERIES = 6;    // below this, form is noise wearing a number
@@ -151,6 +156,16 @@ export type LineOption = {
   line: number;
   overOk: boolean;
   underOk: boolean;
+  /**
+   * American odds per side, where the book publishes them.
+   *
+   * Underdog does; PrizePicks cannot, because it prices with a flat
+   * multiplier and expresses price by moving the line instead. Null therefore
+   * means "this book has no per-side price", not "this side is free" — the
+   * bar falls back to MIN_P rather than to zero.
+   */
+  overPrice?: number | null;
+  underPrice?: number | null;
 };
 
 /**
@@ -175,7 +190,17 @@ export type NoCall =
   /** Neither side is offered by any book listing it. */
   | { kind: 'unavailable' }
   /** Evaluated, and the best side available is under MIN_P. */
-  | { kind: 'fair'; edge: number; p: number };
+  | { kind: 'fair'; edge: number; p: number }
+  /**
+   * We have a view, and the price eats it.
+   *
+   * Distinct from `fair`: there the number looked honest, here our own
+   * probability clears MIN_P but not what the odds demand. A -170 side needs
+   * 63.0% before it returns anything, so a 58% view is a losing bet however
+   * confident it looks. That is a fact about the price, and it changes when
+   * the price moves — so the row is worth watching, unlike a thin one.
+   */
+  | { kind: 'priced-out'; edge: number; p: number; breakEven: number };
 
 export type CallStatus = { play: Play; why: null } | { play: null; why: NoCall };
 
@@ -295,17 +320,61 @@ export function evaluate(o: Evaluation): CallStatus {
    * half-a-kill floor never was: 55% means the same thing against a 5.5 line
    * and a 30.5 line.
    */
-  const pOver = forOver ? rateAt(forOver.line, 'over') : null;
-  const pUnder = forUnder ? rateAt(forUnder.line, 'under') : null;
+  /**
+   * The bar a side has to clear, and what it returns if it does.
+   *
+   * Two different bars, and a side must clear both. MIN_P is our own
+   * confidence floor — below it we do not have a view worth acting on. Break-
+   * even is the price's floor: at -139 a bet returns nothing until it wins
+   * 58.2% of the time, whatever we think. Taking the max means a cheap price
+   * never lowers the evidence we demand, and an expensive one raises it.
+   *
+   * PrizePicks has no per-side price to read: it charges through a flat
+   * multiplier whose break-even depends on how many legs the slip ends up
+   * carrying, which is not a property of this market. Those fall back to
+   * MIN_P, and the slip panel is where leg count gets priced.
+   */
+  const assess = (o: LineOption, side: 'over' | 'under') => {
+    const p = rateAt(o.line, side);
+    if (p === null) return null;
+    const price = side === 'over' ? o.overPrice : o.underPrice;
+    const be = typeof price === 'number' && Number.isFinite(price) ? americanToProb(price) : null;
+    const bar = be === null ? MIN_P : Math.max(MIN_P, be);
+    // Expected profit per 1 staked, only where a real price exists.
+    const ev = be === null || price === null || price === undefined
+      ? null
+      : p * (price < 0 ? 100 / -price : price / 100) - (1 - p);
+    return { side, book: o.book, line: o.line, p, breakEven: be, bar, ev, margin: p - bar };
+  };
 
-  const pick =
-    pOver !== null && (pUnder === null || pOver >= pUnder) && forOver
-      ? { side: 'over' as const, book: forOver.book, line: forOver.line, p: pOver }
-      : pUnder !== null && forUnder
-        ? { side: 'under' as const, book: forUnder.book, line: forUnder.line, p: pUnder }
-        : null;
+  // Every takeable side of every book, rather than the best line per direction
+  // and then the better direction. Line shopping is still in here — a lower
+  // line raises P(over) by itself — but price can now outweigh it, which the
+  // two-step version could not express.
+  const candidates = [
+    ...overs.map((o) => assess(o, 'over')),
+    ...unders.map((o) => assess(o, 'under')),
+  ].filter((x): x is NonNullable<typeof x> => x !== null);
 
-  if (!pick) return { play: null, why: { kind: 'unavailable' } };
+  if (candidates.length === 0) return { play: null, why: { kind: 'unavailable' } };
+
+  /**
+   * Rank by how far past its own bar a side is, so clearing a cheap price by
+   * four points beats scraping over an expensive one. Price is already inside
+   * `margin`, because an expensive side carries a higher bar.
+   *
+   * The tie-break is line shopping, and it is not decoration. Whenever a
+   * player's whole history sits on one side of both books' numbers, the two
+   * lines score an identical probability — and the cheaper one is still the
+   * one to take. Ranking on probability alone would have quietly picked
+   * whichever book happened to be listed first.
+   */
+  const better = (a: typeof candidates[number], b: typeof candidates[number]) => {
+    if (Math.abs(b.margin - a.margin) > 1e-9) return b.margin > a.margin ? b : a;
+    if (a.side !== b.side) return a;
+    return (a.side === 'over' ? b.line < a.line : b.line > a.line) ? b : a;
+  };
+  const pick = candidates.reduce(better);
 
   // Still reported in stat units, because "the number is 2.4 kills light" is
   // what a person reads, while the probability is what the model acts on.
@@ -313,7 +382,14 @@ export function evaluate(o: Evaluation): CallStatus {
 
   // Evaluated and honest. Both numbers are reported: the stat-unit gap is what
   // the row shows, and the probability is what decides whether it is a call.
+  // Two different refusals, because they are two different facts. Below MIN_P
+  // we have no view; above it but below break-even we have one the price has
+  // already taken. The second moves when the odds move, so it stays worth
+  // watching in a way a thin market is not.
   if (pick.p < MIN_P) return { play: null, why: { kind: 'fair', edge, p: pick.p } };
+  if (pick.p < pick.bar) {
+    return { play: null, why: { kind: 'priced-out', edge, p: pick.p, breakEven: pick.breakEven ?? pick.bar } };
+  }
 
   const hitRate = pick.p;
 
@@ -341,6 +417,8 @@ export function evaluate(o: Evaluation): CallStatus {
       strength,
       method: useSeries ? 'series' : 'maps',
       sample: useSeries ? form.series : form.mapValues.length,
+      breakEven: pick.breakEven,
+      ev: pick.ev,
       // A rank, not a probability. 60 is a better bet than 30; it is not a claim
       // that it wins 60% of the time — hit rate is shown separately for that.
       score: Math.max(1, Math.min(99, Math.round(strength * 100))),

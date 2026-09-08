@@ -365,3 +365,80 @@ test('the threshold is proportional, so it means the same on a big line as a sma
   assert.ok(a.play && b.play, 'both should be calls or neither');
   assert.ok(Math.abs(a.play.hitRate - b.play.hitRate) < 1e-9, 'and the same confidence');
 });
+
+// -------------------------------------------------------------- price -----
+
+/**
+ * What the odds demand, against what we think.
+ *
+ * Choosing a side by probability alone was only half the job: a 58% view is a
+ * losing bet at -170, which needs 63.0%. Measured on the live board before
+ * this gate existed, 15 of 80 priced calls were negative expectation, and the
+ * board showed every one of them as an edge. These pin the arithmetic and the
+ * refusal, both of which decide money.
+ */
+
+const priced = (
+  book: 'prizepicks' | 'underdog',
+  line: number,
+  overPrice: number | null,
+  underPrice: number | null,
+): LineOption => ({ book, line, overOk: true, underOk: true, overPrice, underPrice });
+
+test('a price the view cannot clear is refused, and says so as a price', () => {
+  // Twelve straight overs shrink to ~85%, comfortably past MIN_P. At -170 the
+  // bar is 63.0% and it clears; at -2000 the bar is 95.2% and it does not.
+  const cheap = evaluate({ form: flat(40), options: [priced('underdog', 30, -170, 140)] });
+  assert.equal(cheap.play?.side, 'over');
+
+  const dear = evaluate({ form: flat(40), options: [priced('underdog', 30, -2000, 1500)] });
+  assert.equal(dear.play, null);
+  assert.equal(dear.why?.kind, 'priced-out');
+  if (dear.why?.kind !== 'priced-out') throw new Error('unreachable');
+  // The refusal reports the bar it failed, so the row can name the price.
+  assert.ok(Math.abs(dear.why.breakEven - 2000 / 2100) < 1e-9);
+  assert.ok(dear.why.p > 0.55, 'still a real view — this is a price refusal, not a thin one');
+});
+
+test('priced-out is a different answer from fair, because a price can move', () => {
+  // A coin-flip view fails MIN_P and is `fair` however cheap the price.
+  const flatish = form({
+    series: 12, mean: 20, sd: 5,
+    totals: [30, 10, 30, 10, 30, 10, 30, 10, 30, 10, 30, 10],
+    mapValues: [], perMap: 20,
+  });
+  const s = evaluate({ form: flatish, options: [priced('underdog', 20, -110, -110)] });
+  assert.equal(s.play, null);
+  assert.equal(s.why?.kind, 'fair');
+});
+
+test('a call carries the break-even it beat and its expected value', () => {
+  const s = evaluate({ form: flat(40), options: [priced('underdog', 30, -110, -110)] });
+  assert.ok(s.play);
+  assert.ok(Math.abs((s.play!.breakEven ?? 0) - 110 / 210) < 1e-9);
+  // EV = p * profit - (1 - p), profit at -110 being 100/110.
+  const p = s.play!.hitRate;
+  assert.ok(Math.abs((s.play!.ev ?? 0) - (p * (100 / 110) - (1 - p))) < 1e-9);
+  assert.ok((s.play!.ev ?? 0) > 0, 'a call that clears its bar must be positive expectation');
+});
+
+test('PrizePicks has no per-side price, so it falls back to MIN_P not to free', () => {
+  // No price fields at all: the bar is our own confidence floor, and EV is
+  // null rather than a number invented from a multiplier we do not know.
+  const s = evaluate({ form: flat(40), options: [both('prizepicks', 30)] });
+  assert.ok(s.play);
+  assert.equal(s.play!.breakEven, null);
+  assert.equal(s.play!.ev, null);
+});
+
+test('an expensive good line loses to a cheap slightly worse one', () => {
+  // Same player, same history. Underdog's 28 is the better number for an over,
+  // but at -400 it needs 80%; PrizePicks' 30 has no price to clear. Ranking on
+  // probability alone would have taken the -400.
+  const s = evaluate({
+    form: flat(40),
+    options: [both('prizepicks', 30), priced('underdog', 28, -400, 300)],
+  });
+  assert.equal(s.play?.side, 'over');
+  assert.equal(s.play?.book, 'prizepicks');
+});
