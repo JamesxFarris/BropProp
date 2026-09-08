@@ -772,14 +772,15 @@ function ouButtons(
   const b = (side: 'over' | 'under', label: string, cls: string) => {
     // The book doesn't list this side at all — every Underdog assists market
     // is higher-only, and PrizePicks promo projections are over-only.
+    // A bare "O" or "U" is meaningless read aloud, and `title` is not reliably
+    // announced. Every one of these carries the same sentence as a real label.
     if (!available[side]) {
-      return `<button class="${cls}" disabled title="${
-        side === 'over' ? 'Higher' : 'Lower'
-      } isn't offered on this market">${label}</button>`;
+      const msg = `${side === 'over' ? 'Higher' : 'Lower'} isn't offered on this market`;
+      return `<button class="${cls}" disabled title="${msg}" aria-label="${msg}">${label}</button>`;
     }
     if (offer !== 'both' && offer !== side) {
-      return `<button class="${cls}" disabled
-        title="The ${side} is a better number on the other app">${label}</button>`;
+      const msg = `The ${side} is a better number on the other app`;
+      return `<button class="${cls}" disabled title="${msg}" aria-label="${msg}">${label}</button>`;
     }
     // Marked, not filled: "this is the side this app prices better" is a
     // different statement from "you have taken this", so they can't look alike.
@@ -790,7 +791,9 @@ function ouButtons(
       <input type="hidden" name="side" value="${side}">
       <input type="hidden" name="back" value="${esc(back)}">
       <button class="${cls}${mark}${picked === side ? ' on' : ''}"
-        title="Take ${side}${why}">${label}</button>
+        title="Take ${side}${why}"
+        aria-label="Take ${side}${why}"
+        aria-pressed="${picked === side ? 'true' : 'false'}">${label}</button>
     </form>`;
   };
   // The id is what the redirect after a pick scrolls back to. Taking a leg is
@@ -1059,16 +1062,16 @@ export function boardPage(o: {
       </div>
       <div class="scroll cards-sm"><table class="board-table stack-sm" data-filter>
         <thead><tr>
-          <th>Player</th>
-          <th>Prop</th>
-          <th class="c">Line</th>
-          <th class="c">Ours</th>
-          <th class="c">Lean</th>
-          <th class="c">Win %</th>
-          ${showEv ? '<th class="c evcol">EV</th>' : ''}
-          ${showPP ? `<th class="n">${only ? 'Take' : 'PrizePicks'}</th>` : ''}
-          <th class="c gapcol">${gapLabel}</th>
-          ${showUD ? `<th class="n">${only ? 'Take' : 'Underdog'}</th>` : ''}
+          <th scope="col">Player</th>
+          <th scope="col">Prop</th>
+          <th scope="col" class="c">Line</th>
+          <th scope="col" class="c">Ours</th>
+          <th scope="col" class="c">Lean</th>
+          <th scope="col" class="c">Win %</th>
+          ${showEv ? '<th scope="col" class="c evcol">EV</th>' : ''}
+          ${showPP ? `<th scope="col" class="n">${only ? 'Take' : 'PrizePicks'}</th>` : ''}
+          <th scope="col" class="c gapcol">${gapLabel}</th>
+          ${showUD ? `<th scope="col" class="n">${only ? 'Take' : 'Underdog'}</th>` : ''}
         </tr></thead>
         <tbody>${ranked
           .map((r, i) => {
@@ -1236,9 +1239,9 @@ export function edgesPage(o: {
       </div>
       <div class="scroll cards-sm"><table class="stack-sm gaps-table" data-filter>
         <thead><tr>
-          <th>Player</th><th>Market</th>
-          <th class="n">PrizePicks</th><th class="c">Gap</th><th class="n">Underdog</th>
-          <th>Better side</th><th class="hide-sm">Match</th>
+          <th scope="col">Player</th><th scope="col">Market</th>
+          <th scope="col" class="n">PrizePicks</th><th scope="col" class="c">Gap</th><th scope="col" class="n">Underdog</th>
+          <th scope="col">Better side</th><th scope="col" class="hide-sm">Match</th>
         </tr></thead>
         <tbody>${gaps
           .map((r) => {
@@ -1295,9 +1298,9 @@ export function edgesPage(o: {
       <div class="card-head"><h2>Lines on the move</h2>
         <span class="sub"><b data-count>${o.mov.length}</b> lines, largest move first</span></div>
       <div class="scroll cards-sm"><table class="stack-sm moves-table" data-filter>
-        <thead><tr><th>Player</th><th>Market</th><th>App</th>
-          <th class="n">Opened</th><th class="n">Now</th><th class="c">Move</th>
-          <th class="n">Changes</th><th class="hide-sm">Match</th></tr></thead>
+        <thead><tr><th scope="col">Player</th><th scope="col">Market</th><th scope="col">App</th>
+          <th scope="col" class="n">Opened</th><th scope="col" class="n">Now</th><th scope="col" class="c">Move</th>
+          <th scope="col" class="n">Changes</th><th scope="col" class="hide-sm">Match</th></tr></thead>
         <tbody>${o.mov
           .map((r) => {
             const mv = Number(r.move);
@@ -1458,8 +1461,8 @@ function gamesCard(games: PlayerGame[], hist: PropHistory, line: number | null):
     </div>
     <div class="scroll"><table>
       <thead><tr>
-        <th>Played</th><th>By map</th>
-        <th class="n">${esc(range)}</th><th class="n">vs ${line === null ? 'line' : line.toFixed(1)}</th>
+        <th scope="col">Played</th><th scope="col">By map</th>
+        <th scope="col" class="n">${esc(range)}</th><th scope="col" class="n">vs ${line === null ? 'line' : line.toFixed(1)}</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table></div>

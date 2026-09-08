@@ -155,6 +155,16 @@
   --nav-ink:   #ffffff;
   --focus:     #0d7d96;
   --lift:      inset 0 1px 0 rgba(255, 255, 255, .9);
+  /* The pastels are tuned for a dark ground and vanish on a white one — a
+     tint that reads as a soft glow at 12% over #12161f is nearly paper at 12%
+     over #ffffff. Same meanings, weighted for light: deeper and more
+     saturated, so the chip still carries its hue at text sizes. */
+  --model:     #0f7d78;
+  --model-bg:  #0f7d7814;
+  --cs2:       #935f0b;
+  --cs2-bg:    #935f0b14;
+  --lol:       #16607f;
+  --lol-bg:    #16607f14;
 }
 
 * { box-sizing: border-box; }
@@ -511,8 +521,8 @@ td.match .sub2 {
    scanning a mixed board, so a labelled chip that also carries a tint answers
    it before the label is read. Pastel and confined to the badge, so it tints
    the row's identity without competing with the figures. */
-.lg.cs2   { color: var(--cs2); background: var(--cs2-bg); border-color: #f3c98b3d; }
-.lg.lol   { color: var(--lol); background: var(--lol-bg); border-color: #9fd3ef3d; }
+.lg.cs2   { color: var(--cs2); background: var(--cs2-bg); border-color: color-mix(in srgb, var(--cs2) 24%, transparent); }
+.lg.lol   { color: var(--lol); background: var(--lol-bg); border-color: color-mix(in srgb, var(--lol) 24%, transparent); }
 .lg.other { color: var(--text-2); background: var(--surface-2); border-color: var(--line-2); }
 
 .chip {
@@ -896,8 +906,8 @@ button.link:hover { color: var(--under); text-decoration: underline; }
   padding: 5px 10px; border-radius: var(--r-s);
   border: 1px solid transparent;
 }
-.chip-num.book  { color: var(--brand); background: var(--brand-dim); border-color: #f5c26533; }
-.chip-num.model { color: var(--model); background: var(--model-bg);  border-color: #86d7d033; }
+.chip-num.book  { color: var(--brand); background: var(--brand-dim); border-color: color-mix(in srgb, var(--brand) 20%, transparent); }
+.chip-num.model { color: var(--model); background: var(--model-bg);  border-color: color-mix(in srgb, var(--model) 20%, transparent); }
 
 /* Our probability. The largest plain figure in the row, because after the two
    chips it is the number that decides. */

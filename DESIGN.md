@@ -234,6 +234,34 @@ changed here: it decides money and deserves its own measurement.
 
 ## Log
 
+- **2026-09-08** — Radius by role, not one number. A single house radius on
+  cards, chips, buttons and inputs alike is documented tell #4 — "one
+  border-radius on everything regardless of hierarchy" — and it is what
+  "everything feels round" describes: every element becomes the same kind of
+  object. Panels are 3px because they are regions of a page, controls 6px
+  because they are pressable, chips 3px so figures do not read as buttons.
+- **2026-09-08** — Surfaces got chroma. The first pass off near-black still
+  carried only about six points of blue over red, so the three steps separated
+  by lightness alone — legible, but grey on grey. Eighteen points now, held as
+  they lighten, so a card reads as a lit surface of the same material.
+- **2026-09-08** — Strength is back, as a shape rather than a number. Dropping
+  Score was right — it was `(p − 0.5) × 2` and duplicated Win % — but a bare
+  "67%" gives no sense of where it sits in the range a call can occupy, and on
+  a phone there is no neighbouring row to compare against. Four banded steps
+  drawn on the figure itself, width proportional to the claim.
+- **2026-09-08** — Taking a prop cross-fades instead of whiting out. The write
+  is a form POST and a redirect, which is what keeps it working with scripts
+  blocked; a cross-document view transition sits entirely in CSS, so that
+  guarantee is untouched and unsupporting browsers navigate as before. Motion
+  here is user-triggered, which is the only kind the frontend-design guidance
+  permits — no fade-up entrances, no hover transitions on every card.
+- **2026-09-08** — Audit found three real defects, all invisible on the dark
+  default: the new `--model` / `--cs2` / `--lol` tokens had no light-theme
+  values, so light mode would have rendered pastels on white; four chip
+  borders were hardcoded hex that duplicated those tokens and could not
+  follow the theme at all (now `color-mix` off the token); and every take
+  button was a bare "O" or "U" with only a `title`, which screen readers do
+  not reliably announce. All 29 column headers gained `scope`.
 - **2026-09-08** — Rebuilt the board around the comparison it exists to make.
   Their line and our number are a matched pair of chips now, gold against
   teal, sat next to each other; before, the average lived in a grey column
