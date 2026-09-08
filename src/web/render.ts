@@ -126,7 +126,7 @@ function correlatedGroups(picks: PickRow[]): number {
  *          on data, keeps the ones it priced as fair
  *   calls  only markets with a call
  */
-type ShowMode = 'all' | 'live' | 'calls';
+type ShowMode = 'all' | 'live' | 'calls' | 'moved';
 
 type Filters = {
   league: string | null; book: string | null; matched: boolean;
@@ -218,6 +218,7 @@ function filterBar(path: string, f: Filters, leagues: string[], locked: string |
           ${a(qs({ show: 'all' }, f), 'All', f.show === 'all')}
           ${a(qs({ show: 'live' }, f), 'Priced', f.show === 'live')}
           ${a(qs({ show: 'calls' }, f), 'With a call', f.show === 'calls')}
+          ${a(qs({ show: 'moved' }, f), 'Line moved', f.show === 'moved')}
         </nav></div>
         <div class="group"><nav class="seg">
           ${
@@ -1049,7 +1050,14 @@ export function boardPage(o: {
   // here rather than in SQL because whether a market has a call is decided by
   // the projection, not by anything the query can see.
   const visible =
-    o.filters.show === 'calls'
+    // Markets where one book has moved and the other has not followed. The
+    // only signal here with a measured edge behind it, and until now there
+    // was no way to look at just those rows — they were scattered through a
+    // board sorted by a projection we have four experiments saying is at its
+    // ceiling.
+    o.filters.show === 'moved'
+      ? o.rows.filter((r) => staleLine(r) !== null)
+      : o.filters.show === 'calls'
       ? o.rows.filter((r) => playOf(r) !== null)
       : o.filters.show === 'live'
         ? o.rows.filter((r) => tier(r) <= 1)
@@ -1133,7 +1141,11 @@ export function boardPage(o: {
           // as a broken page.
           `<div class="card"><div class="empty">
            None of these ${o.rows.length} markets ${
-             o.filters.show === 'calls' ? 'carries a call' : 'could be priced'
+             o.filters.show === 'calls'
+               ? 'carries a call'
+               : o.filters.show === 'moved'
+                 ? 'has one book moving while the other holds'
+                 : 'could be priced'
            } right now — ${esc(summary)}. Switch <strong>Show</strong> back to
            <strong>All</strong> to see them anyway; a market with no edge on our numbers
            is still a market you may have a reason to take.</div></div>`
