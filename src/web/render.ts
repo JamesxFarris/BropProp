@@ -3,6 +3,7 @@ import type { PickRow, SlipSummary } from './picks.js';
 import type { MarketRow, PropHistory, PlayerGame } from './boardq.js';
 import type { FormStats, Play, CallStatus, NoCall } from './projection.js';
 import { evaluate, edgeProgress, type LineOption, flatBreakEven } from './projection.js';
+import { staleLine } from './stale.js';
 import type { Entry } from './optimize.js';
 import { isComboHandle } from '../normalize.js';
 import { devig } from '../devig.js';
@@ -753,6 +754,30 @@ function noCallText(why: NoCall, r: { stat: string; handle: string }): string {
   }
 }
 
+/**
+ * "One book moved, the other hasn't" — shown above the model's own lean.
+ *
+ * Deliberately louder than the projection beside it, because it is the better
+ * evidence. Four attempts to out-predict a player's flat average have failed;
+ * this one does not try. It reports that the two books disagree about a
+ * number one of them has just changed, which is an observation rather than a
+ * forecast — and when the lagging book does respond, it agrees with the
+ * mover about 6.5 to 1.
+ *
+ * Phrased as what happened, never as a claim about the player: "UD moved
+ * +2.0, PP hasn't" says exactly what we know and nothing we don't.
+ */
+function staleCell(r: MarketRow): string {
+  const s = staleLine(r);
+  if (!s) return '';
+  const who = (b: string) => (b === 'prizepicks' ? 'PP' : 'UD');
+  return `<div class="stale ${s.side === 'over' ? 'o' : 'u'}"
+    title="${who(s.mover)} moved ${signed(s.move)} and ${who(s.book)} has not followed. When the lagging book does respond it agrees with the mover about 6.5 to 1 — measured, but not yet proven profitable.">
+    <span class="stale-k">${who(s.mover)} moved ${signed(s.move)}</span>
+    <span class="stale-v">${who(s.book)} still ${num(s.book === 'prizepicks' ? r.pp_line : r.ud_line)}</span>
+  </div>`;
+}
+
 function playCell(
   play: Play | null,
   why: NoCall | null,
@@ -1216,7 +1241,7 @@ export function boardPage(o: {
                 : `<span class="chip-num model">${Number(ours).toFixed(1)}</span>
                    <div class="meta">${formNote(formOf(r), play)}</div>`
             }</td>
-            <td class="c" data-label="Lean">${playCell(play, statusOf(r).why, r, only)}</td>
+            <td class="c" data-label="Lean">${staleCell(r)}${playCell(play, statusOf(r).why, r, only)}</td>
             <td class="c${play ? ` strength s${Math.min(4, Math.max(1, Math.ceil((play.hitRate - 0.5) * 20)))}` : ''}" data-label="Win %">${
               play === null
                 ? '<span class="meta">—</span>'

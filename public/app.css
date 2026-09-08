@@ -1539,3 +1539,24 @@ body.searching .tick { display: none; }
   box-shadow: inset 0 -1px 0 var(--line-2);
 }
 .foot-link:hover { color: var(--text); border-color: var(--text); }
+
+/* ---- the stale-line signal ----------------------------------------------
+   Louder than the model's own lean sitting under it, and that ordering is
+   deliberate. Four attempts to out-predict a player's flat average have
+   failed; this one does not try to. It reports that one book changed a number
+   and the other has not followed — an observation about two lines rather than
+   a forecast about a person — and when the lagging book does respond it
+   agrees with the mover about 6.5 to 1.
+   Bordered rather than filled: it is evidence to weigh, not a verdict. */
+.stale {
+  display: inline-flex; align-items: baseline; gap: 6px; flex-wrap: wrap;
+  margin-bottom: 5px; padding: 3px 8px;
+  border-radius: var(--r-chip);
+  border: 1px solid currentColor;
+  font-size: 12px; font-weight: 600;
+  line-height: 1.35;
+}
+.stale.o { color: var(--over); background: var(--over-bg); }
+.stale.u { color: var(--under); background: var(--under-bg); }
+.stale-k { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.stale-v { color: var(--text-2); font-weight: 500; }
