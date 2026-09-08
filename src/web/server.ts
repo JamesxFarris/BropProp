@@ -124,6 +124,24 @@ const server = createServer(async (req, res) => {
       const body = await readBody(req);
       const back = body.get('back') || '/board';
 
+      /**
+       * Send the browser back to the row it was just on.
+       *
+       * Taking a prop is a plain form post and a redirect, which is what makes
+       * it work with scripts blocked — but a redirect lands at the top of the
+       * page, and on a board of hundreds of rows that means hunting for your
+       * place after every single leg. A fragment costs nothing, needs no
+       * script, and the browser does the scrolling itself.
+       *
+       * Any fragment already on `back` is dropped rather than appended to: two
+       * hashes in one URL and the browser keeps the first, which would pin you
+       * to whichever row you happened to take first.
+       */
+      const backTo = (anchor: string | null) => {
+        const clean = back.split('#')[0]!;
+        return anchor ? `${clean}#${anchor}` : clean;
+      };
+
       if (url.pathname === '/pick') {
         const propId = Number(body.get('prop_id'));
         const side = body.get('side');
@@ -135,21 +153,23 @@ const server = createServer(async (req, res) => {
             // that silently looks unchanged.
             if (err instanceof WrongBookError) {
               const sep = back.includes('?') ? '&' : '?';
-              return redirect(res, `${back}${sep}locked=${encodeURIComponent(err.locked)}`);
+              return redirect(res, `${backTo(null)}${sep}locked=${encodeURIComponent(err.locked)}#m${propId}`);
             }
             if (err instanceof SideUnavailableError) {
               const sep = back.includes('?') ? '&' : '?';
-              return redirect(res, `${back}${sep}unavailable=${encodeURIComponent(err.side)}`);
+              return redirect(res, `${backTo(null)}${sep}unavailable=${encodeURIComponent(err.side)}#m${propId}`);
             }
             throw err;
           }
+          return redirect(res, backTo(`m${propId}`));
         }
-        return redirect(res, back);
+        return redirect(res, backTo(null));
       }
       if (url.pathname === '/pick/remove') {
         const id = Number(body.get('pick_id'));
+        const propId = Number(body.get('prop_id'));
         if (Number.isFinite(id)) await removePick(id);
-        return redirect(res, back);
+        return redirect(res, backTo(Number.isFinite(propId) ? `m${propId}` : null));
       }
       // Stage a suggested entry as the open slip, in order, stopping at the
       // first leg the rules refuse rather than silently building a partial one.

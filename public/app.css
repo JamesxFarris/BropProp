@@ -468,9 +468,34 @@ td.match .sub2 {
   border: 1px solid var(--line);
 }
 .ou button:hover { color: var(--text); border-color: var(--line-2); }
-.ou button.o.on { background: var(--over-bg);  border-color: var(--over);  color: var(--over); }
-.ou button.u.on { background: var(--under-bg); border-color: var(--under); color: var(--under); }
+
+/* A taken side is FILLED, not tinted.
+   It used to be a faint background wash with coloured text, which on a dense
+   board of thirty rows was almost impossible to pick out — and "have I taken
+   this?" is the one question the board must never make you squint at. Solid
+   fill is unmistakable at a glance and still says which side it is, because
+   the fill is the side's own colour: green over, red under, exactly as
+   everywhere else.
+
+   The text takes --bg rather than a fixed light or dark, so it inverts with
+   the theme: near-black on bright green in dark mode, near-white on deep
+   green in light mode. Both stay legible without a second colour token. */
+.ou button.o.on,
+.ou button.u.on {
+  color: var(--bg);
+  font-weight: 700;
+  box-shadow: none;
+}
+.ou button.o.on { background: var(--over);  border-color: var(--over); }
+.ou button.u.on { background: var(--under); border-color: var(--under); }
+.ou button.o.on:hover { background: var(--over);  color: var(--bg); }
+.ou button.u.on:hover { background: var(--under); color: var(--bg); }
 .ou button:disabled { opacity: .3; cursor: not-allowed; }
+
+/* Taking a leg redirects, and the redirect carries a fragment back to this
+   element. Without a scroll margin the sticky header lands on top of the row
+   you were just looking at, which defeats the point of going back to it. */
+.ou { scroll-margin-top: 96px; }
 
 form.inline { display: inline; }
 
@@ -656,12 +681,21 @@ button.link:hover { color: var(--under); text-decoration: underline; }
 
 /* The side this app prices better than the other. Outlined, never filled:
    "this is the better number here" and "you have taken this" are different
-   statements and must not look alike. */
+   statements and must not look alike.
+
+   That rule still holds and matters more than ever now that taken is filled —
+   outline against solid fill is a far bigger difference than outline against
+   the faint tint taken used to carry, which is what made a taken leg so easy
+   to miss on a dense board. So `best` keeps its outline, and `on` overrides it
+   with the fill in both the plain and the best case; without the `.best.*.on`
+   pair below, these four-class selectors would out-specify the fill and a
+   taken best-price side — the most common thing you will ever take — would be
+   the one that still looked untaken. */
 .ou button.best.o { border-color: var(--over); color: var(--over); }
 .ou button.best.u { border-color: var(--under); color: var(--under); }
 .ou button.best { border-width: 2px; font-weight: 700; }
-.ou button.best.o.on { background: var(--over-bg); }
-.ou button.best.u.on { background: var(--under-bg); }
+.ou button.best.o.on { background: var(--over);  color: var(--bg); }
+.ou button.best.u.on { background: var(--under); color: var(--bg); }
 
 /* Distance from the player's recent average to this book's line. Small and
    adjacent to the number: one input among several, not a verdict. */
@@ -736,7 +770,36 @@ button.link:hover { color: var(--under); text-decoration: underline; }
    Below 760px this same edge gets overridden — see the phone section — since
    a left border on a full-width stacked cell reads as a stray mark, not a
    column boundary. */
-.board-table td.fairgap { border-left: 2px solid var(--line-2); }
+/* Was a 2px left border. The Fair % column sits fifth of nine — dead centre —
+   so a vertical rule there read as a line drawn down the middle of the board,
+   cutting the row in half and competing with the numbers either side of it.
+   A flagged cell should look like a flagged cell, not like a column boundary,
+   so the mark is now a tint and a weight on the cell itself. No new colour:
+   the tint is the raised neutral surface already used elsewhere. */
+.board-table td.fairgap {
+  background: var(--raised);
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* The player's own average is the number every call is argued from, and it was
+   the quietest thing in the row — same ground, same weight as the labels
+   around it. Giving the column a tone of its own makes it a band the eye can
+   run down, and lifts the figure to full-strength ink.
+
+   Deliberately neutral rather than a hue. Colour on a row means exactly three
+   things here — gold for worth-your-money, green over, red under — and an
+   average is none of them; a fourth hue would cost more in legibility than it
+   buys in prominence. The tone is one step off the card, and the flagged
+   Fair % cell sits one step further, so the two read as a hierarchy rather
+   than as the same treatment twice. */
+.board-table td.formcol {
+  background: var(--surface-2);
+}
+.board-table td.formcol .fig {
+  color: var(--text);
+  font-size: 18px;
+}
 
 /* Kick-off. Quiet until it matters — a market that has already started is
    the one thing here you cannot act on. */

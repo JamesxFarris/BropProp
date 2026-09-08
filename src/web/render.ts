@@ -498,6 +498,7 @@ function slipRail(picks: PickRow[], back: string): string {
         </div>
         <form method="post" action="/pick/remove" class="inline">
           <input type="hidden" name="pick_id" value="${p.id}">
+          <input type="hidden" name="prop_id" value="${p.prop_id}">
           <input type="hidden" name="back" value="${esc(back)}">
           <button class="rm" aria-label="Remove ${esc(p.handle)}">×</button>
         </form>
@@ -745,7 +746,11 @@ function ouButtons(
         title="Take ${side}${why}">${label}</button>
     </form>`;
   };
-  return `<div class="ou">${b('over', 'O', 'o')}${b('under', 'U', 'u')}</div>`;
+  // The id is what the redirect after a pick scrolls back to. Taking a leg is
+  // a form post and a redirect — that is what keeps it working with scripts
+  // blocked — and a redirect otherwise lands at the top of a board hundreds of
+  // rows long, so you lose your place on every single leg.
+  return `<div class="ou" id="m${propId}">${b('over', 'O', 'o')}${b('under', 'U', 'u')}</div>`;
 }
 
 /** Which side of a market is the better price on `book`. */
