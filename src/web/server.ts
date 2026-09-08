@@ -257,14 +257,21 @@ const server = createServer(async (req, res) => {
         (lockedBook as 'prizepicks' | 'underdog' | null) ??
         (bookParam === 'underdog' ? 'underdog' : 'prizepicks');
       const rows = await markets({ league: filters.league, book, matched: false, search: null });
-      const form = await projectMarkets(
-        rows.map((r) => ({
-          canon_handle: r.canon_handle, handle: r.handle, league: r.league, stat: r.stat,
-          map_start: r.map_start, map_end: r.map_end,
-        })),
-      );
-      const [picks, h] = await Promise.all([openPicks(), health(filters.league)]);
-      const entries = buildEntries(rows, form, book);
+      // Same round pool the board fetches, and for the same reason: once per
+      // render, not per row, so a CS2 kills market prices identically here as
+      // it does on /board rather than falling back to the old per-map method
+      // just because this page forgot to pass it along.
+      const [form, roundPool, [picks, h]] = await Promise.all([
+        projectMarkets(
+          rows.map((r) => ({
+            canon_handle: r.canon_handle, handle: r.handle, league: r.league, stat: r.stat,
+            map_start: r.map_start, map_end: r.map_end,
+          })),
+        ),
+        roundLengthPool('CS2'),
+        Promise.all([openPicks(), health(filters.league)]),
+      ]);
+      const entries = buildEntries(rows, form, book, roundPool);
       return html(res, buildPage({ entries, book, lockedBook, picks, health: h }));
     }
 

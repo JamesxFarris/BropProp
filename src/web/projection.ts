@@ -269,8 +269,10 @@ export function recommend(
   options: LineOption[],
   maps = 1,
   seed = '',
+  league?: string,
+  roundPool?: number[],
 ): Play | null {
-  return evaluate({ form, options, maps, seed }).play;
+  return evaluate({ form, options, maps, seed, league, roundPool }).play;
 }
 
 export function evaluate(o: Evaluation): CallStatus {
