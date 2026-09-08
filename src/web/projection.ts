@@ -114,6 +114,81 @@ function resampleTotals(mapValues: number[], maps: number, seed: string): number
 }
 
 /**
+ * Totals for an n-map range, drawn from a rate and a length separately.
+ *
+ * The existing resampler draws whole per-map kill totals, which bakes in the
+ * round lengths that happened to occur in the player's sample. This draws the
+ * two apart: a kills-per-round from the player, and a round count from the
+ * matches.
+ *
+ * Rounds come from the match pool and never from the player. Round count is a
+ * property of how a match went, not of who was in it, and drawing a player's
+ * own past round counts would put back exactly the sample-mix bias this
+ * exists to remove.
+ *
+ * One round count is drawn per map rather than one for the range, because a
+ * three-map series is three separate lengths and collapsing them would
+ * understate the spread.
+ *
+ * Task 6 measured the correlation this independence assumes away: Pearson
+ * r(kills-per-round, rounds) = -0.03 over 47,626 CS2 maps, and mean
+ * kills-per-round barely moves across round-length buckets (0.740 / 0.690 /
+ * 0.676 / 0.684 for 13-15 / 16-19 / 20-24 / 25+ rounds). That is negligible
+ * and non-monotonic, so rate and length are drawn independently rather than
+ * as re-weighted joint pairs.
+ */
+export function resampleFromRates(
+  rates: number[],
+  roundPool: number[],
+  maps: number,
+  seed: string,
+): number[] {
+  if (rates.length === 0 || roundPool.length === 0) return [];
+  const rand = rng(seedFrom(seed));
+  const out: number[] = [];
+  for (let d = 0; d < DRAWS; d++) {
+    let sum = 0;
+    for (let m = 0; m < maps; m++) {
+      sum += rates[Math.floor(rand() * rates.length)]!
+           * roundPool[Math.floor(rand() * roundPool.length)]!;
+    }
+    out.push(sum);
+  }
+  return out;
+}
+
+/**
+ * Round counts actually observed, to draw a match length from.
+ *
+ * Pooled across the league rather than conditioned on the upcoming match's
+ * tier. Props come from PrizePicks and Underdog, neither of which publishes a
+ * tier, and an upcoming match is not necessarily linked to a bo3 match yet —
+ * so conditioning would refuse far more often than it would sharpen. Round
+ * length varies much less between tiers than between a stomp and a grinder,
+ * which is the difference this is here to capture.
+ *
+ * `rounds >= 13` because CS2 is MR12 — first to 13 — so a completed map
+ * cannot run fewer than 13 rounds. The 87-91 rows below that in the backfill
+ * are abandoned or forfeited games (90.8% KAST-consistent against 99.79% for
+ * everything else), not short games: a 1-round map with 2 kills implies a
+ * rate of 2.0 and would distort the pool badly. This is the same refusal
+ * grading already makes when it voids a range that didn't complete.
+ *
+ * No high-end cutoff: 46-60 round maps are genuine deep overtime, 100%
+ * KAST-consistent, and belong in the pool as much as any other real game.
+ */
+export async function roundLengthPool(league: string, limit = 5000): Promise<number[]> {
+  const rows = await q<{ rounds: number }>(
+    `SELECT rounds FROM map_stat_dedup
+      WHERE league = $1 AND rounds IS NOT NULL AND rounds >= 13
+      ORDER BY played_at DESC NULLS LAST
+      LIMIT $2`,
+    [league, limit],
+  );
+  return rows.map((r) => r.rounds);
+}
+
+/**
  * Which side to take, on which app.
  *
  * The two questions are separate and were being answered as one. Direction is a

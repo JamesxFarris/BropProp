@@ -1,6 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { evaluate, recommend, edgeProgress, type FormStats, type LineOption } from './projection.js';
+import {
+  evaluate,
+  recommend,
+  edgeProgress,
+  resampleFromRates,
+  type FormStats,
+  type LineOption,
+} from './projection.js';
 import { foldCombo, type ComboStatRow } from '../combo.js';
 
 /**
@@ -203,4 +210,34 @@ test('a combo whose members never played together makes no call', () => {
   assert.equal(f.series, 0);
   assert.equal(f.mapValues.length, 0);
   assert.equal(evaluate({ form: f, options: [both('prizepicks', 5)], handle: 'A + B' }).play, null);
+});
+
+test('a round pool of one value produces that value every draw', () => {
+  // Degenerate but load-bearing: it proves the pool is being sampled at all,
+  // rather than a mean being taken behind the scenes.
+  const totals = resampleFromRates([0.8], [20], 1, 'seed');
+  assert.ok(totals.every((t) => Math.abs(t - 16) < 1e-9));
+});
+
+test('a range of n maps draws n round counts, not one scaled by n', () => {
+  // Two maps of 20 rounds at 0.8 kills per round is 32 kills. If the
+  // implementation drew one round count and multiplied, a pool with spread
+  // would produce a narrower distribution than reality.
+  const totals = resampleFromRates([0.8], [10, 30], 2, 'seed');
+  const distinct = new Set(totals.map((t) => t.toFixed(4)));
+  // 10+10, 10+30, 30+10, 30+30 -> three distinct sums (8, 16, 24 kills).
+  assert.ok(distinct.size >= 3, `expected several distinct totals, got ${distinct.size}`);
+});
+
+test('rates and rounds are drawn independently of each other', () => {
+  const totals = resampleFromRates([0.5, 1.0], [10, 20], 1, 'seed');
+  const sums = new Set(totals.map((t) => t.toFixed(4)));
+  // 0.5*10, 0.5*20, 1.0*10, 1.0*20 -> 5, 10, 10, 20 -> three distinct values.
+  assert.ok(sums.size >= 3, `expected the cross product, got ${[...sums].join(',')}`);
+});
+
+test('the same seed gives the same draws', () => {
+  const a = resampleFromRates([0.5, 1.0], [10, 20], 2, 'fixed');
+  const b = resampleFromRates([0.5, 1.0], [10, 20], 2, 'fixed');
+  assert.deepEqual(a, b);
 });
