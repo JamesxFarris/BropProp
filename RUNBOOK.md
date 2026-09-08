@@ -201,6 +201,35 @@ Pinnacle's own web client ships a fixed guest key. Using it to get past that
 401 was deliberately **not** done — reading an open endpoint is one thing,
 presenting a lifted credential to defeat an auth check is another.
 
+### The one thing that did show signal: line movement
+
+Measured 2026-09-08 over 2,101 snapshots and 316 markets priced by both
+books. Looked at every moment one book moved its line while the other had
+not yet — 147 such events:
+
+| What the lagging book did next (6h) | |
+|---|---|
+| **Followed the same direction** | 39 (26.5%) |
+| Moved the opposite way | 6 (4.1%) |
+| Never moved at all | 102 (69.4%) |
+
+**When the lagging book responds at all, it agrees with the leader 39 to 6 —
+about 6.5 to 1.** Line moves carry real directional information. And 69% of
+the time the other book simply never catches up, leaving a median **1.0 stat
+unit** gap standing.
+
+Neither book clearly leads (PrizePicks moved first 63 times, Underdog 84), so
+this is not "follow Underdog" — it is "follow whichever one moved."
+
+This matters because it needs **no projection at all**. Four modelling ideas
+have now failed to beat a player's flat average; this one sidesteps the model
+entirely and bets that the book which already moved was right.
+
+**Not yet proven profitable.** Two days of snapshots, 147 events, and no check
+that the stale side actually wins — that needs settled outcomes, which needs
+more logging time. But it is the first positive signal found, and the logger
+is already collecting exactly what would confirm it.
+
 ### Modelling ideas that were measured and failed
 
 All walk-forward over CS2 maps-1-2 series, scoring only on history that
