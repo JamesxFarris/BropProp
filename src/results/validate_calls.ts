@@ -125,6 +125,20 @@ export type Scorecard = {
   underSeriesP: number;
   claimedEv: number | null;
   realisedEv: number | null;
+  /**
+   * How well the two central estimates predicted the actual total.
+   *
+   * `oursMae` is the board's "Ours" number against what the player did;
+   * `lineMae` is the book's line against the same thing. The board leads with
+   * "+3.6 in your favour", which is only worth reading if `Ours` is the better
+   * estimate. If the line wins, that gap is measuring our error, not an edge.
+   * Bias is signed: positive means the estimate sat above the outcome.
+   */
+  oursMae: number | null;
+  lineMae: number | null;
+  oursBias: number | null;
+  lineBias: number | null;
+  estN: number;
   byRange: Array<{ range: string; under: number; n: number; margin: number }>;
   buckets: Array<{ band: string; n: number; won: number; claimedEv: number; realEv: number }>;
 };
@@ -190,7 +204,9 @@ export async function scoreCalls(league = 'CS2'): Promise<Scorecard> {
     realised: null, claimed: null, auc: null, alwaysOver: null, alwaysUnder: null,
     seriesAhead: 0, seriesJudged: 0, seriesP: 1,
     underSeries: 0, underSeriesJudged: 0, underSeriesP: 1,
-    claimedEv: null, realisedEv: null, byRange: [], buckets: [],
+    claimedEv: null, realisedEv: null,
+    oursMae: null, lineMae: null, oursBias: null, lineBias: null, estN: 0,
+    byRange: [], buckets: [],
   };
   if (markets.length === 0) return empty;
 
@@ -267,6 +283,11 @@ export async function scoreCalls(league = 'CS2'): Promise<Scorecard> {
     };
   }
 
+  // Central-estimate accuracy, scored on every settled market rather than
+  // only the called ones — "Ours" is printed on every row, so it should be
+  // judged on every row.
+  let oursErr = 0, oursAbs = 0, lineErr = 0, lineAbs = 0, estN = 0;
+
   const model = arm();
   const alwaysOver = arm();
   const alwaysUnder = arm();
@@ -307,6 +328,19 @@ export async function scoreCalls(league = 'CS2'): Promise<Scorecard> {
     }
 
     const form = formBefore(m.canon_handle, m.stat, m.map_start, m.map_end, cutoff);
+
+    // Only where "Ours" is the mean of real exact-range series, which is what
+    // the board prints. With no such series the board shows a per-map figure
+    // instead, and comparing that to a range total would be a different
+    // question answered with the wrong units.
+    if (form.series > 0) {
+      estN++;
+      oursErr += form.mean - total;
+      oursAbs += Math.abs(form.mean - total);
+      lineErr += line - total;
+      lineAbs += Math.abs(line - total);
+    }
+
     const opt: LineOption = {
       book: m.book === 'underdog' ? 'underdog' : 'prizepicks',
       line, overOk: true, underOk: true,
@@ -373,6 +407,11 @@ export async function scoreCalls(league = 'CS2'): Promise<Scorecard> {
     underSeriesP: signTest(underSeries, leans.length),
     claimedEv: priced ? claimedSum / priced : null,
     realisedEv: priced ? realSum / priced : null,
+    oursMae: estN ? oursAbs / estN : null,
+    lineMae: estN ? lineAbs / estN : null,
+    oursBias: estN ? oursErr / estN : null,
+    lineBias: estN ? lineErr / estN : null,
+    estN,
     byRange: [...underByRange]
       .sort()
       .map(([range, v]) => ({ range, under: v.won, n: v.n, margin: v.margin / v.n })),
@@ -410,6 +449,21 @@ export function report(s: Scorecard): void {
 
   console.log(`\nat the series level: ${s.underSeries}/${s.underSeriesJudged} series ` +
               `leaned under  (two-sided p ${s.underSeriesP.toFixed(3)})`);
+
+  // The board's headline number, judged against the only thing that settles
+  // it. "+3.6 in your favour" is the distance between these two estimates, so
+  // it is only worth reading if ours is the better one.
+  if (s.oursMae !== null && s.lineMae !== null) {
+    const sign = (v: number | null) => (v === null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(2)}`);
+    console.log(`\nhow close each estimate got to the actual total (${s.estN} markets):`);
+    console.log(`  "Ours"      MAE ${s.oursMae.toFixed(2)}   bias ${sign(s.oursBias)}`);
+    console.log(`  book's line MAE ${s.lineMae.toFixed(2)}   bias ${sign(s.lineBias)}`);
+    console.log(
+      s.oursMae <= s.lineMae
+        ? `  -> our projection is the closer estimate, by ${(s.lineMae - s.oursMae).toFixed(2)}.`
+        : `  -> the BOOK's line is closer, by ${(s.oursMae - s.lineMae).toFixed(2)}. ` +
+          `The "in your favour" gap is measuring our error, not an edge.`);
+  }
 
   console.log(`\nthe model PREDICTED an average of ${p1(s.claimed)}`);
   console.log(`it realised ${p1(s.realised)}`);
@@ -495,19 +549,25 @@ export async function storeScore(s: Scorecard, league = 'CS2'): Promise<void> {
     `INSERT INTO model_score
        (scored_at, league, calls, series, days, realised, claimed, auc,
         always_over, always_under, series_ahead, series_judged, series_p,
-        claimed_ev, realised_ev)
+        claimed_ev, realised_ev,
+        ours_mae, line_mae, ours_bias, line_bias, est_n)
      VALUES (date_trunc('day', now()), $1, $2, $3, $4, $5, $6, $7,
-             $8, $9, $10, $11, $12, $13, $14)
+             $8, $9, $10, $11, $12, $13, $14,
+             $15, $16, $17, $18, $19)
      ON CONFLICT (league, scored_at) DO UPDATE SET
        calls = EXCLUDED.calls, series = EXCLUDED.series, days = EXCLUDED.days,
        realised = EXCLUDED.realised, claimed = EXCLUDED.claimed, auc = EXCLUDED.auc,
        always_over = EXCLUDED.always_over, always_under = EXCLUDED.always_under,
        series_ahead = EXCLUDED.series_ahead, series_judged = EXCLUDED.series_judged,
        series_p = EXCLUDED.series_p,
-       claimed_ev = EXCLUDED.claimed_ev, realised_ev = EXCLUDED.realised_ev`,
+       claimed_ev = EXCLUDED.claimed_ev, realised_ev = EXCLUDED.realised_ev,
+       ours_mae = EXCLUDED.ours_mae, line_mae = EXCLUDED.line_mae,
+       ours_bias = EXCLUDED.ours_bias, line_bias = EXCLUDED.line_bias,
+       est_n = EXCLUDED.est_n`,
     [league, s.calls, s.series, s.days, s.realised, s.claimed, s.auc,
      s.alwaysOver, s.alwaysUnder, s.seriesAhead, s.seriesJudged, s.seriesP,
-     s.claimedEv, s.realisedEv],
+     s.claimedEv, s.realisedEv,
+     s.oursMae, s.lineMae, s.oursBias, s.lineBias, s.estN],
   );
 }
 

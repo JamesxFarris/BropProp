@@ -90,6 +90,11 @@ export type ScoreRow = {
   series_ahead: number | null;
   series_judged: number | null;
   series_p: number | null;
+  ours_mae: number | null;
+  line_mae: number | null;
+  ours_bias: number | null;
+  line_bias: number | null;
+  est_n: number | null;
 };
 
 /**
@@ -103,7 +108,8 @@ export async function scoreHistory(limit = 60, league = 'CS2'): Promise<ScoreRow
   return q(
     `SELECT to_char(scored_at, 'YYYY-MM-DD') AS day,
             calls, series, days, realised, claimed, auc,
-            always_over, always_under, series_ahead, series_judged, series_p
+            always_over, always_under, series_ahead, series_judged, series_p,
+            ours_mae, line_mae, ours_bias, line_bias, est_n
        FROM model_score
       WHERE league = $2
       ORDER BY scored_at DESC

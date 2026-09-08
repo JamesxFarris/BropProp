@@ -1270,30 +1270,34 @@ export function boardPage(o: {
             <td class="c${play ? ` strength s${Math.min(4, Math.max(1, Math.ceil((play.hitRate - 0.5) * 20)))}` : ''}" data-label="Hit rate">${
               play === null
                 ? '<span class="meta">—</span>'
+                  // Two lines, not three. The market line used to print on
+                  // every row, and on 95% of them it said "no market view" or
+                  // "no market price" — the same non-information three hundred
+                  // times. Only ~2 markets on a full board carry a real
+                  // devigged number, so only those get a third line.
                 : `<div class="prob" title="${
                      play.rawOf === null
                        ? 'Modelled from single maps, then shrunk toward a coin flip.'
-                       : `${play.rawWins} of ${play.rawOf} past series won this side. ` +
-                         `Shrunk toward a coin flip because ${play.rawOf} is a small sample.`
+                       : `${play.rawWins} of ${play.rawOf} past series won this side, ` +
+                         `shrunk toward a coin flip because ${play.rawOf} is a small sample. ` +
+                         `Neither book prices this market, so there is nothing to compare against.`
                    }">${Math.round(play.hitRate * 100)}%</div>
                    ${
                      play.rawOf === null
                        ? '<div class="meta raw">modelled</div>'
-                       : `<div class="meta raw">${play.rawWins} of ${play.rawOf}, shrunk</div>`
+                       : `<div class="meta raw">${play.rawWins} of ${play.rawOf}</div>`
                    }
-                   <div class="meta${
-                     gapToMarket !== null && Math.abs(gapToMarket) >= MARKET_GAP && !flatVig ? ' fairgap' : ''
-                   }"${
-                     gapToMarket !== null && Math.abs(gapToMarket) >= MARKET_GAP && !flatVig
-                       ? ` title="${Math.round(Math.abs(gapToMarket) * 100)} points from what we think — worth a second look"`
-                       : ''
-                   }>${
-                     marketProb === null
-                       ? 'no market price'
-                       : flatVig
-                         ? '<span title="Both sides priced identically — the book is charging flat vig, not taking a side.">no market view</span>'
-                         : `market ${Math.round(marketProb * 100)}%`
-                   }</div>`
+                   ${
+                     marketProb === null || flatVig
+                       ? ''
+                       : `<div class="meta${
+                           gapToMarket !== null && Math.abs(gapToMarket) >= MARKET_GAP ? ' fairgap' : ''
+                         }"${
+                           gapToMarket !== null && Math.abs(gapToMarket) >= MARKET_GAP
+                             ? ` title="${Math.round(Math.abs(gapToMarket) * 100)} points from what we think — worth a second look"`
+                             : ''
+                         }>market ${Math.round(marketProb * 100)}%</div>`
+                   }`
             }</td>
             ${showEv ? `<td class="c evcol" data-label="EV">${evCell(play)}</td>` : ''}
             ${
@@ -2101,6 +2105,36 @@ export function statsPage(o: {
                'series the model led',
                latest.series_p === null ? '' : `p = ${latest.series_p.toFixed(3)}`)}
       </div>
+
+      ${
+        latest.ours_mae === null || latest.line_mae === null
+          ? ''
+          : `<p class="note"><b>Is our number better than the book's?</b> The board
+              shows "Ours" beside the line and calls the gap between them your
+              edge. That only holds if ours is the closer estimate. Measured
+              against what players actually did, over ${latest.est_n ?? 0} settled
+              markets:</p>
+            <div class="stat-row">
+              ${stat(latest.ours_mae.toFixed(2), 'our average miss',
+                     latest.ours_bias === null ? ''
+                       : `runs ${latest.ours_bias >= 0 ? '+' : ''}${latest.ours_bias.toFixed(2)} high`)}
+              ${stat(latest.line_mae.toFixed(2), "the book's average miss",
+                     latest.line_bias === null ? ''
+                       : `runs ${latest.line_bias >= 0 ? '+' : ''}${latest.line_bias.toFixed(2)} high`)}
+              <div class="stat"><div class="stat-n ${
+                latest.ours_mae <= latest.line_mae ? 'good' : 'bad'
+              }">${latest.ours_mae <= latest.line_mae ? 'ours' : 'the book'}</div>
+                <div class="stat-k">closer estimate</div>
+                <div class="meta">by ${Math.abs(latest.ours_mae - latest.line_mae).toFixed(2)}</div></div>
+            </div>
+            ${
+              latest.ours_mae <= latest.line_mae
+                ? ''
+                : `<p class="note">The book's line is the better estimate, so part of
+                    every "in your favour" gap on the board is our own error rather
+                    than an edge. Read the lean as a disagreement, not a discount.</p>`
+            }`
+      }
 
       <p class="note"><b>Leg counts are not sample sizes.</b> Every player in a
         series shares its length, its overtime and its pace, so one long map sends
