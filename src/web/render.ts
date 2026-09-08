@@ -607,6 +607,11 @@ function lockNotice(locked: string | null, blocked: string | null): string {
 function formCell(f: FormStats | undefined, play: Play | null): string {
   if (!f) return '<span class="meta">—</span>';
   // Show the number the call was actually made from, and say which it is.
+  if (play?.method === 'kpr') {
+    const kprMean = f.kpr.length ? f.kpr.reduce((a, b) => a + b, 0) / f.kpr.length : 0;
+    return `<div class="fig sm">${kprMean.toFixed(2)}</div>
+      <div class="meta">per round, from ${f.kpr.length} maps</div>`;
+  }
   if (play?.method === 'maps') {
     return `<div class="fig sm">${(f.perMap ?? 0).toFixed(1)}</div>
       <div class="meta">per map, from ${f.mapValues.length} maps</div>`;
@@ -698,7 +703,9 @@ function playCell(
     <div class="meta">${signed(play.edge)} in your favour, ${basis}${
       play.method === 'maps'
         ? ` <span class="est" title="Estimated by resampling ${play.sample} single maps, because too few series played this exact map range">est</span>`
-        : ''
+        : play.method === 'kpr'
+          ? ` <span class="est" title="Estimated from ${play.sample} kills-per-round maps, scaled by observed round lengths rather than averaged as whole-map totals">per round</span>`
+          : ''
     }</div>`;
 }
 
@@ -812,6 +819,8 @@ export function boardPage(o: {
   lockedBook: string | null;
   blocked: string | null;
   form?: Map<string, FormStats>;
+  /** Observed CS2 round counts, fetched once for the whole render. */
+  roundPool?: number[];
 }): string {
   const back = `/board${qs({}, o.filters)}`;
   const formOf = (r: MarketRow) =>
@@ -849,6 +858,8 @@ export function boardPage(o: {
         seed: `${r.canon_handle}|${r.stat}|${r.map_start}|${r.map_end}`,
         stat: r.stat,
         handle: r.handle,
+        league: r.league,
+        roundPool: o.roundPool,
       });
       cache.set(r, s);
     }

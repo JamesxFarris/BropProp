@@ -12,7 +12,7 @@ import {
 } from './picks.js';
 import { boardPage, edgesPage, slipsPage, historyPage, buildPage } from './render.js';
 import { buildEntries } from './optimize.js';
-import { projectMarkets } from './projection.js';
+import { projectMarkets, roundLengthPool } from './projection.js';
 
 const PORT = Number(process.env.PORT ?? 3000);
 const PUBLIC = 'public';
@@ -236,13 +236,19 @@ const server = createServer(async (req, res) => {
       ]);
       // One projection lookup for the whole board rather than per row. The
       // handle goes along because a combo's members are only recorded there.
-      const form = await projectMarkets(
-        rows.map((r) => ({
-          canon_handle: r.canon_handle, handle: r.handle, league: r.league, stat: r.stat,
-          map_start: r.map_start, map_end: r.map_end,
-        })),
-      );
-      return html(res, boardPage({ rows, picks, health: h, leagues: known, filters, lockedBook, blocked, form }));
+      // The round pool is fetched once here too, for the same reason — CS2 is
+      // the only league it applies to, so it's fetched unconditionally rather
+      // than per row.
+      const [form, roundPool] = await Promise.all([
+        projectMarkets(
+          rows.map((r) => ({
+            canon_handle: r.canon_handle, handle: r.handle, league: r.league, stat: r.stat,
+            map_start: r.map_start, map_end: r.map_end,
+          })),
+        ),
+        roundLengthPool('CS2'),
+      ]);
+      return html(res, boardPage({ rows, picks, health: h, leagues: known, filters, lockedBook, blocked, form, roundPool }));
     }
 
     if (url.pathname === '/build') {
