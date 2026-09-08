@@ -761,22 +761,23 @@ function noCallText(why: NoCall, r: { stat: string; handle: string }): string {
 /**
  * "One book moved, the other hasn't" — shown above the model's own lean.
  *
- * Deliberately louder than the projection beside it, because it is the better
- * evidence. Four attempts to out-predict a player's flat average have failed;
- * this one does not try. It reports that the two books disagree about a
- * number one of them has just changed, which is an observation rather than a
- * forecast — and when the lagging book does respond, it agrees with the
- * mover about 6.5 to 1.
+ * It reports that the two books disagree about a number one of them has just
+ * changed. That is an observation, not a forecast, and it is phrased that way
+ * on purpose: "UD moved +2.0, PP still 15.0" says exactly what we know.
  *
- * Phrased as what happened, never as a claim about the player: "UD moved
- * +2.0, PP hasn't" says exactly what we know and nothing we don't.
+ * What it is NOT is a pick. Taking the stale side and settling it against
+ * what the player actually did came out 41-41 — 50.0%, a coin flip, over 49
+ * independent player-matches (RUNBOOK, 2026-09-08). The 6.5-to-1 figure that
+ * motivated this cell is about how the *other book* responds, which turns out
+ * to be a different thing from how the *player* performs. So this sits beside
+ * the model's lean rather than above it, and the tooltip says the number.
  */
 function staleCell(r: MarketRow): string {
   const s = staleLine(r);
   if (!s) return '';
   const who = (b: string) => (b === 'prizepicks' ? 'PP' : 'UD');
   return `<div class="stale ${s.side === 'over' ? 'o' : 'u'}"
-    title="${who(s.mover)} moved ${signed(s.move)} and ${who(s.book)} has not followed. When the lagging book does respond it agrees with the mover about 6.5 to 1 — measured, but not yet proven profitable.">
+    title="${who(s.mover)} moved ${signed(s.move)} and ${who(s.book)} has not followed. Useful for choosing where to place a bet — but not a reason to make one: taking the stale side settled 50.0% (41-41) over 49 matches.">
     <span class="stale-k">${who(s.mover)} moved ${signed(s.move)}</span>
     <span class="stale-v">${who(s.book)} still ${num(s.book === 'prizepicks' ? r.pp_line : r.ud_line)}</span>
   </div>`;

@@ -201,7 +201,7 @@ Pinnacle's own web client ships a fixed guest key. Using it to get past that
 401 was deliberately **not** done — reading an open endpoint is one thing,
 presenting a lifted credential to defeat an auth check is another.
 
-### The one thing that did show signal: line movement
+### Line movement: real information, but not a winning bet
 
 Measured 2026-09-08 over 2,101 snapshots and 316 markets priced by both
 books. Looked at every moment one book moved its line while the other had
@@ -223,12 +223,37 @@ this is not "follow Underdog" — it is "follow whichever one moved."
 
 This matters because it needs **no projection at all**. Four modelling ideas
 have now failed to beat a player's flat average; this one sidesteps the model
-entirely and bets that the book which already moved was right.
+entirely.
 
-**Not yet proven profitable.** Two days of snapshots, 147 events, and no check
-that the stale side actually wins — that needs settled outcomes, which needs
-more logging time. But it is the first positive signal found, and the logger
-is already collecting exactly what would confirm it.
+#### …but the stale side does not win. Measured 2026-09-08.
+
+The obvious next question — does taking the stale line actually make money? —
+now has settled outcomes behind it. Every moment one book moved while the
+other sat on a number on the cheap side of that move, settled against what
+the player actually did:
+
+| | Record | |
+|---|---|---|
+| **Take the move's direction at the lagging book's stale line** | 41–41 | **50.0%** |
+| Take the same direction at the mover's own new line | 35–49 | 41.7% |
+
+149 events, 86 settled, across **49 independent player-matches**. Exactly a
+coin flip. The standard error is 5.5 points on decided legs and nearer 7 on
+independent matches, so this rules out a *large* edge, not a small one — but
+there is nothing here to bet on.
+
+So the 6.5-to-1 agreement figure above is real and it is about **book
+behaviour**: a move predicts what the other book will print, not what the
+player will do. Those are different claims and only the first survived. The
+board still shows the disagreement, because a standing 1.0-unit gap is worth
+knowing when choosing where to place a bet you were making anyway — it is
+labelled as an observation, and must not be dressed up as an edge.
+
+Re-run it as outcomes accumulate — 49 matches is thin:
+
+```bash
+npm run validate:stale
+```
 
 ### Modelling ideas that were measured and failed
 
