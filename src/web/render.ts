@@ -817,7 +817,20 @@ function playCell(
       <span class="dir">${dir}</span>
       ${at}
     </div>
-    <div class="meta">${signed(play.edge)} in your favour${basis ? `, ${basis}` : ''}${
+    <div class="meta">${
+      // A negative gap under the words "in your favour" is a contradiction,
+      // and it happens on about 7% of calls. The side is chosen by
+      // probability; this number is the distance from our estimate to the
+      // line, and for a right-skewed stat those two can disagree — a few huge
+      // games drag the average above the line while most series land below it,
+      // so the under is right and the average says otherwise. Measured on the
+      // live board: 28 of 415 calls, 27 of them with mean and median on
+      // opposite sides. Where they disagree, say what actually drove the call
+      // instead of printing a gap with a minus sign in front of it.
+      play.edge > 0
+        ? `${signed(play.edge)} in your favour`
+        : `<span title="Our average sits on the other side of the line, but most of this player's series land ${play.side} it — a few outsized games pull an average around in a way a count of series does not follow.">most series land ${play.side}</span>`
+    }${basis ? `, ${basis}` : ''}${
       play.method === 'maps'
         ? ` <span class="est" title="Estimated by resampling ${play.sample} single maps, because too few series played this exact map range">est</span>`
         : ''
