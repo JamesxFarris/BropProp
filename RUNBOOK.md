@@ -32,6 +32,27 @@ If a new season is missing, its Drive file id needs adding to `FILES` in
 `src/results/oracleselixir.ts`. The ids come from the folder linked at
 oracleselixir.com/tools/downloads.
 
+**The blocker is Drive's quota, and it does not clear overnight.** Drive
+answers an exhausted quota with **HTTP 200 and an HTML page**, not an error
+status, so the adapter checks `content-type` and re-reads the body — an
+unguarded parse would have stored zero rows and called it success. Probe it
+without running the import:
+
+```bash
+curl -s "https://drive.usercontent.google.com/download?id=<FILES id>&export=download&confirm=t" \
+  | sed 's/<[^>]*>/ /g' | head -c 200
+```
+
+`Google Drive - Quota exceeded` means wait. Checked **2026-09-08**, more than
+a day after first hitting it, and 2025 and 2024 were both still exhausted — so
+the "resets within a day" guess in earlier notes is wrong. This is a per-file
+quota shared across everyone downloading a popular public file, so it is not
+about our usage and cannot be waited out reliably. If LoL coverage becomes
+urgent before it clears, the answer is a different source, not a retry loop.
+
+This is why LoL is the starving half of the board: **39 of 68 LoL players**
+clear the projection threshold against **259 of 373** for CS2.
+
 ### 2. Leaguepedia backfill — only if you want gaps filled
 
 ```bash
