@@ -154,7 +154,7 @@ export function bestEntry(
   candidates: Candidate[],
   size: number,
   book: 'prizepicks' | 'underdog',
-  maxPerMatch = 2,
+  maxPerMatch = 4,
 ): Entry | null {
   const base = BASE[book]?.[size];
   if (base === undefined) return null;
@@ -162,14 +162,46 @@ export function bestEntry(
   const legs: Candidate[] = [];
   const players = new Set<string>();
   const perMatch = new Map<string, number>();
+  /** Which direction this entry has already committed to, per match. */
+  const matchSide = new Map<string, 'over' | 'under'>();
 
   for (const c of candidates) {
     if (legs.length === size) break;
     if (c.players.some((h) => players.has(h))) continue;
     if ((perMatch.get(c.matchKey) ?? 0) >= maxPerMatch) continue;
+
+    /**
+     * Same match, opposite sides, is the one stack to refuse.
+     *
+     * The old rule capped legs per match at two to spread risk, which is
+     * right for independent bets and backwards for an entry that pays only
+     * if every leg wins. What matters there is P(all win), and correlated
+     * legs win together — measured over 35,702 same-match pairs of real CS2
+     * series:
+     *
+     *   both overs          observed 24.69%  vs 21.30% under independence  (1.159)
+     *   one over, one under observed 20.56%  vs 24.85% under independence  (0.828)
+     *
+     * Stacking the same direction beats independence by 16%. Mixing
+     * directions is 17% worse than independence, because the two legs are
+     * betting against each other: a long bloody series cashes every over on
+     * it and busts every under. The cap was blocking both cases equally.
+     *
+     * So the constraint is on direction rather than on count. The count cap
+     * stays, loosened, purely as a ceiling on concentration — an entry that
+     * is five legs of one match lives or dies on one server crash.
+     *
+     * Underdog's per-leg multiplier and PrizePicks' demotion of correlated
+     * legs both already ride in `mult`, so whatever the books claw back for
+     * this shows up in the objective on its own.
+     */
+    const committed = matchSide.get(c.matchKey);
+    if (committed !== undefined && committed !== c.play.side) continue;
+
     legs.push(c);
     for (const h of c.players) players.add(h);
     perMatch.set(c.matchKey, (perMatch.get(c.matchKey) ?? 0) + 1);
+    matchSide.set(c.matchKey, c.play.side);
   }
 
   if (legs.length < size) return null;

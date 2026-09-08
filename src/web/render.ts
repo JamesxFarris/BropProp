@@ -1922,8 +1922,10 @@ export function statsPage(o: {
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([week, n]) => ({ label: week, value: n }));
 
-  const stat = (n: number, k: string, sub = '') =>
-    `<div class="stat"><div class="stat-n">${n.toLocaleString()}</div>
+  // Takes a string as well as a number so a percentage can carry its sign.
+  // It read "33" under "beat the close", which is a different claim entirely.
+  const stat = (n: number | string, k: string, sub = '') =>
+    `<div class="stat"><div class="stat-n">${typeof n === 'number' ? n.toLocaleString() : esc(n)}</div>
       <div class="stat-k">${esc(k)}</div>${sub ? `<div class="meta">${esc(sub)}</div>` : ''}</div>`;
 
   const graded = o.record.filter((r) => r.status !== 'pending').reduce((a, r) => a + r.n, 0);
@@ -1935,7 +1937,7 @@ export function statsPage(o: {
         line before kick-off.</div>`
     : `<div class="stat-row">
         ${stat(o.clv.picks, 'picks measured')}
-        ${stat(Math.round(o.clv.beatRate * 100), 'beat the close', `${o.clv.beat} of ${o.clv.picks}`)}
+        ${stat(`${Math.round(o.clv.beatRate * 100)}%`, 'beat the close', `${o.clv.beat} of ${o.clv.picks}`)}
         <div class="stat"><div class="stat-n ${o.clv.meanClv >= 0 ? 'good' : 'bad'}">${
           o.clv.meanClv >= 0 ? '+' : ''
         }${o.clv.meanClv.toFixed(2)}</div>
