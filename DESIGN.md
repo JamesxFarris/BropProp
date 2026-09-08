@@ -377,8 +377,31 @@ changed here: it decides money and deserves its own measurement.
   correctly but doesn't cash out as a sharper projection once round length is
   drawn from the pool instead of the player's own mix. Task 6's argument
   survives; the accuracy claim built on it does not. See
-  `src/results/validate_kpr.ts`. Reported BLOCKED rather than reverting Task
-  8's projection change — the `rounds` column, the collection, and the
-  backfill are worth keeping regardless of this result, and which of Task 8's
-  pieces come out is a call for whoever asked for this validation, not for
-  the validation itself to make.
+  `src/results/validate_kpr.ts`.
+- **2026-09-07** — Found out *why* the rate projection couldn't win, and took
+  it back out. The dead heat above looked like it might be a mixing effect:
+  rounds-normalisation only corrects a player whose past maps ran unusually
+  short or long, so if most players are typical the correction does nothing
+  for them and could drown a real effect on the few it was built for. That is
+  a prediction the theory makes, so it was tested — bands fixed before
+  looking, same split, same leakage guards, nothing changed but the grouping.
+  **There is no such population.** Of the 250 players who clear
+  `MIN_KPR_MAPS`, the median carries 197 maps of history, and their mean round
+  length sits between −0.52 and +0.19 pool standard deviations of the pool
+  mean, with exactly one player past ±0.5. At two hundred maps the law of
+  large numbers has already pulled a player's round-length mix back to
+  average, so there is no bias left for the correction to remove — and the
+  small-sample players where it genuinely would bite are precisely the ones
+  the twelve-map threshold excludes from the rate path. The method can only
+  fire where it cannot help.
+  So the projection change came out, along with the resampler it needed: it
+  moved 41 of 261 live calls (12 gained, 17 lost, 12 flipped side) and bought
+  nothing measurable. The rule was written before the work started — a change
+  that decides money ships only if it wins on held-out data — and it is worth
+  more than any of the reasoning it overrode. **What stayed:** the `rounds`
+  column, its capture (free — it rides along in a response the collector
+  already holds), the backfill of 13,564 games, the `map_stat_dedup` fix, and
+  both measurements. The data is a real asset and Phase 4 may yet use round
+  count as a model feature; what failed was one specific way of using it, and
+  it failed for a reason now written down so nobody rebuilds it from the same
+  argument.

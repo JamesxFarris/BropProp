@@ -65,6 +65,20 @@ publishes a `combo` flag and it over-fires — it was set on a single CS2 player
 whom Underdog listed normally on the same market, which split that market in
 two and hid a 4.0 gap between the books.
 
+**Fair %** is what Underdog's own price implies, with the bookmaker's margin
+taken back out. Underdog publishes real two-sided American odds; PrizePicks
+cannot, because it prices with a flat multiplier and expresses price by moving
+the line instead — so this is the only genuine market probability on the board.
+It sits beside our own hit rate and is marked where the two disagree by more
+than twenty points.
+
+It is shown and **never scored on**. Our hit rate is an empirical frequency
+over a dozen-odd series, not a calibrated probability, and Underdog is a DFS
+operator rather than a sharp book. Multiplying the two would dress an
+unvalidated number up as an edge and sort the board on it. A market Underdog
+lists one way only shows nothing rather than a guess — a single price cannot be
+devigged. See `src/devig.ts`.
+
 Set `DASHBOARD_PASSWORD` in production — the dashboard accepts writes.
 
 See `DESIGN.md` for the visual direction and the rules behind it.
@@ -179,6 +193,16 @@ same stat, same map range, different number).
   Anything beating 54% here is real signal.
 - **Phase 4 — features and model.** Rolling per-map averages, opponent
   strength, series format. Logistic regression / gradient boosting, not a net.
+
+  **Round counts are already collected** (`map_stat.rounds`, free from the
+  bo3 payload, backfilled across 13,564 games) and are available as a feature.
+  One specific use of them has already been tried and rejected: projecting CS2
+  kills as a per-round rate scaled by a resampled map length. It was sound in
+  theory, it was built, and on a time-split held-out test it scored MAE 6.8831
+  against per-map's 6.8778 — a coin flip (t = 0.39). The reason is worth
+  knowing before anyone tries it again: the bias it corrects is washed out by
+  the sample sizes of every player who qualifies to use it. See `DESIGN.md`
+  and `src/results/validate_kpr.ts`, which still runs and still reproduces it.
 - **Discord tracker** — wanted, deliberately deferred until grading exists;
   the thing worth posting is graded results, not raw lines.
 - **Phase 5 — the learning loop.** Nightly grade → retrain → log hit rate and
