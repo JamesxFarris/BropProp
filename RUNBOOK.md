@@ -80,6 +80,30 @@ Free, no key, no browser, no rate limit. **This is the CS2 equivalent of
 Oracle's Elixir** and it is wired into the scheduled runs, so the manual
 command is for backfilling depth rather than for keeping current.
 
+**For a deep backfill, use the resumable one.** `npm run bo3 730` is a single
+indivisible walk: a deploy kills it and the next run starts over. On
+2026-09-08 that cost five restarts and most of a day for about 4,000 rows.
+
+```bash
+npm run bo3:resume            # 730 days in 30-day windows
+npm run bo3:resume 365 14     # 365 days in 14-day windows
+```
+
+It cuts the range into dated windows and records each one in
+`backfill_chunk` as it finishes, so a restart skips everything already done.
+Set **`BACKFILL_DAYS=730`** on the logger and it resumes itself on every boot
+— which is the point, because a deploy replaces the container and *nothing*
+running inside can survive one. A deploy then costs one window, not the walk.
+
+Windows go newest-first, so an interrupted job has still done the part the
+board prices. The consequence is that the oldest date in `map_stat` does not
+move until the whole range is walked; that looks like a stall and is not. A
+completed window is never revisited even if it wrote nothing, because an empty
+window is a real answer — bo3.gg's archive thins going back.
+
+`BACKFILL_CHUNK_DAYS` (default 30) trades granularity against overhead: each
+window re-pays the match-list paging, so very small chunks waste requests.
+
 **A deep backfill is a ~6 hour job, and must be detached.** Measured
 2026-09-08 on `npm run bo3 730`: 20,000 matches found, 13,102 of them parsed
 and worth fetching, and about 364 minutes projected from the first 200. Run it

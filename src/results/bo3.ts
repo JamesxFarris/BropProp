@@ -100,7 +100,9 @@ export async function getJson<T>(url: string): Promise<T> {
  * request per match into one per hundred — the difference between a season
  * backfill taking an hour and taking a day.
  */
-async function finishedMatches(since: string, cap: number): Promise<Bo3Match[]> {
+async function finishedMatches(
+  since: string, cap: number, until?: string,
+): Promise<Bo3Match[]> {
   const out: Bo3Match[] = [];
   for (let offset = 0; out.length < cap; offset += 100) {
     const params = new URLSearchParams();
@@ -109,6 +111,12 @@ async function finishedMatches(since: string, cap: number): Promise<Bo3Match[]> 
     params.set('page[offset]', String(offset));
     params.set('filter[matches.status][in]', 'finished');
     params.set('filter[matches.start_date][gt]', since);
+    // An upper bound turns "the last N days" into a window, which is what
+    // makes a backfill resumable: the work splits into chunks that can be
+    // recorded as done. Server-side filtering is a request-count saving only
+    // — the client-side check below is what actually enforces it, because
+    // this API answers an unknown filter with the UNFILTERED list and a 200.
+    if (until) params.set('filter[matches.start_date][lt]', until);
     params.set('filter[matches.discipline_id][eq]', String(CS2_DISCIPLINE));
     params.set('with', 'games');
 
@@ -121,6 +129,7 @@ async function finishedMatches(since: string, cap: number): Promise<Bo3Match[]> 
       if (m.status !== 'finished') continue;
       if (m.discipline_id !== CS2_DISCIPLINE) continue;
       if (m.start_date && m.start_date < since) continue;
+      if (until && m.start_date && m.start_date >= until) continue;
       out.push(m);
     }
     if (rows.length < 100) break;
@@ -248,6 +257,22 @@ async function storedMaps(since: string): Promise<Set<string>> {
 export type Bo3Options = {
   /** How far back to look. */
   days?: number;
+  /**
+   * Explicit lower bound, ISO `yyyy-mm-dd`. Overrides `days`.
+   *
+   * A chunked backfill keys its ledger on the exact window boundaries, and
+   * deriving them back from a day count rounds — half a day of drift renames
+   * the chunk and it gets walked again on the next boot.
+   */
+  since?: string;
+  /**
+   * Upper bound on match start date, ISO `yyyy-mm-dd`, exclusive.
+   *
+   * Turns "the last N days" into a window. That is what makes a long backfill
+   * resumable: the work splits into chunks that can be recorded as done, so a
+   * deploy costs one chunk instead of the whole walk.
+   */
+  until?: string;
   /** Cap on matches examined, so one run cannot take an afternoon. */
   maxMatches?: number;
   /** Keep every player rather than only the board's. */
@@ -274,11 +299,11 @@ export type Bo3Options = {
 export async function fetchBo3(opts: Bo3Options = {}): Promise<FetchStatsResult> {
   const days = opts.days ?? 3;
   const maxMatches = opts.maxMatches ?? 400;
-  const since = new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
+  const since = opts.since ?? new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
 
   const tracked = opts.allPlayers ? new Set<string>() : await trackedHandles();
   const done = opts.refetch ? new Set<string>() : await storedMaps(since);
-  const matches = await finishedMatches(since, maxMatches);
+  const matches = await finishedMatches(since, maxMatches, opts.until);
 
   // Only parsed matches carry stats — measured 99% against 0%. Skipping the
   // rest is the difference between 137 requests and 75 for the same data.

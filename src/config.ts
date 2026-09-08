@@ -21,6 +21,17 @@ export const config = {
   // load, so it runs here and the Stats page reads the table. Scheduled after
   // the CS2 sweep, so it scores against results the sweep has just landed.
   scoreCron: process.env.SCORE_CRON ?? '47 5 * * *',
+
+  // Deep CS2 backfill, resumed on boot. Off unless set.
+  //
+  // A deploy replaces the container, so a long backfill cannot survive one —
+  // it can only resume. Setting this makes the logger pick the job back up
+  // every time it starts, walking only the dated windows not yet recorded in
+  // `backfill_chunk`. Set it to 730 and forget it; it costs one chunk per
+  // deploy instead of the whole eight-hour walk, and does nothing once every
+  // window is done.
+  backfillDays: Number(process.env.BACKFILL_DAYS ?? 0),
+  backfillChunkDays: Number(process.env.BACKFILL_CHUNK_DAYS ?? 30),
   leagues: (process.env.LEAGUES ?? 'CS2,LOL')
     .split(',')
     .map((s) => s.trim().toUpperCase())

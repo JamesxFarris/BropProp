@@ -5,6 +5,7 @@ import { runResults } from './results/run.js';
 import { fetchBo3 } from './results/bo3.js';
 import { storeStats } from './results/store_stats.js';
 import { scoreCalls, storeScore, LEAGUES } from './results/validate_calls.js';
+import { resumeBackfill } from './results/backfill_resume.js';
 
 console.log(`BropProp logger up — schedule "${config.pollCron}", leagues ${config.leagues.join(',')}`);
 
@@ -121,3 +122,27 @@ console.log(`results schedule "${config.resultsCron}", cs2 accumulate "${config.
 
 await tick();       // don't wait a full interval for the first datapoint
 await gradeTick();  // and grade anything already waiting
+
+/**
+ * Resume the deep backfill, if one is configured.
+ *
+ * Deliberately not awaited: it runs for hours and the poller must not wait on
+ * it. Deliberately last, so a backfill can never delay the first poll or the
+ * first grading pass — collection is the job, and this is catch-up.
+ *
+ * `SIGTERM` sets the stop flag rather than killing the walk, so a deploy ends
+ * the run at the next chunk boundary and the chunk in flight is not thrown
+ * away half-finished. Railway will replace the container regardless; this just
+ * means the ledger stays honest about what actually completed.
+ */
+if (config.backfillDays > 0) {
+  let stopping = false;
+  process.once('SIGTERM', () => { stopping = true; });
+  void resumeBackfill({
+    days: config.backfillDays,
+    chunkDays: config.backfillChunkDays,
+    shouldStop: () => stopping,
+  }).catch((err) => {
+    console.warn('backfill stopped:', (err as Error).message.slice(0, 160));
+  });
+}
