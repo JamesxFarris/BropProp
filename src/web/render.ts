@@ -4,7 +4,7 @@ import type { MarketRow, PropHistory, PlayerGame } from './boardq.js';
 import type { FormStats, Play, CallStatus, NoCall } from './projection.js';
 import { evaluate, edgeProgress, type LineOption, flatBreakEven } from './projection.js';
 import { staleLine } from './stale.js';
-import type { Counters } from './statsq.js';
+import type { Counters, ScoreRow } from './statsq.js';
 import type { ClvSummary } from './clv.js';
 import type { Entry } from './optimize.js';
 import { isComboHandle } from '../normalize.js';
@@ -1906,6 +1906,70 @@ function barChart(
   </div>`;
 }
 
+/**
+ * Two probability series over time, against a 50% reference.
+ *
+ * Built for the model scorecard, where the gap between the two lines IS the
+ * finding — claimed sitting above realised is overconfidence, and you can
+ * only see that if both are drawn on one axis. The 50% rule is dashed and
+ * always present, because every number here has to be read against a coin.
+ *
+ * A single stored day cannot make a polyline, so points are drawn as dots
+ * too. That is the normal state on a young install, not an edge case.
+ */
+function lineChart(
+  series: Array<{ label: string; points: Array<number | null>; cls: string }>,
+  xLabels: string[],
+  o: { rule?: number; label?: string } = {},
+): string {
+  const n = xLabels.length;
+  if (n === 0) return '<div class="empty">Nothing scored yet.</div>';
+
+  const h = 120;
+  // A fixed window rather than an auto-fit: rescaling the axis as data arrives
+  // would make an unchanged model look like it was moving. Values outside it
+  // pin to the edge — deliberate, since anything beyond 35-70% on a prop hit
+  // rate is either a bug or a sample of three.
+  const lo = 0.35, hi = 0.7;
+  const y = (v: number) => h - ((Math.min(hi, Math.max(lo, v)) - lo) / (hi - lo)) * h;
+  const x = (i: number) => (n === 1 ? 50 : (i / (n - 1)) * 100);
+
+  const rule = o.rule ?? 0.5;
+  const parts = series.map((s) => {
+    const pts = s.points
+      .map((v, i) => (v === null ? null : `${x(i).toFixed(3)},${y(v).toFixed(2)}`))
+      .filter((p): p is string => p !== null);
+    // Point markers are zero-length round-capped lines, not circles. The
+    // viewBox is stretched to the container (100 units across a 1400px card),
+    // so a circle renders as an ellipse fourteen times wider than it is tall —
+    // which turned the whole series into a fuzzy band. A stroke with
+    // non-scaling-stroke ignores that scaling, and a round cap on a zero-length
+    // segment is a true circle at any width.
+    const dots = s.points
+      .map((v, i) => (v === null ? '' :
+        `<line x1="${x(i).toFixed(3)}" y1="${y(v).toFixed(2)}"
+               x2="${x(i).toFixed(3)}" y2="${y(v).toFixed(2)}" class="dot ${s.cls}"/>`))
+      .join('');
+    const line = pts.length > 1
+      ? `<polyline points="${pts.join(' ')}" class="line ${s.cls}"/>` : '';
+    return line + dots;
+  }).join('');
+
+  const keys = series
+    .map((s) => `<span class="key"><i class="swatch ${s.cls}"></i>${esc(s.label)}</span>`)
+    .join('');
+
+  return `<div class="chart">
+    <svg viewBox="0 0 100 ${h}" preserveAspectRatio="none" role="img"
+         aria-label="${esc(o.label ?? 'scorecard over time')}">
+      <line x1="0" x2="100" y1="${y(rule).toFixed(2)}" y2="${y(rule).toFixed(2)}" class="rule"/>
+      ${parts}
+    </svg>
+    <div class="chart-x"><span>${esc(xLabels[0]!)}</span><span>${esc(xLabels[n - 1]!)}</span></div>
+    <div class="chart-key">${keys}<span class="key"><i class="swatch rule"></i>50% — a coin</span></div>
+  </div>`;
+}
+
 /** A labelled proportion bar — ready against total, that kind of thing. */
 function meter(done: number, total: number, label: string): string {
   const pct = total > 0 ? Math.round((100 * done) / total) : 0;
@@ -1924,6 +1988,7 @@ export function statsPage(o: {
   record: Array<{ status: string; n: number }>;
   sources: Array<{ source: string; league: string; n: number }>;
   clv: ClvSummary;
+  scores: ScoreRow[];
 }): string {
   const c = o.counters;
 
@@ -1978,6 +2043,59 @@ export function statsPage(o: {
           .join('')}</tbody>
       </table></div>`;
 
+  // The scorecard, newest first from the table; charts read oldest-first.
+  const hist = [...o.scores].reverse();
+  const latest = o.scores[0] ?? null;
+  const pc = (v: number | null | undefined) =>
+    v === null || v === undefined ? '—' : `${(100 * v).toFixed(1)}%`;
+
+  const scoreBody = latest === null
+    ? `<div class="empty">No scorecard stored yet. It is computed once a day, and
+        needs settled matches to score against — this fills in on its own.</div>`
+    : `<div class="stat-row">
+        ${stat(pc(latest.realised), 'the model realised', `${latest.calls} calls`)}
+        ${stat(pc(latest.claimed), 'it predicted', 'average confidence')}
+        ${stat(latest.auc === null ? '—' : latest.auc.toFixed(3), 'AUC',
+               '0.50 = no skill')}
+        ${stat(latest.series, 'independent series', `over ${latest.days} days`)}
+      </div>
+
+      <p class="note">The number to read is <b>AUC</b>, not the hit rate. It is the
+        chance a winning call carried higher confidence than a losing one, so 0.500
+        means the model cannot tell the two apart — and no amount of recalibration
+        fixes that, because there is no ordering to correct. A hit rate on its own
+        says nothing until you know what doing nothing would have scored, which is
+        why both baselines sit below.</p>
+
+      <div class="stat-row">
+        ${stat(pc(latest.always_under), 'always take the under', 'no model at all')}
+        ${stat(pc(latest.always_over), 'always take the over', 'no model at all')}
+        ${stat(latest.series_judged
+                 ? `${latest.series_ahead}/${latest.series_judged}`
+                 : '—',
+               'series the model led',
+               latest.series_p === null ? '' : `p = ${latest.series_p.toFixed(3)}`)}
+      </div>
+
+      <p class="note"><b>Leg counts are not sample sizes.</b> Every player in a
+        series shares its length, its overtime and its pace, so one long map sends
+        every leg over at once. ${latest.calls} calls from ${latest.series} series is
+        ${latest.series} pieces of evidence, not ${latest.calls} — which is why the
+        significance quoted above is counted per series, and why nothing here is
+        settled yet.</p>
+
+      ${hist.length
+        ? lineChart(
+            [
+              { label: 'predicted', cls: 'claimed', points: hist.map((r) => r.claimed) },
+              { label: 'realised', cls: 'realised', points: hist.map((r) => r.realised) },
+              { label: 'always under', cls: 'baseline', points: hist.map((r) => r.always_under) },
+            ],
+            hist.map((r) => r.day),
+            { label: 'model scorecard over time' },
+          )
+        : ''}`;
+
   const body = `
   <div class="card">
     <div class="card-head"><h2>What has been collected</h2>
@@ -1995,6 +2113,12 @@ export function statsPage(o: {
     <div class="card-head"><h2>History collected, by week</h2>
       <span class="sub">per-map results, the thing everything else rests on</span></div>
     <div class="card-body">${barChart(weekData, { label: 'stat lines per week' })}</div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2>Has the model actually been right?</h2>
+      <span class="sub">every logged line replayed through the real engine, on history it had at the time</span></div>
+    <div class="card-body">${scoreBody}</div>
   </div>
 
   <div class="card">

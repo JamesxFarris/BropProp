@@ -4,6 +4,7 @@ import { pollOnce } from './poll.js';
 import { runResults } from './results/run.js';
 import { fetchBo3 } from './results/bo3.js';
 import { storeStats } from './results/store_stats.js';
+import { scoreCalls, storeScore } from './results/validate_calls.js';
 
 console.log(`BropProp logger up — schedule "${config.pollCron}", leagues ${config.leagues.join(',')}`);
 
@@ -75,10 +76,45 @@ async function accumulateTick() {
   }
 }
 
+let scoring = false;
+
+/**
+ * Score the model against everything that has settled, and store the result.
+ *
+ * This is the one job whose output nobody bets on — it exists so the board's
+ * claims stay checkable. The replay is slow (every settled market, through
+ * the real `evaluate()`, with every stat row for every player in them), which
+ * is exactly why it belongs on a schedule rather than on a page load.
+ */
+async function scoreTick() {
+  if (scoring) return;
+  scoring = true;
+  try {
+    const s = await scoreCalls();
+    if (s.settled === 0) {
+      console.log('model score: nothing settled yet');
+      return;
+    }
+    await storeScore(s);
+    const pc = (v: number | null) => (v === null ? '—' : `${(100 * v).toFixed(1)}%`);
+    console.log(
+      `model score: ${s.calls} calls / ${s.series} series — realised ${pc(s.realised)}, ` +
+      `claimed ${pc(s.claimed)}, AUC ${s.auc === null ? '—' : s.auc.toFixed(3)}, ` +
+      `always-under ${pc(s.alwaysUnder)}`);
+  } catch (err) {
+    // Scoring is reporting, not collection. It must never take the logger down.
+    console.warn('model score skipped:', (err as Error).message.slice(0, 120));
+  } finally {
+    scoring = false;
+  }
+}
+
 cron.schedule(config.pollCron, tick);
 cron.schedule(config.resultsCron, gradeTick);
 cron.schedule(config.accumulateCron, accumulateTick);
-console.log(`results schedule "${config.resultsCron}", cs2 accumulate "${config.accumulateCron}"`);
+cron.schedule(config.scoreCron, scoreTick);
+console.log(`results schedule "${config.resultsCron}", cs2 accumulate "${config.accumulateCron}", ` +
+            `model score "${config.scoreCron}"`);
 
 await tick();       // don't wait a full interval for the first datapoint
 await gradeTick();  // and grade anything already waiting

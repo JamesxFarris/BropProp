@@ -15,6 +15,12 @@ export const config = {
   // take far longer, and once the shorter window slides past them nothing
   // would look again. Cheap to repeat: the stat upsert makes overlap free.
   accumulateCron: process.env.ACCUMULATE_CRON ?? '23 5 * * *',
+  // The model's own scorecard, recomputed daily and stored so its record is a
+  // tracked series rather than a number re-derived by hand. It replays every
+  // settled market through `evaluate()`, which is far too slow for a page
+  // load, so it runs here and the Stats page reads the table. Scheduled after
+  // the CS2 sweep, so it scores against results the sweep has just landed.
+  scoreCron: process.env.SCORE_CRON ?? '47 5 * * *',
   leagues: (process.env.LEAGUES ?? 'CS2,LOL')
     .split(',')
     .map((s) => s.trim().toUpperCase())

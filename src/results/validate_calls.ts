@@ -102,7 +102,34 @@ function auc(rows: Array<{ p: number; won: boolean }>): number {
   return (rankSum - (wins * (wins + 1)) / 2) / (wins * losses);
 }
 
-export async function main(): Promise<void> {
+/**
+ * Everything one replay measured. Returned rather than printed so the daily
+ * job can store it and the CLI can format it, from one computation.
+ */
+export type Scorecard = {
+  settled: number;
+  calls: number;
+  pushes: number;
+  series: number;
+  days: number;
+  realised: number | null;
+  claimed: number | null;
+  auc: number | null;
+  alwaysOver: number | null;
+  alwaysUnder: number | null;
+  seriesAhead: number;
+  seriesJudged: number;
+  seriesP: number;
+  underSeries: number;
+  underSeriesJudged: number;
+  underSeriesP: number;
+  claimedEv: number | null;
+  realisedEv: number | null;
+  byRange: Array<{ range: string; under: number; n: number; margin: number }>;
+  buckets: Array<{ band: string; n: number; won: number; claimedEv: number; realEv: number }>;
+};
+
+export async function scoreCalls(): Promise<Scorecard> {
   const markets = await q<Mkt>(`
     WITH lines AS (
       SELECT pr.id AS prop_id, p.canon_handle, pr.stat, pr.map_start, pr.map_end,
@@ -141,11 +168,14 @@ export async function main(): Promise<void> {
     HAVING count(*) = (l.map_end - l.map_start + 1)
        AND sum(CASE WHEN l.stat = 'kills' THEN ms.kills ELSE ms.headshots END) IS NOT NULL`);
 
-  console.log(`settled markets with a pre-match line: ${markets.length}`);
-  if (markets.length === 0) {
-    console.log('Nothing to score yet.');
-    return;
-  }
+  const empty: Scorecard = {
+    settled: 0, calls: 0, pushes: 0, series: 0, days: 0,
+    realised: null, claimed: null, auc: null, alwaysOver: null, alwaysUnder: null,
+    seriesAhead: 0, seriesJudged: 0, seriesP: 1,
+    underSeries: 0, underSeriesJudged: 0, underSeriesP: 1,
+    claimedEv: null, realisedEv: null, byRange: [], buckets: [],
+  };
+  if (markets.length === 0) return empty;
 
   const handles = [...new Set(markets.map((m) => m.canon_handle))];
   const hist = await q<{
@@ -290,48 +320,81 @@ export async function main(): Promise<void> {
     buckets.set(b, cur);
   }
 
-  const pct = (a: Arm) => (a.n ? (100 * a.won) / a.n : 0);
-  const show = (name: string, a: Arm) => {
-    if (!a.n) { console.log(`${name.padEnd(22)} nothing decided`); return; }
-    console.log(
-      `${name.padEnd(22)} ${String(a.won).padStart(4)}/${String(a.n).padEnd(4)}` +
-      ` = ${pct(a).toFixed(1)}%`);
-  };
+  const rate = (a: Arm) => (a.n ? a.won / a.n : null);
 
-  const allSeries = new Set([...seriesLean.keys()]);
-  console.log(`calls the model would have made: ${model.n}  (pushes excluded: ${pushes})`);
-  console.log(`those legs came from ${calledSeries.size} distinct series ` +
-              `on ${days.size} distinct days`);
-  console.log(`(settled data spans ${allSeries.size} series in total)`);
+  // Series where the model's calls came out ahead of even, versus behind.
+  // Series it split exactly are dropped rather than counted as half, which is
+  // what a sign test needs.
+  const mLeans = [...seriesModel.values()].filter((v) => v.won * 2 !== v.n);
+  const mAhead = mLeans.filter((v) => v.won * 2 > v.n).length;
+
+  // The same question for the direction baseline, asked once per series
+  // instead of once per leg. This is the test that survives the correlation.
+  const leans = [...seriesLean.values()].filter((v) => v.under * 2 !== v.n);
+  const underSeries = leans.filter((v) => v.under * 2 > v.n).length;
+
+  return {
+    settled: markets.length,
+    calls: model.n,
+    pushes,
+    series: calledSeries.size,
+    days: days.size,
+    realised: rate(model),
+    claimed: rows.length ? rows.reduce((a, r) => a + r.p, 0) / rows.length : null,
+    auc: rows.length ? auc(rows) : null,
+    alwaysOver: rate(alwaysOver),
+    alwaysUnder: rate(alwaysUnder),
+    seriesAhead: mAhead,
+    seriesJudged: mLeans.length,
+    seriesP: signTest(mAhead, mLeans.length),
+    underSeries,
+    underSeriesJudged: leans.length,
+    underSeriesP: signTest(underSeries, leans.length),
+    claimedEv: priced ? claimedSum / priced : null,
+    realisedEv: priced ? realSum / priced : null,
+    byRange: [...underByRange]
+      .sort()
+      .map(([range, v]) => ({ range, under: v.won, n: v.n, margin: v.margin / v.n })),
+    buckets: [...buckets.entries()]
+      .sort()
+      .map(([band, v]) => ({ band, n: v.n, won: v.won, claimedEv: v.claimedEv, realEv: v.realEv })),
+  };
+}
+
+/** The scorecard as a person reads it. Kept apart from the measuring. */
+export function report(s: Scorecard): void {
+  const p1 = (v: number | null) => (v === null ? '—' : `${(100 * v).toFixed(1)}%`);
+
+  console.log(`settled markets with a pre-match line: ${s.settled}`);
+  if (s.settled === 0) { console.log('Nothing to score yet.'); return; }
+
+  console.log(`calls the model would have made: ${s.calls}  (pushes excluded: ${s.pushes})`);
+  console.log(`those legs came from ${s.series} distinct series on ${s.days} distinct days`);
   console.log();
   console.log('Leg counts below are NOT sample sizes. Every player in a series');
   console.log('shares its length, its overtime and its pace, so their props move');
   console.log('together — a long map sends everyone over at once. The series');
   console.log('count is the honest n, and it is the number the verdict uses.');
   console.log();
-  show('MODEL (its picks)', model);
-  show('baseline: always over', alwaysOver);
-  show('baseline: always under', alwaysUnder);
+  console.log(`MODEL (its picks)      ${p1(s.realised)}`);
+  console.log(`baseline: always over  ${p1(s.alwaysOver)}`);
+  console.log(`baseline: always under ${p1(s.alwaysUnder)}`);
 
   console.log('\nunder rate by map range (the shade is not one direction):');
-  for (const [k, v] of [...underByRange].sort()) {
+  for (const r of s.byRange) {
     console.log(
-      `  maps ${k.padEnd(8)} ${String(v.won).padStart(4)}/${String(v.n).padEnd(4)}` +
-      ` = ${((100 * v.won) / v.n).toFixed(1)}%   mean(total-line) ${(v.margin / v.n).toFixed(2)}`);
+      `  maps ${r.range.padEnd(8)} ${String(r.under).padStart(4)}/${String(r.n).padEnd(4)}` +
+      ` = ${((100 * r.under) / r.n).toFixed(1)}%   mean(total-line) ${r.margin.toFixed(2)}`);
   }
 
-  // The same question asked once per series instead of once per leg. This is
-  // the test that survives the correlation: does a series as a whole lean the
-  // way the strategy needs, more often than a coin would say?
-  const leans = [...seriesLean.values()].filter((v) => v.under * 2 !== v.n);
-  const underSeries = leans.filter((v) => v.under * 2 > v.n).length;
-  console.log(`\nat the series level: ${underSeries}/${leans.length} series leaned under` +
-              `  (two-sided p ${signTest(underSeries, leans.length).toFixed(3)})`);
+  console.log(`\nat the series level: ${s.underSeries}/${s.underSeriesJudged} series ` +
+              `leaned under  (two-sided p ${s.underSeriesP.toFixed(3)})`);
 
-  const predMean = rows.length ? rows.reduce((a, r) => a + r.p, 0) / rows.length : 0;
-  console.log(`\nthe model PREDICTED an average of ${(100 * predMean).toFixed(1)}%`);
-  console.log(`it realised ${pct(model).toFixed(1)}%`);
-  console.log(`>>> claimed minus realised: ${(100 * predMean - pct(model)).toFixed(1)} points`);
+  console.log(`\nthe model PREDICTED an average of ${p1(s.claimed)}`);
+  console.log(`it realised ${p1(s.realised)}`);
+  if (s.claimed !== null && s.realised !== null) {
+    console.log(`>>> claimed minus realised: ${(100 * (s.claimed - s.realised)).toFixed(1)} points`);
+  }
 
   // Discrimination, separately from calibration. Being 8 points overconfident
   // is fixable by shrinking every number toward 0.5 — being unable to tell a
@@ -340,54 +403,100 @@ export async function main(): Promise<void> {
   // AUC is the chance that a randomly chosen winning call carried a higher
   // predicted probability than a randomly chosen losing one. 0.5 is no skill;
   // below 0.5 means the ranking is backwards.
-  console.log(`discrimination (AUC): ${auc(rows).toFixed(3)}   [0.50 = no skill]`);
+  console.log(`discrimination (AUC): ${s.auc === null ? '—' : s.auc.toFixed(3)}` +
+              `   [0.50 = no skill]`);
 
   console.log('\ncalibration by predicted probability:');
   console.log('predicted      n   realised   claimed EV/bet   realised EV/bet');
-  for (const [b, v] of [...buckets.entries()].sort()) {
+  for (const b of s.buckets) {
     console.log(
-      b.padEnd(13), String(v.n).padStart(4),
-      `${((100 * v.won) / v.n).toFixed(0)}%`.padStart(9),
-      (v.n ? `${((100 * v.claimedEv) / v.n).toFixed(1)}%` : '—').padStart(16),
-      (v.n ? `${((100 * v.realEv) / v.n).toFixed(1)}%` : '—').padStart(17),
+      b.band.padEnd(13), String(b.n).padStart(4),
+      `${((100 * b.won) / b.n).toFixed(0)}%`.padStart(9),
+      `${((100 * b.claimedEv) / b.n).toFixed(1)}%`.padStart(16),
+      `${((100 * b.realEv) / b.n).toFixed(1)}%`.padStart(17),
     );
   }
 
-  if (priced) {
-    console.log(`\nacross ${priced} priced calls:`);
-    console.log(`  claimed  EV: ${((100 * claimedSum) / priced).toFixed(1)}% per bet`);
-    console.log(`  realised EV: ${((100 * realSum) / priced).toFixed(1)}% per bet`);
+  if (s.claimedEv !== null && s.realisedEv !== null) {
+    console.log(`\nper priced bet:`);
+    console.log(`  claimed  EV: ${(100 * s.claimedEv).toFixed(1)}%`);
+    console.log(`  realised EV: ${(100 * s.realisedEv).toFixed(1)}%`);
   }
 
   console.log();
-  if (!model.n) {
-    console.log('VERDICT: no calls to score.');
-    return;
-  }
+  if (!s.calls) { console.log('VERDICT: no calls to score.'); return; }
 
-  // Series where the model's calls came out ahead, versus behind. This is the
-  // model's own result at the unit of independence.
-  const mLeans = [...seriesModel.values()].filter((v) => v.won * 2 !== v.n);
-  const mAhead = mLeans.filter((v) => v.won * 2 > v.n).length;
-  const mP = signTest(mAhead, mLeans.length);
-  console.log(`the model's calls led in ${mAhead}/${mLeans.length} series ` +
-              `(two-sided p ${mP.toFixed(3)})`);
-
-  const beatsBoth = pct(model) > pct(alwaysOver) && pct(model) > pct(alwaysUnder);
+  console.log(`the model's calls led in ${s.seriesAhead}/${s.seriesJudged} series ` +
+              `(two-sided p ${s.seriesP.toFixed(3)})`);
   console.log();
+
+  const beatsBoth =
+    s.realised !== null && s.alwaysOver !== null && s.alwaysUnder !== null &&
+    s.realised > s.alwaysOver && s.realised > s.alwaysUnder;
+  // Say what the AUC actually is rather than asserting a fixed conclusion.
+  // It drifts as results settle, and a line reading "AUC 0.542 says its
+  // confidence carries no information" is its own small dishonesty.
+  const a = s.auc;
+  const aucNote = a === null
+    ? 'AUC could not be computed.'
+    : Math.abs(a - 0.5) < 0.02
+      ? `AUC ${a.toFixed(3)} is a coin flip: its confidence carries no information, ` +
+        `and no recalibration fixes that because there is no ordering to correct.`
+      : a < 0.5
+        ? `AUC ${a.toFixed(3)} is below 0.5, meaning the ranking is pointing the ` +
+          `wrong way on this sample.`
+        : `AUC ${a.toFixed(3)} is above a coin flip, but well short of evidence — ` +
+          `on ${s.series} series that is comfortably inside noise.`;
+
   console.log(
     !beatsBoth
       ? `VERDICT: the model does not beat a no-model baseline ` +
-        `(${pct(model).toFixed(1)}% vs over ${pct(alwaysOver).toFixed(1)}% / ` +
-        `under ${pct(alwaysUnder).toFixed(1)}%), and AUC ${auc(rows).toFixed(3)} ` +
-        `says its confidence carries no information — a call it rates 75% wins ` +
-        `no more often than one it rates 56%.`
-      : `VERDICT: model ${pct(model).toFixed(1)}% beats both baselines.`);
+        `(${p1(s.realised)} vs over ${p1(s.alwaysOver)} / under ${p1(s.alwaysUnder)}). ` +
+        aucNote
+      : `VERDICT: model ${p1(s.realised)} beats both baselines. ${aucNote}`);
   console.log(
-    `Either way, ${calledSeries.size} series across ${days.size} days is far too ` +
-    `little to conclude anything, and none of it is out of sample — book lines ` +
-    `only exist from the day logging started, so a shade found here can only ever ` +
-    `be confirmed forward, never backtested.`);
+    `Either way, ${s.series} series across ${s.days} days is far too little to ` +
+    `conclude anything, and none of it is out of sample — book lines only exist ` +
+    `from the day logging started, so a shade found here can only ever be ` +
+    `confirmed forward, never backtested.`);
+}
+
+/**
+ * Store today's scorecard, so the model's record is a series rather than a
+ * number someone re-derives by hand. `--store` on the CLI, and the daily job.
+ *
+ * One row per league per day: re-running corrects today rather than appending
+ * a second opinion, because two runs hours apart differ only by whatever
+ * settled in between and both are "today's" answer.
+ */
+export async function storeScore(s: Scorecard, league = 'CS2'): Promise<void> {
+  await q(
+    `INSERT INTO model_score
+       (scored_at, league, calls, series, days, realised, claimed, auc,
+        always_over, always_under, series_ahead, series_judged, series_p,
+        claimed_ev, realised_ev)
+     VALUES (date_trunc('day', now()), $1, $2, $3, $4, $5, $6, $7,
+             $8, $9, $10, $11, $12, $13, $14)
+     ON CONFLICT (league, scored_at) DO UPDATE SET
+       calls = EXCLUDED.calls, series = EXCLUDED.series, days = EXCLUDED.days,
+       realised = EXCLUDED.realised, claimed = EXCLUDED.claimed, auc = EXCLUDED.auc,
+       always_over = EXCLUDED.always_over, always_under = EXCLUDED.always_under,
+       series_ahead = EXCLUDED.series_ahead, series_judged = EXCLUDED.series_judged,
+       series_p = EXCLUDED.series_p,
+       claimed_ev = EXCLUDED.claimed_ev, realised_ev = EXCLUDED.realised_ev`,
+    [league, s.calls, s.series, s.days, s.realised, s.claimed, s.auc,
+     s.alwaysOver, s.alwaysUnder, s.seriesAhead, s.seriesJudged, s.seriesP,
+     s.claimedEv, s.realisedEv],
+  );
+}
+
+export async function main(): Promise<void> {
+  const s = await scoreCalls();
+  report(s);
+  if (process.argv.includes('--store')) {
+    await storeScore(s);
+    console.log('\nstored to model_score.');
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

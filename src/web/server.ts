@@ -14,7 +14,7 @@ import {
   openSlipBook, WrongBookError, SideUnavailableError,
 } from './picks.js';
 import { boardPage, edgesPage, slipsPage, historyPage, buildPage, loginPage, statsPage } from './render.js';
-import { counters, historyByWeek, coverage, record, sources } from './statsq.js';
+import { counters, historyByWeek, coverage, record, sources, scoreHistory } from './statsq.js';
 import { clv } from './clv.js';
 import { buildEntries } from './optimize.js';
 import { projectMarkets } from './projection.js';
@@ -379,11 +379,11 @@ const server = createServer(async (req, res) => {
     }
 
     if (url.pathname === '/stats') {
-      const [h, ctr, weeks, cov, rec, src, value] = await Promise.all([
-        health(null), counters(), historyByWeek(), coverage(), record(), sources(), clv(),
+      const [h, ctr, weeks, cov, rec, src, value, scores] = await Promise.all([
+        health(null), counters(), historyByWeek(), coverage(), record(), sources(), clv(), scoreHistory(),
       ]);
       return html(res, statsPage({
-        health: h, counters: ctr, weeks, coverage: cov, record: rec, sources: src, clv: value,
+        health: h, counters: ctr, weeks, coverage: cov, record: rec, sources: src, clv: value, scores,
       }));
     }
 

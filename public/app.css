@@ -1608,6 +1608,46 @@ body.searching .tick { display: none; }
   font-family: var(--mono);
 }
 
+/* The scorecard's two-series line chart. The viewBox is stretched to fit, so
+   strokes have to opt out of that scaling or the horizontals go hairline and
+   the verticals go fat. */
+.chart .line, .chart .rule, .chart .dot { fill: none; vector-effect: non-scaling-stroke; }
+.chart .line { stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chart .dot {
+  vector-effect: non-scaling-stroke;
+  stroke-width: 5; stroke-linecap: round;
+}
+.chart .rule { stroke: var(--text-3); stroke-width: 1; stroke-dasharray: 3 3; opacity: .7; }
+/* Stroke only. These classes sit on polylines as well as markers, and a fill
+   here paints the area under the curve — which reads as a quantity nobody
+   measured. Markers are round-capped strokes, so they need no fill. */
+.chart .claimed  { stroke: var(--model); stroke-dasharray: 5 4; }
+/* Dashed, not just a different green. What the model CLAIMED is a forecast;
+   what it realised is a fact, and the two read as the same kind of thing when
+   they differ only by hue — the more so for anyone who cannot separate
+   --model from --over. */
+.chart-key .swatch.claimed {
+  background: none; border-top: 3px dashed var(--model); height: 0;
+}
+.chart .realised { stroke: var(--over); }
+.chart .baseline { stroke: var(--under); opacity: .8; }
+/* Must come after the series colours: a marker carries both classes, and the
+   claimed series is dashed. Equal specificity means the last rule wins, so
+   this sits here rather than up with the other .dot properties. */
+.chart .dot { stroke-dasharray: none; }
+
+.chart-key {
+  display: flex; flex-wrap: wrap; gap: 4px 16px;
+  margin-top: 10px; font-size: 12px; color: var(--text-3);
+}
+.chart-key .key { display: inline-flex; align-items: center; gap: 6px; }
+.chart-key .swatch { width: 12px; height: 3px; border-radius: 2px; background: currentColor; }
+.chart-key .swatch.realised { background: var(--over); }
+.chart-key .swatch.baseline { background: var(--under); }
+.chart-key .swatch.rule {
+  background: transparent; border-top: 2px dashed var(--text-3); height: 0;
+}
+
 .meter-row { margin-bottom: 14px; }
 .meter-row:last-child { margin-bottom: 0; }
 .meter-top {

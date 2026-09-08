@@ -75,3 +75,39 @@ export async function sources(): Promise<Array<{ source: string; league: string;
   return q(`SELECT source, league, count(*)::int n
               FROM map_stat GROUP BY 1, 2 ORDER BY n DESC`);
 }
+
+/** One stored scorecard — see `db/012_model_score.sql`. */
+export type ScoreRow = {
+  day: string;
+  calls: number;
+  series: number;
+  days: number;
+  realised: number | null;
+  claimed: number | null;
+  auc: number | null;
+  always_over: number | null;
+  always_under: number | null;
+  series_ahead: number | null;
+  series_judged: number | null;
+  series_p: number | null;
+};
+
+/**
+ * The model's record over time, newest first.
+ *
+ * Read rather than computed: the walk-forward replay behind each row reads
+ * every settled market and every stat row for the players in them, which is a
+ * scheduled job's work, not a page load's.
+ */
+export async function scoreHistory(limit = 60): Promise<ScoreRow[]> {
+  return q(
+    `SELECT to_char(scored_at, 'YYYY-MM-DD') AS day,
+            calls, series, days, realised, claimed, auc,
+            always_over, always_under, series_ahead, series_judged, series_p
+       FROM model_score
+      WHERE league = 'CS2'
+      ORDER BY scored_at DESC
+      LIMIT $1`,
+    [limit],
+  );
+}
