@@ -890,7 +890,7 @@ export function boardPage(o: {
   // half-point line move turns into a call.
   const nearness = (r: MarketRow) => {
     const s = statusOf(r);
-    return s.play === null && s.why.kind === 'fair' ? edgeProgress(s.why.edge) : -1;
+    return s.play === null && s.why.kind === 'fair' ? edgeProgress(s.why.p) : -1;
   };
 
   // A model that can't see a market is not the same as a market with no edge,

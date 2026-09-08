@@ -71,29 +71,44 @@ test('a market with neither side offered is unavailable, whatever the edge', () 
   assert.deepEqual(s.why, { kind: 'unavailable' });
 });
 
-test('an evaluated market under MIN_EDGE reports the edge it actually found', () => {
-  // The number is the whole point of separating this from "no history": 0.4
-  // off is one line move from a call and 2.0 off is not, and the board sorts
-  // on the difference.
-  const s = evaluate({ form: flat(10.1), options: [both('prizepicks', 10)] });
+/**
+ * These three used to pin an absolute half-a-kill floor. That floor is gone:
+ * it was the wrong shape (0.5 against a 30.5 line is a 1.6% claim and against
+ * a 5.5 line a 9% one, and the board treated them alike — DESIGN.md had it
+ * logged as an open question), and it selected sides by comparing a mean to a
+ * line, which on a right-skewed distribution favours the over even when the
+ * over is the losing side. They are rewritten here in the terms that replaced
+ * it rather than deleted, because the intent behind each still holds.
+ */
+
+test('a market the history splits near evenly is fair, and reports how close it came', () => {
+  // Seven of twelve is a 58% record, which shrinks to under the threshold.
+  // The `p` is reported anyway, because a market two points short is one line
+  // move from live and the board sorts those first.
+  const near = form({
+    series: 12, totals: [9, 9, 9, 9, 9, 9, 9, 2, 2, 2, 2, 2], mean: 6.08, sd: 3.4,
+  });
+  const s = evaluate({ form: near, options: [both('prizepicks', 5.5)] });
   assert.equal(s.play, null);
   assert.equal(s.why?.kind, 'fair');
-  assert.ok(s.why!.kind === 'fair' && Math.abs(s.why.edge - 0.1) < 1e-9);
+  assert.ok(s.why!.kind === 'fair' && s.why.p > 0.5 && s.why.p < 0.55, `got ${(s.why as any).p}`);
 });
 
-test('MIN_EDGE is a floor, not a suggestion', () => {
-  // Half a unit is inside the rounding of a line, so 0.49 must not call and
-  // 0.51 must. This threshold is the difference between a board with edges on
-  // it and a board with an opinion about every row.
-  assert.equal(evaluate({ form: flat(10.49), options: [both('prizepicks', 10)] }).play, null);
-  assert.ok(evaluate({ form: flat(10.51), options: [both('prizepicks', 10)] }).play);
+test('the confidence threshold is a floor, not a suggestion', () => {
+  // Nine of twelve clears it; seven of twelve does not. The difference between
+  // a board with edges on it and a board with an opinion about every row.
+  const nine = form({ series: 12, totals: [9,9,9,9,9,9,9,9,9,2,2,2], mean: 7.25, sd: 3.2 });
+  const seven = form({ series: 12, totals: [9,9,9,9,9,9,9,2,2,2,2,2], mean: 6.08, sd: 3.4 });
+  assert.ok(evaluate({ form: nine, options: [both('prizepicks', 5.5)] }).play);
+  assert.equal(evaluate({ form: seven, options: [both('prizepicks', 5.5)] }).play, null);
 });
 
 test('edgeProgress says how close a fair market is to being a call', () => {
-  // 1.0 is exactly at the threshold, so the board can sort near-misses first.
-  assert.equal(edgeProgress(0.5), 1);
-  assert.equal(edgeProgress(0.25), 0.5);
-  assert.equal(edgeProgress(-3), 0);
+  // Measured in probability now, since that is what the threshold is. 1.0 is
+  // exactly at it, so the board can sort near-misses first.
+  assert.equal(edgeProgress(0.55), 1);
+  assert.ok(Math.abs(edgeProgress(0.525) - 0.5) < 1e-9);
+  assert.equal(edgeProgress(0.4), 0);
 });
 
 // ------------------------------------------------------ side and book -----
@@ -217,43 +232,40 @@ test('a combo whose members never played together makes no call', () => {
  */
 
 test('a total exactly on the line is excluded, not counted as a loss', () => {
-  // Ten series: 4 over, 3 under, 3 landing exactly on 20. Taking the over,
-  // the honest hit rate is 4 of the 7 that could be settled, not 4 of 10.
-  // The totals sit well clear of the line so the call survives MIN_EDGE and
-  // the hit rate is actually reached — mean 21.0 against a line of 20.
-  const f = form({
-    series: 10,
-    totals: [30, 28, 26, 24, 20, 20, 20, 15, 14, 13],
-    mean: 21,
-    sd: 6,
+  // Two samples of the same size, identical except that in one the two series
+  // that landed exactly on 20 are pushes, and in the other they are losses.
+  // Same size means the same shrink, so any difference in the reported rate is
+  // the push handling and nothing else.
+  const withPushes = form({
+    series: 12, totals: [30, 28, 26, 25, 24, 23, 22, 21, 20, 20, 15, 14], mean: 23.2, sd: 4.6,
   });
-  const r = evaluate({
-    form: f,
-    options: [{ book: 'prizepicks', line: 20, overOk: true, underOk: true }],
-    maps: 1,
+  const asLosses = form({
+    series: 12, totals: [30, 28, 26, 25, 24, 23, 22, 21, 15, 15, 15, 14], mean: 21.5, sd: 5.4,
   });
-  assert.ok(r.play, 'should make a call');
+  const opts: LineOption[] = [{ book: 'prizepicks', line: 20, overOk: true, underOk: true }];
+  const a = evaluate({ form: withPushes, options: opts, maps: 1 });
+  const b = evaluate({ form: asLosses, options: opts, maps: 1 });
+  assert.ok(a.play && b.play, 'both should be calls');
   assert.ok(
-    Math.abs(r.play.hitRate - 4 / 7) < 1e-9,
-    `pushes must leave the denominator: got ${r.play.hitRate}, wanted ${4 / 7}`,
+    a.play.hitRate > b.play.hitRate,
+    `a pushed series must not count against the side: ${a.play.hitRate} vs ${b.play.hitRate}`,
   );
 });
 
-test('a half-point line has no pushes and is unaffected', () => {
-  // The common case must not change: nothing can land on 20.5.
+test('a half-point line has no pushes, and is damped but still a call', () => {
+  // Nothing can land on 20.5, so every series settles. Six of eight is a 75%
+  // record; it must stay a call and must NOT be reported as 75%.
   const f = form({
-    series: 8,
-    totals: [25, 24, 23, 22, 15, 14, 13, 12],
-    mean: 18.5,
-    sd: 5,
+    series: 8, totals: [25, 24, 23, 22, 21, 21, 13, 12], mean: 20.1, sd: 5,
   });
   const r = evaluate({
     form: f,
     options: [{ book: 'prizepicks', line: 20.5, overOk: true, underOk: true }],
     maps: 1,
   });
-  assert.ok(r.play);
-  assert.ok(Math.abs(r.play.hitRate - 4 / 8) < 1e-9, `got ${r.play.hitRate}`);
+  assert.ok(r.play, 'six of eight should clear the threshold');
+  assert.ok(r.play.hitRate > 0.55, `still a call: ${r.play.hitRate}`);
+  assert.ok(r.play.hitRate < 0.75, `but damped below the raw record: ${r.play.hitRate}`);
 });
 
 test('a market that only ever pushed reports no hit rate rather than dividing by zero', () => {
@@ -267,4 +279,89 @@ test('a market that only ever pushed reports no hit rate rather than dividing by
   });
   // Every series pushed, so there is no edge either way and no call to make.
   assert.equal(r.play, null);
+});
+
+/**
+ * Picking a side by probability rather than by the mean.
+ *
+ * Kill counts are right-skewed: measured across 239 CS2 players and 18,712
+ * series, 53.3% of a player's series land BELOW their own mean, and mean minus
+ * median averages +0.55 kills. So a line set near the median sits below the
+ * mean, and selecting a side by `mean - line` recommended the over on markets
+ * where the over was more likely to lose. On a live board that produced 77.4%
+ * over calls, and lines moved AWAY from our picks 72% of the time — 0 of 6 on
+ * the highest-scoring ones.
+ *
+ * The side is now chosen by the share of a player's own history that would
+ * actually have won it, shrunk toward a coin flip by how little history there
+ * is. That also makes the threshold proportional: 54% means the same thing on
+ * a 5.5 line and a 30.5 line, which half a kill never did.
+ */
+
+test('a right-skewed sample does not get called over just because the mean is high', () => {
+  // Twelve series. Nine land at 8, three spike to 30 — a classic esports
+  // distribution. Mean is 13.5, well above a line of 10, so the old
+  // mean-minus-line rule called the over. But only 3 of 12 series actually
+  // cleared 10: the over loses three times out of four.
+  const totals = [30, 30, 30, 8, 8, 8, 8, 8, 8, 8, 8, 8];
+  const f = form({ series: 12, totals, mean: 13.5, sd: 10 });
+  const r = evaluate({
+    form: f,
+    options: [{ book: 'underdog', line: 10, overOk: true, underOk: true }],
+    maps: 1,
+  });
+  assert.notEqual(r.play?.side, 'over', 'the over loses 9 times in 12 and must not be the call');
+});
+
+test('the under is called when the history actually supports it', () => {
+  // Same sample, and the under is the side that wins 9 of 12.
+  const totals = [30, 30, 30, 8, 8, 8, 8, 8, 8, 8, 8, 8];
+  const f = form({ series: 12, totals, mean: 13.5, sd: 10 });
+  const r = evaluate({
+    form: f,
+    options: [{ book: 'underdog', line: 10, overOk: true, underOk: true }],
+    maps: 1,
+  });
+  assert.equal(r.play?.side, 'under');
+});
+
+test('a perfect record on a thin sample is not reported as near-certain', () => {
+  // Six from six is 100% observed. It is not a 100% chance, and a board that
+  // says so will be believed. Shrinking toward a coin flip by sample size is
+  // what stops six games outranking sixty.
+  const f = form({ series: 6, totals: [20, 20, 20, 20, 20, 20], mean: 20, sd: 0.1 });
+  const r = evaluate({
+    form: f,
+    options: [{ book: 'underdog', line: 10, overOk: true, underOk: true }],
+    maps: 1,
+  });
+  assert.ok(r.play, 'six clear wins should still be a call');
+  assert.ok(r.play.hitRate < 0.9, `a 6-game sweep must be damped, got ${r.play.hitRate}`);
+  assert.ok(r.play.hitRate > 0.5, `but it should still favour the winning side, got ${r.play.hitRate}`);
+});
+
+test('the same record on a deep sample is damped less', () => {
+  const thin = form({ series: 6, totals: Array(6).fill(20), mean: 20, sd: 0.1 });
+  const deep = form({ series: 40, totals: Array(40).fill(20), mean: 20, sd: 0.1 });
+  const opts: LineOption[] = [{ book: 'underdog', line: 10, overOk: true, underOk: true }];
+  const a = evaluate({ form: thin, options: opts, maps: 1 });
+  const b = evaluate({ form: deep, options: opts, maps: 1 });
+  assert.ok(a.play && b.play);
+  assert.ok(
+    b.play.hitRate > a.play.hitRate,
+    `40 games should earn more confidence than 6: ${b.play.hitRate} vs ${a.play.hitRate}`,
+  );
+});
+
+test('the threshold is proportional, so it means the same on a big line as a small one', () => {
+  // Both markets win 7 of 12. One is a 5.5 line, the other a 30.5 line. Under
+  // an absolute half-a-unit rule these were wildly different claims; as a
+  // probability they are the same claim and must be treated alike.
+  const small = form({ series: 12, totals: [9,9,9,9,9,9,9,9,9,2,2,2], mean: 7.25, sd: 3.2 });
+  const big = form({ series: 12, totals: [34,34,34,34,34,34,34,34,34,27,27,27], mean: 32.25, sd: 3.2 });
+  const a = evaluate({ form: small, options: [{ book: 'underdog', line: 5.5, overOk: true, underOk: true }], maps: 1 });
+  const b = evaluate({ form: big, options: [{ book: 'underdog', line: 30.5, overOk: true, underOk: true }], maps: 1 });
+  assert.equal(a.play?.side, b.play?.side, 'same record, same side');
+  assert.ok(a.play && b.play, 'both should be calls or neither');
+  assert.ok(Math.abs(a.play.hitRate - b.play.hitRate) < 1e-9, 'and the same confidence');
 });

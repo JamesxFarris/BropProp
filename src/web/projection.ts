@@ -69,7 +69,26 @@ export type Play = {
 
 const MIN_SERIES = 6;    // below this, form is noise wearing a number
 export const MIN_MAPS = 12;     // single maps needed before modelling a range from them
-const MIN_EDGE = 0.5;    // half a kill is inside the rounding of a line
+/**
+ * How confident the shrunk history must be before a market is a call.
+ *
+ * This replaced an absolute half-a-kill floor, which DESIGN.md had already
+ * flagged as the wrong shape: 0.5 against a 30.5-kill line is a 1.6% claim
+ * and against a 5.5-kill assists line a 9% one, and the board treated them
+ * alike. A probability is scale-free, so one threshold means the same thing on
+ * every market.
+ */
+const MIN_P = 0.55;
+
+/**
+ * Strength of the coin-flip prior an observed rate is shrunk toward, in
+ * pseudo-observations. Ten is deliberately heavy: hit rate here is measured on
+ * the same history used to choose the side, so it is optimistic by
+ * construction — the board read 85-90% on markets the market itself priced
+ * near 50%. Ten flips pulls a six-game sweep back to 73% and leaves a
+ * forty-game record largely intact, which is the trade this is for.
+ */
+const PRIOR = 10;
 const DRAWS = 4000;
 
 /** Deterministic PRNG, so the same board renders the same numbers every time. */
@@ -155,8 +174,8 @@ export type NoCall =
   | { kind: 'thin'; series: number; maps: number }
   /** Neither side is offered by any book listing it. */
   | { kind: 'unavailable' }
-  /** Evaluated, and the best edge available is under MIN_EDGE. */
-  | { kind: 'fair'; edge: number };
+  /** Evaluated, and the best side available is under MIN_P. */
+  | { kind: 'fair'; edge: number; p: number };
 
 export type CallStatus = { play: Play; why: null } | { play: null; why: NoCall };
 
@@ -172,8 +191,15 @@ export type Evaluation = {
   handle?: string;
 };
 
-/** How close a `fair` market is to being a call — 1.0 means it is at MIN_EDGE. */
-export const edgeProgress = (edge: number) => Math.max(0, edge) / MIN_EDGE;
+/**
+ * How close a `fair` market is to being a call — 1.0 means it is at MIN_P.
+ *
+ * Takes the shrunk probability rather than the stat-unit edge, because that is
+ * what the threshold is now measured in. A market two points of probability
+ * short is one line move from live; one sitting at a coin flip is not, however
+ * many kills separate the mean from the number.
+ */
+export const edgeProgress = (p: number) => Math.max(0, (p - 0.5)) / (MIN_P - 0.5);
 
 export function recommend(
   form: FormStats | undefined,
@@ -225,52 +251,82 @@ export function evaluate(o: Evaluation): CallStatus {
   const forOver = overs.length ? overs.reduce((a, b) => (b.line < a.line ? b : a)) : null;
   const forUnder = unders.length ? unders.reduce((a, b) => (b.line > a.line ? b : a)) : null;
 
-  const overEdge = forOver ? mean - forOver.line : -Infinity;
-  const underEdge = forUnder ? forUnder.line - mean : -Infinity;
+  // How much history this actually rests on. NOT sample.length: the modelled
+  // path resamples 4,000 draws from a handful of maps, and shrinking against
+  // 4,000 would treat a guess as a certainty.
+  const observations = useSeries ? form.series : form.mapValues.length;
+  // The modelled path carries an extra assumption — that maps are
+  // interchangeable — so it is held to twice the evidence for the same claim.
+  const prior = useSeries ? PRIOR : PRIOR * 2;
+
+  /**
+   * The share of this player's own history that would have won a side, shrunk
+   * toward a coin flip by how little history there is.
+   *
+   * A push leaves the denominator: the book hands the leg back rather than
+   * losing it, which is how `grade.ts` has always recorded it. 15% of
+   * PrizePicks lines are whole numbers and 7.4% of series land exactly on
+   * them, so counting those as losses understated every such market.
+   *
+   * The shrink is what stops six games from outranking sixty. Six wins from
+   * six is an observed 100% and is not a 100% chance; against a prior of ten
+   * coin flips it reports 73%, which is a claim the sample can carry.
+   */
+  const rateAt = (line: number, side: 'over' | 'under') => {
+    const wins = sample.filter((t) => (side === 'over' ? t > line : t < line)).length;
+    const settled = sample.filter((t) => t !== line).length;
+    if (settled === 0) return null;
+    const raw = wins / settled;
+    return (raw * observations + 0.5 * prior) / (observations + prior);
+  };
+
+  /**
+   * Pick the side by probability, not by the mean.
+   *
+   * Kills are right-skewed: across 239 CS2 players and 18,712 series, 53.3% of
+   * a player's series land below their own mean, and mean minus median averages
+   * +0.55 kills. A line set near the median therefore sits under the mean, so
+   * choosing by `mean - line` recommended the over on markets where the over
+   * was the losing side more often than not. It produced a board that was 77%
+   * over calls, and lines moved AWAY from those calls 72% of the time — 0 of 6
+   * on the highest-scoring ones, which is the market telling you it disagrees.
+   *
+   * A probability also makes the threshold proportional, which an absolute
+   * half-a-kill floor never was: 55% means the same thing against a 5.5 line
+   * and a 30.5 line.
+   */
+  const pOver = forOver ? rateAt(forOver.line, 'over') : null;
+  const pUnder = forUnder ? rateAt(forUnder.line, 'under') : null;
 
   const pick =
-    overEdge >= underEdge && forOver
-      ? { side: 'over' as const, book: forOver.book, line: forOver.line, edge: overEdge }
-      : forUnder
-        ? { side: 'under' as const, book: forUnder.book, line: forUnder.line, edge: underEdge }
+    pOver !== null && (pUnder === null || pOver >= pUnder) && forOver
+      ? { side: 'over' as const, book: forOver.book, line: forOver.line, p: pOver }
+      : pUnder !== null && forUnder
+        ? { side: 'under' as const, book: forUnder.book, line: forUnder.line, p: pUnder }
         : null;
 
   if (!pick) return { play: null, why: { kind: 'unavailable' } };
-  // Evaluated and honest. The edge is reported anyway, because a line half a
-  // unit from a call is a different row from one two units away, and only one
-  // of them is worth watching.
-  if (pick.edge < MIN_EDGE) return { play: null, why: { kind: 'fair', edge: pick.edge } };
 
-  // A total landing exactly on the line is a push: the book refunds the leg
-  // rather than losing it, and `grade.ts` has always recorded it that way. So
-  // it leaves the denominator instead of counting against the side.
-  //
-  // This is not a corner case. 15% of PrizePicks lines are whole numbers —
-  // Underdog posts none — and across those markets' history 7.4% of series
-  // land exactly on the number. Counting those as losses understated hit rate
-  // on every one of them, and hit rate is what the board ranks on, so the
-  // markets where a push is even possible were being pushed down the page for
-  // outcomes that would have been handed back.
-  const wins = sample.filter((t) => (pick.side === 'over' ? t > pick.line : t < pick.line)).length;
-  const settled = sample.filter((t) => t !== pick.line).length;
-  // Every observation pushed. There is no rate to report and nothing to rank,
-  // rather than a NaN wearing a percent sign.
-  if (settled === 0) return { play: null, why: { kind: 'fair', edge: pick.edge } };
-  const hitRate = wins / settled;
+  // Still reported in stat units, because "the number is 2.4 kills light" is
+  // what a person reads, while the probability is what the model acts on.
+  const edge = pick.side === 'over' ? mean - pick.line : pick.line - mean;
 
-  // Relative to how much the player actually swings: two kills on a 30-kill
-  // line is a smaller claim than two kills on a 5-kill line, and ranking them
-  // the same would put noisy high-volume markets on top every time.
-  const edgeSd = sd && sd > 0 ? pick.edge / sd : null;
+  // Evaluated and honest. Both numbers are reported: the stat-unit gap is what
+  // the row shows, and the probability is what decides whether it is a call.
+  if (pick.p < MIN_P) return { play: null, why: { kind: 'fair', edge, p: pick.p } };
 
-  // Hit rate carries the ranking, nudged by how big the edge is relative to
-  // the player's own variance. Sample size damps small-sample confidence, and
-  // a modelled range is damped again — it rests on an assumption a measured
-  // total doesn't need.
-  const evidence = useSeries
-    ? Math.min(1, form.series / 12)
-    : 0.75 * Math.min(1, form.mapValues.length / 30);
-  const strength = (hitRate - 0.5) * 2 * (edgeSd ?? 0.5) * evidence;
+  const hitRate = pick.p;
+
+  // Relative to how much the player actually swings — kept for display, since
+  // two kills on a 30-kill line is a smaller claim than two on a 5-kill line.
+  // It no longer scales the ranking: the probability already is the claim.
+  const edgeSd = sd && sd > 0 ? edge / sd : null;
+
+  // The probability IS the ranking now. It already carries the sample size in
+  // its shrink, so multiplying by a separate evidence term would damp twice —
+  // and the old edgeSd factor was a proxy for the proportionality the
+  // probability gives directly.
+  const strength = (hitRate - 0.5) * 2;
 
   return {
     why: null,
@@ -278,7 +334,7 @@ export function evaluate(o: Evaluation): CallStatus {
       side: pick.side,
       book: pick.book,
       line: pick.line,
-      edge: pick.edge,
+      edge,
       edgeSd,
       hitRate,
       series: form.series,
