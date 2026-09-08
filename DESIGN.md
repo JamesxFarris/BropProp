@@ -356,3 +356,29 @@ changed here: it decides money and deserves its own measurement.
   rate and round count may be drawn independently in the resample. Written
   down so the next person doesn't re-measure it. See
   `src/results/measure_rounds.ts`.
+- **2026-09-07** — Held the rate projection out against data it never saw, and
+  it did not win. Time-based split of CS2 `map_stat_dedup`: everything before
+  2026-06-01 is training (4,788 series, 35,610 maps), everything from
+  2026-06-01 onward is test (1,134 series). Never random — rosters churn, and
+  a random split would let a player's own future maps leak into their own
+  training data. Of 5,279 held-out player-series groups, 66 played an
+  incomplete map range and were dropped, and 296 had too little training
+  history for one method or the other (`MIN_MAPS` / `MIN_KPR_MAPS`, both 12);
+  the remaining 4,917 were scored against both methods, built from training
+  rows only — the round pool included, which is the leak that's easy to miss
+  and was checked for specifically. Per-map (`resampleTotals`) scored MAE
+  6.8778, median AE 5.6420. The rate path (`resampleFromRates`) scored MAE
+  6.8831, median AE 5.6145. Paired, the rate method beat per-map on 2,435 of
+  4,917 series (49.5%) and lost on 2,482 (50.5%); the mean of its per-series
+  error difference against per-map was 0.0053 kills with a standard error of
+  0.0135 (t = 0.39) — indistinguishable from zero. This is not "barely lost,"
+  it is a coin flip: the two methods are statistically the same predictor on
+  data neither saw, which means Task 6's near-zero correlation was measured
+  correctly but doesn't cash out as a sharper projection once round length is
+  drawn from the pool instead of the player's own mix. Task 6's argument
+  survives; the accuracy claim built on it does not. See
+  `src/results/validate_kpr.ts`. Reported BLOCKED rather than reverting Task
+  8's projection change — the `rounds` column, the collection, and the
+  backfill are worth keeping regardless of this result, and which of Task 8's
+  pieces come out is a call for whoever asked for this validation, not for
+  the validation itself to make.
