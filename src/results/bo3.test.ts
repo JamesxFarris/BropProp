@@ -98,3 +98,25 @@ test('a player with no usable name is skipped, not stored blank', () => {
   assert.equal(toMapStats(match, game, [nameless], new Set()).length, 0);
   assert.equal(toMapStats(match, game, [row({ steam_profile: null })], new Set()).length, 0);
 });
+
+test('a bad rounds_count writes null, never 0', () => {
+  // 0 would claim a map that ran no rounds, which is a stronger and false
+  // claim than "we don't know" — the same distinction grading already draws
+  // between an ungradeable stat and a zero one.
+  const zero = { ...game, rounds_count: 0 };
+  assert.equal(toMapStats(match, zero, [row()], new Set())[0]!.rounds, null);
+
+  const negative = { ...game, rounds_count: -3 };
+  assert.equal(toMapStats(match, negative, [row()], new Set())[0]!.rounds, null);
+
+  // The API is not typechecked at the wire; a string slipping through the
+  // `number` guard must not become a number, coerced or otherwise.
+  const nonNumeric = { ...game, rounds_count: '16' as unknown as number };
+  assert.equal(toMapStats(match, nonNumeric, [row()], new Set())[0]!.rounds, null);
+
+  const missing = { ...game, rounds_count: undefined };
+  assert.equal(toMapStats(match, missing, [row()], new Set())[0]!.rounds, null);
+
+  const valid = { ...game, rounds_count: 16 };
+  assert.equal(toMapStats(match, valid, [row()], new Set())[0]!.rounds, 16);
+});

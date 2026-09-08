@@ -1,5 +1,13 @@
 # Rounds Normalisation and Market Probability — Implementation Plan
 
+> **Historical note (2026-09-07):** Tasks 7 and 8 below describe the
+> rate-based CS2 kills projection (`resampleFromRates`, `roundLengthPool`,
+> `Play.method: 'kpr'`, the "per round" label) as something that ships. It
+> was built and held out against data it never saw, lost against the
+> per-map method (MAE 6.8831 vs 6.8778, t = 0.39), and was removed. See
+> `DESIGN.md`'s 2026-09-07 entry for the full result. This plan is left as
+> written for history, not updated.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Project CS2 kills from kills-per-round scaled by expected round count instead of from raw per-map totals, and show Underdog's devigged market probability beside our own hit rate.

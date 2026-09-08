@@ -75,6 +75,8 @@ function toStats(body: any): MapStat[] {
       deaths: int(t.Deaths),
       assists: int(t.Assists),
       headshots: null,
+      // League of Legends has no rounds.
+      rounds: null,
       playedAt: t['DateTime UTC'] ? `${t['DateTime UTC']}Z`.replace(' ', 'T') : null,
       raw: { gameId: t.GameId, backfill: true },
     });

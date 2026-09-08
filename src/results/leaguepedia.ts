@@ -110,6 +110,8 @@ async function fetchPage(since: string, offset: number): Promise<MapStat[]> {
       assists: int(t.Assists),
       // League has no headshot statistic; null is the honest value, not 0.
       headshots: null,
+      // League of Legends has no rounds.
+      rounds: null,
       playedAt: t['DateTime UTC'] ? `${t['DateTime UTC']}Z`.replace(' ', 'T') : null,
       raw: { gameId: t.GameId },
     });

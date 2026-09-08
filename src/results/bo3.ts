@@ -43,11 +43,20 @@ const API = 'https://api.bo3.gg/api/v1';
 const CS2_DISCIPLINE = 1;
 
 /** No rate limiting was observed. This is politeness, not a measured floor. */
-const GAP_MS = 90;
+export const GAP_MS = 90;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export type Bo3Game = { id: number; number: number | null; begin_at: string | null };
+export type Bo3Game = {
+  id: number;
+  number: number | null;
+  begin_at: string | null;
+  /**
+   * Rounds the map ran. Present on the embedded game objects we already
+   * request with `with=games`, so reading it costs nothing extra.
+   */
+  rounds_count?: number | null;
+};
 
 export type Bo3Match = {
   id: number;
@@ -76,7 +85,7 @@ export type Bo3PlayerStat = {
   } | null;
 };
 
-async function getJson<T>(url: string): Promise<T> {
+export async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url, {
     headers: { Accept: 'application/json', 'User-Agent': 'BropProp/0.1 (prop research)' },
   });
@@ -178,6 +187,10 @@ export function toMapStats(
       // exceeded that player's kills, and the ratio to kills is 0.54 (a
       // plausible headshot rate) against 0.17 to hits.
       headshots: p.headshots,
+      // Straight off the game object we already hold. A game that somehow
+      // reports no round count writes null rather than a zero, which would
+      // be an infinitely fast map rather than an unknown one.
+      rounds: typeof game.rounds_count === 'number' && game.rounds_count > 0 ? game.rounds_count : null,
       playedAt: game.begin_at ?? match.end_date ?? match.start_date,
       raw: {
         match_id: match.id,

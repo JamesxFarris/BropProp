@@ -10,6 +10,11 @@ export type MapStat = {
   deaths: number | null;
   assists: number | null;
   headshots: number | null;
+  /**
+   * Rounds the map ran. CS2 only — LoL has no such thing, and a source that
+   * did not report it leaves this null rather than guessing.
+   */
+  rounds: number | null;
   playedAt: string | null;
   raw?: Record<string, unknown>;
 };

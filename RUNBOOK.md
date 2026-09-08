@@ -52,6 +52,7 @@ or run it from somewhere else. Nothing is wrong with the code.
 npm run bo3                # last 30 days
 npm run bo3 365            # a year
 npm run bo3 30 --all-players
+npm run bo3:rounds         # fill in round counts for history already stored
 ```
 
 Free, no key, no browser, no rate limit. **This is the CS2 equivalent of
@@ -60,6 +61,24 @@ command is for backfilling depth rather than for keeping current.
 
 `GET /games/{game_id}/players_stats` returns one row per player per map:
 kills, deaths, assists, **headshots**, ADR, KAST, first kills, clutches.
+
+**Round counts ride along for free.** The collector already asks for the game
+objects with `with=games`, and `rounds_count` is a field on each one, so
+`map_stat.rounds` fills itself on every normal run — there is no separate
+command to remember. `npm run bo3:rounds` exists only to fill in history that
+was collected before the column did, and it is resumable and a cheap no-op
+once coverage is complete. It batches 100 game ids per request
+(`filter[games.id][in]`), so the whole archive is about 135 requests.
+
+Two things worth knowing about those numbers. A map reporting **fewer than 13
+rounds did not finish** — CS2 is MR12, first to 13 — so those rows are
+abandonments and forfeits, not short games; there are about 90 of them and any
+model should exclude them. A map reporting **46 to 60 rounds is real deep
+overtime**, not a parsing error: all 168 such rows are KAST-consistent, and
+clamping them would be discarding real data because it looked surprising.
+KAST is the cross-check throughout — it is a fraction whose denominator is the
+round count, so `kast * rounds` must land on a whole number, and it does for
+99.77% of stored rows.
 
 Measured 2026-09-07, against this board:
 

@@ -68,7 +68,7 @@ export type Play = {
 };
 
 const MIN_SERIES = 6;    // below this, form is noise wearing a number
-const MIN_MAPS = 12;     // single maps needed before modelling a range from them
+export const MIN_MAPS = 12;     // single maps needed before modelling a range from them
 const MIN_EDGE = 0.5;    // half a kill is inside the rounding of a line
 const DRAWS = 4000;
 
@@ -102,7 +102,7 @@ function seedFrom(s: string): number {
  * real totals swing wider than this produces. Calls built this way are
  * therefore marked, and their score is damped rather than trusted equally.
  */
-function resampleTotals(mapValues: number[], maps: number, seed: string): number[] {
+export function resampleTotals(mapValues: number[], maps: number, seed: string): number[] {
   const rand = rng(seedFrom(seed));
   const out: number[] = [];
   for (let d = 0; d < DRAWS; d++) {
