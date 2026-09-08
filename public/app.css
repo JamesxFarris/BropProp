@@ -5,13 +5,21 @@
      gold   the book's number      (the line chip, the place button)
      teal   our number             (the model chip)
      green  over, and value        red  under, and no value
-     cyan   the view you chose     (nav, filters, freshness — chrome only)
+     bone   the view you chose     (nav, filters, freshness — chrome only)
      pastel amber / pastel blue    which game this is (league badge only)
 
-   Cyan is the chrome voice and never appears on a row; the data voices never
+   Bone is the chrome voice and never appears on a row; the data voices never
    appear in the chrome. That separation is the point: gold once did double
    duty as both "selected filter" and "worth your money", which is one hue
    making two claims on the same screen.
+
+   Chrome is deliberately NOT a hue. It was cyan, which read as this app's
+   signature colour and made the board look like every other odds screen. By
+   then there was no saturated hue left to swap in — gold, green, red and two
+   league pastels were all spoken for, and violet is ruled out below — so any
+   replacement would have made one hue answer two questions, which is the
+   mistake cyan existed to fix. A warm bone says "selected" without claiming
+   anything about a market.
 
    Gold-versus-teal is the newest pair and the most important. The board exists
    to compare two numbers — what the app is offering and what this player
@@ -20,9 +28,9 @@
    pair of chips the comparison needs no reading at all.
 
    League got its tint back after `fc8325c` had cut it. That commit was right
-   at the time, when gold was overloaded; cyan has taken the chrome job since,
-   which frees the slot, and "which game is this" really is the first question
-   on a mixed board.
+   at the time, when gold was doing both "selected" and "valuable"; chrome has
+   taken the selection job since and given the slot back, and "which game is
+   this" really is the first question on a mixed board.
 
    Everything is pastel on purpose. Thirty saturated calls on one board is
    thirty things shouting; a tint keeps the meaning and lets the figures stay
@@ -33,26 +41,27 @@
 :root {
   color-scheme: dark;
 
-  /* Blue slate with actual chroma, not grey on grey.
-     Two rounds of this. First the floor came off near-black, because at
-     #101216 nothing was lit and every surface read as an outline. Then the
-     replacement was still barely tinted — about six points of blue over red —
-     so the three surface steps separated by lightness alone, which is the
-     "grey on grey" complaint: you could tell they were different but not that
-     they were anything. These carry roughly eighteen points of blue over red
-     and hold that ratio as they lighten, so a card reads as a lit surface of
-     the same material rather than as a paler grey. Still a dark tool used at
-     night; just one made of something. */
-  --bg:        #12161f;
-  --surface:   #1a2030;
-  --surface-2: #232b3d;
-  --raised:    #2a3349;
-  --line:      #333d54;
-  --line-2:    #47536e;
+  /* Warm charcoal. Three rounds to get here, and the middle one was wrong.
+     The floor started at #101216, a hair off black, where nothing was lit and
+     every surface read as an outline. The fix added blue — six points, then
+     eighteen — which solved the flatness and walked straight into a navy
+     slate that looked like every other odds screen on the internet, OddsJam
+     included. Blue is the default hue for this entire category, which is
+     exactly why it is worth not using.
+     So: warm, red over green over blue, holding that ratio as it lightens.
+     A card still reads as a lit surface of the same material — the thing the
+     chroma was for — while the page stops looking borrowed. It also gives
+     gold, green and red a ground they sit on rather than fight. */
+  --bg:        #1a1816;
+  --surface:   #232120;
+  --surface-2: #2d2a27;
+  --raised:    #37332f;
+  --line:      #423d37;
+  --line-2:    #5a534b;
 
-  --text:      #f2f5fb;
-  --text-2:    #bcc6da;
-  --text-3:    #8b96ad;
+  --text:      #f7f4f0;
+  --text-2:    #cec7bd;
+  --text-3:    #9c9489;
 
   /* Brand. A warm gold — the one thing on the page that means "good". */
   --brand:     #f5c265;
@@ -82,12 +91,23 @@
   --lol:       #9fd3ef;
   --lol-bg:    #9fd3ef1c;
 
-  /* Chrome. One hue for "where you are", so gold can mean only one thing. */
-  --nav:       #3fc9e4;
-  --nav-dim:   #3fc9e41f;
-  --nav-ink:   #06222a;
+  /* Chrome: warm bone, and deliberately not a hue.
+     The job here is "you are here", and it used to be cyan — which read as
+     this app's signature colour and was the single thing that made the board
+     look like OddsJam. There is no saturated hue free to replace it: gold is
+     the book's number, green is over, red is under, and the two league
+     pastels take amber and blue. Violet is ruled out at the top of this file.
+     Every remaining option would have made one hue answer two questions,
+     which is the mistake cyan was introduced to fix in the first place.
+     So chrome stops competing. A light warm bone against a warm dark ground
+     is unmistakably "selected" without claiming to mean anything about a
+     market, and it leaves the row hues as the only colour that carries
+     information. Boldness spent in one place, as intended. */
+  --nav:       #e7dac4;
+  --nav-dim:   #e7dac41c;
+  --nav-ink:   #221e19;
 
-  --focus:     #3fc9e4;
+  --focus:     #e7dac4;
   /* A one-pixel lift along the top edge of raised surfaces. Not a drop
      shadow — the light is coming from above, which is all it says. */
   --lift:      inset 0 1px 0 rgba(255, 255, 255, .045);
@@ -134,15 +154,15 @@
    a machine set to light never sees the default this tool is designed in. */
 [data-theme="light"] {
   color-scheme: light;
-  --bg:        #f3f4f6;
+  --bg:        #f5f2ed;
   --surface:   #ffffff;
-  --surface-2: #eceef1;
+  --surface-2: #ece7df;
   --raised:    #ffffff;
-  --line:      #dcdfe4;
-  --line-2:    #b9bec7;
-  --text:      #12151a;
-  --text-2:    #495059;
-  --text-3:    #737b85;
+  --line:      #ded7cc;
+  --line-2:    #bab2a5;
+  --text:      #1a1713;
+  --text-2:    #564e44;
+  --text-3:    #82796d;
   --brand:     #a76a00;
   --brand-dim: #a76a0018;
   --brand-ink: #ffffff;
@@ -150,10 +170,12 @@
   --over-bg:   #0f8a5f16;
   --under:     #c2334d;
   --under-bg:  #c2334d16;
-  --nav:       #0d7d96;
-  --nav-dim:   #0d7d9614;
+  /* The bone inverts on a light ground: chrome is still the warm neutral
+     voice, just dark ink on paper rather than light on charcoal. */
+  --nav:       #4b4032;
+  --nav-dim:   #4b403214;
   --nav-ink:   #ffffff;
-  --focus:     #0d7d96;
+  --focus:     #4b4032;
   --lift:      inset 0 1px 0 rgba(255, 255, 255, .9);
   /* The pastels are tuned for a dark ground and vanish on a white one — a
      tint that reads as a soft glow at 12% over #12161f is nearly paper at 12%
@@ -241,10 +263,13 @@ a { color: inherit; }
   text-decoration: none; color: var(--text);
   border-radius: var(--r-s);
 }
-/* Two-tone wordmark: the second half in the chrome hue, so the name is the
-   one place the app's own colour is allowed to be decoration — it is the
-   name, and a name is the only thing on this page that means itself. */
-.brand a span { color: var(--nav); }
+/* Two-tone wordmark, and the one place a data hue is allowed out of the rows.
+   It used to take the chrome hue, which worked while chrome was cyan and
+   stopped working the moment chrome became a bone barely off the text colour —
+   the name went flat white. Gold instead: the brand is the single thing on
+   this page that means itself rather than something about a market, and it
+   sits in the masthead where no line or chip can be confused with it. */
+.brand a span { color: var(--brand); }
 .brand a:hover span { color: var(--text); }
 .brand em {
   font-style: normal; font-weight: 600; font-size: 12px;
@@ -1356,7 +1381,7 @@ body.searching .tick { display: none; }
    from the page-name pill. There is no pill here, so flex only inserted a
    10px gap into the middle of the name. */
 .login-brand { display: block; font-size: 34px; margin: 0 0 6px; }
-.login-brand span { color: var(--nav); }
+.login-brand span { color: var(--brand); }
 .login-sub { color: var(--text-3); margin: 0 0 26px; font-size: 15px; }
 
 .login-card {

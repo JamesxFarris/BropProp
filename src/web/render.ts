@@ -265,7 +265,7 @@ function shell(o: {
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-<meta name="theme-color" content="#101216">
+<meta name="theme-color" content="#1a1816">
 <link rel="stylesheet" href="/app.css">
 </head>
 <body>
@@ -1733,7 +1733,7 @@ export function loginPage(o: { next: string; error?: string }): string {
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-<meta name="theme-color" content="#171a21">
+<meta name="theme-color" content="#1a1816">
 <link rel="stylesheet" href="/app.css">
 </head>
 <body class="login-body">

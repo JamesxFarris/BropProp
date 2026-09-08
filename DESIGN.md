@@ -234,6 +234,17 @@ changed here: it decides money and deserves its own measurement.
 
 ## Log
 
+- **2026-09-08** — Dropped blue entirely from the chrome and the ground. The
+  cyan accent and the navy slate together were the whole reason the board
+  looked like OddsJam, and the navy was self-inflicted the same day: the fix
+  for "grey on grey" added blue chroma and landed on the default hue of the
+  entire category. Ground is warm charcoal now, red over green over blue.
+  Chrome is a warm bone rather than a hue at all — by that point gold, green,
+  red and the two league pastels were all spoken for and violet is ruled out,
+  so any saturated replacement would have made one hue answer two questions,
+  which is precisely the mistake cyan was introduced to fix. The wordmark
+  takes the brand gold, since a name is the one thing on the page that means
+  itself rather than something about a market.
 - **2026-09-08** — Radius by role, not one number. A single house radius on
   cards, chips, buttons and inputs alike is documented tell #4 — "one
   border-radius on everything regardless of hierarchy" — and it is what
