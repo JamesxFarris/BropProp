@@ -1000,6 +1000,15 @@ export function boardPage(o: {
   // join this entry.
   const showPP = only === null || only === 'prizepicks';
   const showUD = only === null || only === 'underdog';
+  /**
+   * EV needs a per-side price, and only Underdog publishes one.
+   *
+   * On the PrizePicks board — the default — every cell in that column was a
+   * dash, which is a column of nothing occupying the width of a column of
+   * something. Honest, and still noise. It appears when a book that prices
+   * both sides is on screen and stays away when none is.
+   */
+  const showEv = only !== 'prizepicks';
   const gapLabel = only ? `vs ${bookName(otherBook(only))}` : 'Gap';
   // Restrict sides only when an app is selected and best-price filtering is on.
   const restrict = Boolean(only) && o.filters.best;
@@ -1036,7 +1045,7 @@ export function boardPage(o: {
           <th class="c">Ours</th>
           <th class="c">Lean</th>
           <th class="c">Win %</th>
-          <th class="c evcol">EV</th>
+          ${showEv ? '<th class="c evcol">EV</th>' : ''}
           ${showPP ? `<th class="n">${only ? 'Take' : 'PrizePicks'}</th>` : ''}
           <th class="c gapcol">${gapLabel}</th>
           ${showUD ? `<th class="n">${only ? 'Take' : 'Underdog'}</th>` : ''}
@@ -1131,7 +1140,7 @@ export function boardPage(o: {
                        : ''
                    }>${marketProb === null ? 'no market price' : `market ${Math.round(marketProb * 100)}%`}</div>`
             }</td>
-            <td class="c evcol" data-label="EV">${evCell(play)}</td>
+            ${showEv ? `<td class="c evcol" data-label="EV">${evCell(play)}</td>` : ''}
             ${
               showPP
                 ? `<td class="n bookcol" data-book="PrizePicks"><div class="bookcell">
