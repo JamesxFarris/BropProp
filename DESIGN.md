@@ -234,6 +234,19 @@ changed here: it decides money and deserves its own measurement.
 
 ## Log
 
+- **2026-09-08** — The ground is a deep forest green, and nothing on the page
+  is grey. Four attempts at this and the first three were all a flavour of
+  grey: near-black, then blue-grey (which was OddsJam), then warm grey (which
+  was bland). Each time the hue was a few points of correction applied to a
+  neutral, so every surface still read as "grey, slightly". Green is the
+  surface now, holding its hue from page to card to control — and it gives
+  gold somewhere to sit the way light sits in trees, rather than a neutral
+  that mutes everything equally.
+  Colour alone was not the whole of "bland", though. Every row carried the
+  same weight, so two dozen of them read as one block however good the
+  palette. Rows the model has an opinion on now carry a leading-edge mark in
+  their own direction and the rest are dimmed — never hidden, because a fair
+  market is one line move from a call.
 - **2026-09-08** — Dropped blue entirely from the chrome and the ground. The
   cyan accent and the navy slate together were the whole reason the board
   looked like OddsJam, and the navy was self-inflicted the same day: the fix

@@ -41,27 +41,27 @@
 :root {
   color-scheme: dark;
 
-  /* Warm charcoal. Three rounds to get here, and the middle one was wrong.
-     The floor started at #101216, a hair off black, where nothing was lit and
-     every surface read as an outline. The fix added blue — six points, then
-     eighteen — which solved the flatness and walked straight into a navy
-     slate that looked like every other odds screen on the internet, OddsJam
-     included. Blue is the default hue for this entire category, which is
-     exactly why it is worth not using.
-     So: warm, red over green over blue, holding that ratio as it lightens.
-     A card still reads as a lit surface of the same material — the thing the
-     chroma was for — while the page stops looking borrowed. It also gives
-     gold, green and red a ground they sit on rather than fight. */
-  --bg:        #1a1816;
-  --surface:   #232120;
-  --surface-2: #2d2a27;
-  --raised:    #37332f;
-  --line:      #423d37;
-  --line-2:    #5a534b;
+  /* Deep forest. Not grey, and not grey with a tint in it.
+     Four rounds to get here and the first three all landed on some flavour of
+     grey: near-black, then blue-grey (which was OddsJam), then warm grey
+     (which was bland). Each time the hue was a few points of correction on a
+     neutral, so every surface still read as "grey, slightly". The fix is to
+     stop treating the ground as a neutral: green IS the surface here, dark
+     and desaturated, holding its hue all the way up the ladder from page to
+     card to control. Nothing on this page is grey any more.
+     Green specifically because gold sits on it the way light sits in trees —
+     the warm accents that carry the actual information get a cool ground to
+     push off, instead of a neutral that mutes everything equally. */
+  --bg:        #0a140d;
+  --surface:   #111e16;
+  --surface-2: #1a2c20;
+  --raised:    #24382a;
+  --line:      #2e4534;
+  --line-2:    #416049;
 
-  --text:      #f7f4f0;
-  --text-2:    #cec7bd;
-  --text-3:    #9c9489;
+  --text:      #f2f7ef;
+  --text-2:    #c2d0c0;
+  --text-3:    #8fa08f;
 
   /* Brand. A warm gold — the one thing on the page that means "good". */
   --brand:     #f5c265;
@@ -154,15 +154,15 @@
    a machine set to light never sees the default this tool is designed in. */
 [data-theme="light"] {
   color-scheme: light;
-  --bg:        #f5f2ed;
+  --bg:        #eff4ed;
   --surface:   #ffffff;
-  --surface-2: #ece7df;
+  --surface-2: #e3ece1;
   --raised:    #ffffff;
-  --line:      #ded7cc;
-  --line-2:    #bab2a5;
-  --text:      #1a1713;
-  --text-2:    #564e44;
-  --text-3:    #82796d;
+  --line:      #d2ded0;
+  --line-2:    #a7baa6;
+  --text:      #101a12;
+  --text-2:    #455046;
+  --text-3:    #6e7d70;
   --brand:     #a76a00;
   --brand-dim: #a76a0018;
   --brand-ink: #ffffff;
@@ -170,12 +170,12 @@
   --over-bg:   #0f8a5f16;
   --under:     #c2334d;
   --under-bg:  #c2334d16;
-  /* The bone inverts on a light ground: chrome is still the warm neutral
-     voice, just dark ink on paper rather than light on charcoal. */
-  --nav:       #4b4032;
-  --nav-dim:   #4b403214;
+  /* Chrome inverts on a light ground: still the quiet voice, now deep pine
+     ink on paper rather than bone on forest. */
+  --nav:       #2c4433;
+  --nav-dim:   #2c443314;
   --nav-ink:   #ffffff;
-  --focus:     #4b4032;
+  --focus:     #2c4433;
   --lift:      inset 0 1px 0 rgba(255, 255, 255, .9);
   /* The pastels are tuned for a dark ground and vanish on a white one — a
      tint that reads as a soft glow at 12% over #12161f is nearly paper at 12%
@@ -1419,3 +1419,34 @@ body.searching .tick { display: none; }
   background: var(--under-bg); border: 1px solid var(--under);
 }
 .login-foot { margin: 16px 0 0; font-size: 13px; color: var(--text-3); }
+
+/* ---- rhythm: live calls against quiet ones -------------------------------
+   Sorting already puts the calls at the top, but every row carried the same
+   weight, so two dozen of them read as one undifferentiated block — which is
+   most of what "bland" means on a board like this. The model's verdict is the
+   one thing that should change how a row LOOKS, not just what it says.
+   Dimmed, never hidden: a fair market is one line move from a call, and the
+   board's own header counts these as a state of the data. */
+.board-table tbody tr.quiet td { opacity: .62; }
+.board-table tbody tr.quiet:hover td { opacity: 1; }
+.board-table tbody tr.quiet .chip-num { border-color: transparent; }
+
+/* A live row gets a hairline of its own direction down the leading edge — the
+   one place a signal hue touches the row frame rather than the type. It reads
+   as a margin mark on a page, which is what it is: this is the row you were
+   looking for. */
+.board-table tbody tr.live td:first-child { box-shadow: inset 3px 0 0 var(--line-2); }
+.board-table tbody tr.live:has(.play.o) td:first-child { box-shadow: inset 3px 0 0 var(--over); }
+.board-table tbody tr.live:has(.play.u) td:first-child { box-shadow: inset 3px 0 0 var(--under); }
+
+@media (max-width: 760px) {
+  /* Stacked, the row is a card and its first cell is only the top block, so
+     the leading-edge mark ran a third of the way down and stopped. Move it to
+     the card itself and let the cell go back to being a cell. */
+  .board-table tbody tr.live td:first-child,
+  .board-table tbody tr.live:has(.play.o) td:first-child,
+  .board-table tbody tr.live:has(.play.u) td:first-child { box-shadow: none; }
+  .board-table tbody tr.live { box-shadow: inset 3px 0 0 var(--line-2); }
+  .board-table tbody tr.live:has(.play.o) { box-shadow: inset 3px 0 0 var(--over); }
+  .board-table tbody tr.live:has(.play.u) { box-shadow: inset 3px 0 0 var(--under); }
+}

@@ -265,7 +265,7 @@ function shell(o: {
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-<meta name="theme-color" content="#1a1816">
+<meta name="theme-color" content="#10160f">
 <link rel="stylesheet" href="/app.css">
 </head>
 <body>
@@ -1112,7 +1112,12 @@ export function boardPage(o: {
               : play?.method === 'maps' || f.series === 0
                 ? f.perMap
                 : f.mean;
-            return `<tr data-search="${rowKey(r.handle, r.match_title, statLabel(r.stat), r.league)}">
+            // Rows the model has no opinion on are dimmed rather than removed.
+            // They still belong here — a line move turns a fair one into a call,
+            // and hiding them would hide why the board is quiet — but giving them
+            // the same weight as a live call is what made two dozen rows read as
+            // one undifferentiated block.
+            return `<tr class="${play ? 'live' : 'quiet'}" data-search="${rowKey(r.handle, r.match_title, statLabel(r.stat), r.league)}">
             <td>
               <div class="who${sameAsPrev ? ' cont' : ''}">
                 ${sameAsPrev ? '<span class="tick"></span>' : leagueBadge(r.league)}
@@ -1733,7 +1738,7 @@ export function loginPage(o: { next: string; error?: string }): string {
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-<meta name="theme-color" content="#1a1816">
+<meta name="theme-color" content="#10160f">
 <link rel="stylesheet" href="/app.css">
 </head>
 <body class="login-body">
