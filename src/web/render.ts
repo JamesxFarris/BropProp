@@ -2,7 +2,7 @@ import type { Movement, Health } from './queries.js';
 import type { PickRow, SlipSummary } from './picks.js';
 import type { MarketRow, PropHistory, PlayerGame } from './boardq.js';
 import type { FormStats, Play, CallStatus, NoCall } from './projection.js';
-import { evaluate, edgeProgress, type LineOption } from './projection.js';
+import { evaluate, edgeProgress, type LineOption, flatBreakEven } from './projection.js';
 import type { Entry } from './optimize.js';
 import { isComboHandle } from '../normalize.js';
 import { devig } from '../devig.js';
@@ -872,12 +872,32 @@ export function boardPage(o: {
   // PrizePicks and then being told to take it on Underdog is the filter not
   // working, however good the number is.
   const only = o.lockedBook ?? o.filters.book;
+
+  /**
+   * The bar a PrizePicks leg has to clear, taken from the entry being built.
+   *
+   * PrizePicks quotes no price, so its markets used to clear MIN_P and nothing
+   * else — the price gate bit only on Underdog. Its price is real though; it
+   * is charged on the entry rather than on the side. What a leg has to win is
+   * therefore a function of how many legs it ends up beside, and the slip on
+   * screen is the best available answer: one more than it already holds, and
+   * at least the two an entry needs.
+   *
+   * This makes the board move as a slip grows, which is the honest behaviour.
+   * A 55% leg that ruins a two-pick is fine on a five-pick, because 20x across
+   * five legs asks less of each one than 3x across two.
+   */
+  const ppBreakEven = flatBreakEven(o.picks.length + 1);
+
   const optionsFor = (r: MarketRow): LineOption[] => {
     const opts: LineOption[] = [];
     if (r.pp_line !== null && only !== 'underdog') {
       opts.push({
         book: 'prizepicks', line: Number(r.pp_line),
         overOk: r.pp_over_ok, underOk: r.pp_under_ok,
+        // No per-side price to read, so the bar comes from the entry this leg
+        // would join. See ppBreakEven above.
+        breakEven: ppBreakEven,
       });
     }
     if (r.ud_line !== null && only !== 'prizepicks') {
@@ -1128,7 +1148,7 @@ export function boardPage(o: {
                    <div class="meta">${formNote(formOf(r), play)}</div>`
             }</td>
             <td class="c" data-label="Lean">${playCell(play, statusOf(r).why, r, only)}</td>
-            <td class="c" data-label="Win %">${
+            <td class="c${play ? ` strength s${Math.min(4, Math.max(1, Math.ceil((play.hitRate - 0.5) * 20)))}` : ''}" data-label="Win %">${
               play === null
                 ? '<span class="meta">—</span>'
                 : `<div class="prob">${Math.round(play.hitRate * 100)}%</div>

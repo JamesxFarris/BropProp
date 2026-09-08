@@ -33,22 +33,26 @@
 :root {
   color-scheme: dark;
 
-  /* A warm slate rather than near-black. The old ground was #101216, which is
-     a hair off pure black and made every surface above it read as an outline
-     rather than as a surface — the page looked flat because nothing was
-     actually lit. Lifting the floor and warming the hue very slightly (a blue
-     of 0.06 rather than 0.10 relative to red) gives the cards somewhere to sit
-     and takes the clinical edge off without turning anything beige. */
-  --bg:        #171a21;
-  --surface:   #1e222b;
-  --surface-2: #262b36;
-  --raised:    #2d3340;
-  --line:      #363d4b;
-  --line-2:    #4a5265;
+  /* Blue slate with actual chroma, not grey on grey.
+     Two rounds of this. First the floor came off near-black, because at
+     #101216 nothing was lit and every surface read as an outline. Then the
+     replacement was still barely tinted — about six points of blue over red —
+     so the three surface steps separated by lightness alone, which is the
+     "grey on grey" complaint: you could tell they were different but not that
+     they were anything. These carry roughly eighteen points of blue over red
+     and hold that ratio as they lighten, so a card reads as a lit surface of
+     the same material rather than as a paler grey. Still a dark tool used at
+     night; just one made of something. */
+  --bg:        #12161f;
+  --surface:   #1a2030;
+  --surface-2: #232b3d;
+  --raised:    #2a3349;
+  --line:      #333d54;
+  --line-2:    #47536e;
 
-  --text:      #f4f6fa;
-  --text-2:    #c3cad6;
-  --text-3:    #939cac;
+  --text:      #f2f5fb;
+  --text-2:    #bcc6da;
+  --text-3:    #8b96ad;
 
   /* Brand. A warm gold — the one thing on the page that means "good". */
   --brand:     #f5c265;
@@ -91,8 +95,22 @@
   --font: 'Barlow', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-  --r:  8px;
-  --r-s: 5px;
+  /* Radius by role, not one number on everything.
+     A single radius applied to cards, chips, buttons and inputs alike is a
+     documented tell — it makes every element the same kind of object, which
+     is exactly what "everything feels round" is describing. These say what a
+     thing IS: panels are near-square because they are regions of a page,
+     controls keep enough curve to read as pressable, and figures sit in tight
+     chips that should not look like buttons. */
+  --r-panel:   3px;   /* cards, tables, banners — structure */
+  --r-control: 6px;   /* buttons, inputs, segmented nav — pressable */
+  --r-chip:    3px;   /* number chips, league badges — labels */
+  --r-pill:    999px; /* the very few things that really are pills */
+
+  /* Kept as aliases so nothing breaks mid-edit; both now resolve to the
+     panel and control roles rather than to a single house radius. */
+  --r:  var(--r-panel);
+  --r-s: var(--r-control);
 
   /* The shell's width cap. Used to live as the literal 1560px, copied into
      eight rules — a magic number that could drift if one copy got edited and
@@ -158,8 +176,30 @@ a { color: inherit; }
   outline-offset: 2px;
 }
 
+/* Taking a prop is a form POST and a redirect back to the board — the rule
+   that keeps writes working with scripts blocked. The cost was a white-out and
+   a full repaint on every single pick, which felt like the app had fallen over
+   rather than like a leg had been added.
+   A cross-document view transition fixes it without touching the write path:
+   the browser holds the old frame, cross-fades to the new one, and anything
+   that does not support it simply navigates as before. No JavaScript, so the
+   scripts-blocked guarantee is untouched.
+   The slip rail is named so it animates as itself rather than as part of the
+   page: the leg you just added should slide into a list that stayed put, not
+   dissolve along with everything else. */
+@view-transition { navigation: auto; }
+::view-transition-old(root),
+::view-transition-new(root) { animation-duration: .18s; }
+.rail { view-transition-name: slip; }
+.top { view-transition-name: chrome; }
+
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
+  /* An involuntary cross-fade on every navigation is exactly what this
+     setting is asking not to happen. */
+  @view-transition { navigation: none; }
+  ::view-transition-old(root),
+  ::view-transition-new(root) { animation: none !important; }
 }
 
 /* ---- frame ---------------------------------------------------------- */
@@ -865,6 +905,31 @@ button.link:hover { color: var(--under); text-decoration: underline; }
   font-family: var(--mono); font-variant-numeric: tabular-nums;
   font-size: 17px; font-weight: 600; color: var(--text);
 }
+
+/* How good a call is, as a shape rather than a second number.
+   The Score column was dropped when the engine started ranking on probability
+   — score was (p − 0.5) × 2 and said nothing Win % did not. But a bare "67%"
+   gives no sense of where that sits in the range a call can occupy, and on the
+   phone, where the row is a card and nothing is beside it to compare against,
+   there was no signal of value at all. Four steps, drawn on the figure itself:
+   weight and colour on the wide board, plus a filled bar under it that the
+   card layout leans on. Meaning first, decoration never — the step IS the
+   number, banded. */
+.strength .prob { position: relative; }
+.strength .prob::after {
+  content: ''; position: absolute; left: 50%; transform: translateX(-50%);
+  bottom: -5px; height: 2px; border-radius: 1px;
+  background: currentColor; opacity: .55;
+}
+/* Absolute widths, not percentages: `.prob` is a block filling its cell, so a
+   percentage measured the column and drew a rule the width of the header
+   rather than a bar the size of the claim. */
+.strength.s1 .prob::after { width: 14px; }
+.strength.s2 .prob::after { width: 26px; }
+.strength.s3 .prob::after { width: 38px; }
+.strength.s4 .prob::after { width: 50px; }
+.strength.s3 .prob { color: var(--brand); }
+.strength.s4 .prob { color: var(--brand); font-size: 19px; }
 
 /* Expected value. Only Underdog prices both sides, so this is blank more often
    than not — which is honest, and why it is a quiet column rather than a

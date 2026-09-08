@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { evaluate, recommend, edgeProgress, type FormStats, type LineOption } from './projection.js';
+import { evaluate, recommend, edgeProgress, flatBreakEven, type FormStats, type LineOption } from './projection.js';
 import { foldCombo, type ComboStatRow } from '../combo.js';
 
 /**
@@ -441,4 +441,43 @@ test('an expensive good line loses to a cheap slightly worse one', () => {
   });
   assert.equal(s.play?.side, 'over');
   assert.equal(s.play?.book, 'prizepicks');
+});
+
+test('a flat multiplier implies a real break-even, and it is not monotone', () => {
+  // PrizePicks power play: 2 legs at 3x, 3 at 5x, 4 at 10x, 5 at 20x.
+  // A single assumed figure would be wrong in both directions.
+  assert.ok(Math.abs(flatBreakEven(2)! - Math.pow(1 / 3, 1 / 2)) < 1e-9);   // 57.7%
+  assert.ok(Math.abs(flatBreakEven(3)! - Math.pow(1 / 5, 1 / 3)) < 1e-9);   // 58.5%
+  assert.ok(Math.abs(flatBreakEven(5)! - Math.pow(1 / 20, 1 / 5)) < 1e-9);  // 54.9%
+  // Three legs demand MORE per leg than five do — the reason this is a table
+  // and not a constant.
+  assert.ok(flatBreakEven(3)! > flatBreakEven(5)!);
+});
+
+test('an entry is at least two legs and at most six, whatever it is asked', () => {
+  assert.equal(flatBreakEven(1), flatBreakEven(2), 'a one-leg slip prices as the entry it must become');
+  assert.equal(flatBreakEven(0), flatBreakEven(2));
+  assert.equal(flatBreakEven(99), flatBreakEven(6));
+});
+
+test('a PrizePicks market clears the entry bar, not just MIN_P', () => {
+  // 56% beats MIN_P (55%) but not a two-leg power play (57.7%).
+  const sample = form({
+    series: 25, mean: 20, sd: 4,
+    // 15 of 25 over the line, which shrinks to about 0.57 against the prior.
+    totals: [...Array(15).fill(30), ...Array(10).fill(10)],
+    mapValues: [], perMap: 20,
+  });
+  const bar = flatBreakEven(2)!;
+  const gated = evaluate({
+    form: sample,
+    options: [{ book: 'prizepicks', line: 20, overOk: true, underOk: true, breakEven: bar }],
+  });
+  const ungated = evaluate({
+    form: sample,
+    options: [{ book: 'prizepicks', line: 20, overOk: true, underOk: true }],
+  });
+  assert.ok(ungated.play, 'without the entry bar it is a call on MIN_P alone');
+  assert.equal(gated.play, null, 'with it, the multiplier eats the edge');
+  assert.equal(gated.why?.kind, 'priced-out');
 });

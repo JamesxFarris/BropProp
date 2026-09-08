@@ -166,6 +166,16 @@ export type LineOption = {
    */
   overPrice?: number | null;
   underPrice?: number | null;
+  /**
+   * A break-even the book implies without quoting odds, as a probability.
+   *
+   * PrizePicks pays a flat multiplier on the whole entry rather than a price
+   * per side, so its break-even is a property of the slip — 3x on two legs
+   * needs (1/3)^(1/2) = 57.7% per leg, 20x on five needs 54.9%. That cannot be
+   * read off the market, so the caller works it out from the entry being built
+   * and passes it in. Used only when there is no per-side price.
+   */
+  breakEven?: number | null;
 };
 
 /**
@@ -338,7 +348,13 @@ export function evaluate(o: Evaluation): CallStatus {
     const p = rateAt(o.line, side);
     if (p === null) return null;
     const price = side === 'over' ? o.overPrice : o.underPrice;
-    const be = typeof price === 'number' && Number.isFinite(price) ? americanToProb(price) : null;
+    // A quoted price wins; a flat-multiplier break-even is the fallback.
+    const be =
+      typeof price === 'number' && Number.isFinite(price)
+        ? americanToProb(price)
+        : typeof o.breakEven === 'number' && Number.isFinite(o.breakEven)
+          ? o.breakEven
+          : null;
     const bar = be === null ? MIN_P : Math.max(MIN_P, be);
     // Expected profit per 1 staked, only where a real price exists.
     const ev = be === null || price === null || price === undefined
@@ -706,4 +722,29 @@ export async function projectMarkets(
   ]);
   for (const [k, v] of b) a.set(k, v);
   return a;
+}
+
+/**
+ * What a flat-multiplier entry needs from each leg to break even.
+ *
+ * PrizePicks quotes no price per side. It pays a fixed multiple of the stake
+ * if every leg wins, so the bar is set by the entry rather than by the market:
+ * n legs at multiple m return nothing until each leg wins (1/m)^(1/n) of the
+ * time. The table is not monotone — 3x on two legs demands 57.7% while 20x on
+ * five demands 54.9% — so guessing a single figure would be wrong in both
+ * directions depending on the slip.
+ *
+ * Assumes the legs are independent, which they are not when two come from the
+ * same match; the slip panel already warns about that separately, and the
+ * error is in the safe direction here (correlated legs win together more often
+ * than independence implies, so a real parlay clears a lower bar than this).
+ */
+const FLAT_PAYOUT: Record<number, number> = { 2: 3, 3: 5, 4: 10, 5: 20, 6: 37.5 };
+
+export function flatBreakEven(legs: number): number | null {
+  // An entry needs at least two legs; a slip being built is one leg short of
+  // the entry it will become, so the caller adds the leg it is considering.
+  const n = Math.max(2, Math.min(6, Math.round(legs)));
+  const mult = FLAT_PAYOUT[n];
+  return mult === undefined ? null : Math.pow(1 / mult, 1 / n);
 }
