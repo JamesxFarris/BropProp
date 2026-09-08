@@ -784,8 +784,8 @@ function staleCell(r: MarketRow): string {
   const who = (b: string) => (b === 'prizepicks' ? 'PP' : 'UD');
   return `<div class="stale ${s.side === 'over' ? 'o' : 'u'}"
     title="${who(s.mover)} moved ${signed(s.move)} and ${who(s.book)} has not followed. Useful for choosing where to place a bet — but not a reason to make one: taking the stale side settled 50.0% (41-41) over 49 matches.">
-    <span class="stale-k">${who(s.mover)} moved ${signed(s.move)}</span>
-    <span class="stale-v">${who(s.book)} still ${num(s.book === 'prizepicks' ? r.pp_line : r.ud_line)}</span>
+    <span class="stale-k">${who(s.mover)} ${signed(s.move)}</span>
+    <span class="stale-v">${who(s.book)} ${num(s.book === 'prizepicks' ? r.pp_line : r.ud_line)}</span>
   </div>`;
 }
 

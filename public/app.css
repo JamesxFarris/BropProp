@@ -823,7 +823,14 @@ button.link:hover { color: var(--under); text-decoration: underline; }
 
 /* The call. Direction is the loud part — it's the thing being decided; the
    app and line sit under it as the where. */
-.play { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
+/* Centred, because the cell is centred. A flex container ignores the
+   text-align that centres everything else in a `.c` cell, so without this the
+   lean packed to the left under a centred header — one of the things that
+   made the row read as ragged. */
+.play {
+  display: flex; align-items: baseline; gap: 8px; white-space: nowrap;
+  justify-content: center;
+}
 .play .dir { font-size: 18px; font-weight: 700; letter-spacing: -.01em; }
 .play .at {
   font-family: var(--mono); font-size: 15px; font-weight: 500;
@@ -939,32 +946,31 @@ button.link:hover { color: var(--under); text-decoration: underline; }
 .prob {
   font-family: var(--mono); font-variant-numeric: tabular-nums;
   font-size: 17px; font-weight: 600; color: var(--text);
+  line-height: 1.15;
 }
 
-/* How good a call is, as a shape rather than a second number.
-   The Score column was dropped when the engine started ranking on probability
-   — score was (p − 0.5) × 2 and said nothing Win % did not. But a bare "67%"
-   gives no sense of where that sits in the range a call can occupy, and on the
-   phone, where the row is a card and nothing is beside it to compare against,
-   there was no signal of value at all. Four steps, drawn on the figure itself:
-   weight and colour on the wide board, plus a filled bar under it that the
-   card layout leans on. Meaning first, decoration never — the step IS the
-   number, banded. */
-.strength .prob { position: relative; }
-.strength .prob::after {
-  content: ''; position: absolute; left: 50%; transform: translateX(-50%);
-  bottom: -5px; height: 2px; border-radius: 1px;
-  background: currentColor; opacity: .55;
+/* What the figure was counted from, directly under it.
+   Mono and tabular like the figure above, so "23 of 30" and "9 of 9" occupy
+   the same width and the pair reads as one block. Both lines carry a fixed
+   line-height so every row in the column sits on the same two baselines —
+   ragged baselines were most of why this cell looked off-centre. */
+.meta.raw {
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+  line-height: 1.3; margin-top: 3px; white-space: nowrap;
 }
-/* Absolute widths, not percentages: `.prob` is a block filling its cell, so a
-   percentage measured the column and drew a rule the width of the header
-   rather than a bar the size of the claim. */
-.strength.s1 .prob::after { width: 14px; }
-.strength.s2 .prob::after { width: 26px; }
-.strength.s3 .prob::after { width: 38px; }
-.strength.s4 .prob::after { width: 50px; }
+
+/* How good a call is, in colour only.
+   There used to be a short bar under the figure as well. It was there because
+   a bare "67%" gave no sense of where it sat in the range a call can occupy —
+   but the cell now prints "23 of 30" directly underneath, which says more than
+   a bar ever did, and the bar ended up sandwiched between the two lines
+   reading as a stray underline rather than a meter.
+   Size is deliberately NOT banded either. A figure that grows on the strongest
+   rows makes the column ragged, because every row then sets its own baseline
+   and the eye has nothing straight to run down. Colour carries the band;
+   the geometry stays identical on every row. */
 .strength.s3 .prob { color: var(--brand); }
-.strength.s4 .prob { color: var(--brand); font-size: 19px; }
+.strength.s4 .prob { color: var(--brand); }
 
 /* Expected value. Only Underdog prices both sides, so this is blank more often
    than not — which is honest, and why it is a quiet column rather than a
@@ -1552,12 +1558,23 @@ body.searching .tick { display: none; }
   /* A block that sizes to its content, not inline-flex: inline let the lean
      text flow straight onto the end of it, so a row read "UD moved -1.0 PP
      still 14.0no edge +1.8" with no break between two separate statements. */
-  display: flex; width: fit-content; align-items: baseline; gap: 6px; flex-wrap: wrap;
-  margin-bottom: 5px; padding: 3px 8px;
+  display: flex; width: fit-content; align-items: baseline; gap: 6px;
+  /* fit-content plus auto margins keeps the chip centred over the lean below
+     it; without the auto it hugged the left edge of a centred cell. */
+  margin: 0 auto 4px; padding: 1px 6px;
   border-radius: var(--r-chip);
-  border: 1px solid currentColor;
-  font-size: 12px; font-weight: 600;
-  line-height: 1.35;
+  /* No wrapping, and no border box.
+     It used to wrap to two lines inside this column, which made any row
+     carrying one noticeably taller than its neighbours and pushed the lean
+     below the line every other column sits on — the main reason the board
+     read as ragged. A bordered box also gave it more weight than the call
+     itself, which the measurement does not support: taking the stale side
+     settles at 50.0%. It is an observation, so it is now annotation-weight —
+     one quiet line, tinted rather than outlined. */
+  white-space: nowrap;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  font-size: 11px; font-weight: 600;
+  line-height: 1.4;
 }
 .stale.o { color: var(--over); background: var(--over-bg); }
 .stale.u { color: var(--under); background: var(--under-bg); }
