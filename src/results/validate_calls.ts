@@ -57,7 +57,7 @@ const arm = (): Arm => ({ n: 0, won: 0 });
  * asked about are in the teens, where the approximation that made 462 legs
  * look like z=5.11 is exactly the thing being corrected.
  */
-function signTest(k: number, n: number): number {
+export function signTest(k: number, n: number): number {
   if (n === 0) return 1;
   const logFact: number[] = [0];
   for (let i = 1; i <= n; i++) logFact[i] = logFact[i - 1]! + Math.log(i);
@@ -81,7 +81,7 @@ function signTest(k: number, n: number): number {
  * shrinks toward a prior, so ties are common and a naive implementation would
  * score them as wins for whichever order they happened to be in.
  */
-function auc(rows: Array<{ p: number; won: boolean }>): number {
+export function auc(rows: Array<{ p: number; won: boolean }>): number {
   const wins = rows.filter((r) => r.won).length;
   const losses = rows.length - wins;
   if (!wins || !losses) return 0.5;
