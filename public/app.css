@@ -1,6 +1,7 @@
 /* BropProp
    ---------------------------------------------------------------------
-   Colour carries exactly four meanings and nothing else:
+   Colour carries exactly three meanings on a row, plus cyan for chrome,
+   and nothing else:
 
      gold   this is worth your money   (the strength score, the place button)
      green  over
@@ -726,11 +727,15 @@ button.link:hover { color: var(--under); text-decoration: underline; }
   .board-table th:nth-child(6), .board-table td:nth-child(6) { width: 15%; }
 }
 
-/* Fair % vs. our own hit rate, twenty points or more apart. Not a fifth
-   colour — colour keeps its four meanings — so the flag is a rule down the
+/* Fair % vs. our own hit rate, twenty points or more apart. Not a fourth
+   colour — colour keeps its three meanings — so the flag is a rule down the
    cell's left edge instead, the same device `.tick` already uses. Unscoped
    by width, unlike the `title` beside it: `title` never fires on touch, and
-   this board is used on phones. */
+   this board is used on phones.
+
+   Below 760px this same edge gets overridden — see the phone section — since
+   a left border on a full-width stacked cell reads as a stray mark, not a
+   column boundary. */
 .board-table td.fairgap { border-left: 2px solid var(--line-2); }
 
 /* Kick-off. Quiet until it matters — a market that has already started is
@@ -892,6 +897,31 @@ button.link:hover { color: var(--under); text-decoration: underline; }
   .formcol, .gapcol { display: none !important; }
   .play { margin-top: 8px; }
   .play .dir { font-size: 18px; }
+
+  /* Fair % has no header once thead is gone, so — like the book columns
+     below — it gets its own label from an attribute via ::before rather
+     than repeating the header text into the markup for every row. */
+  .faircol {
+    display: flex !important; align-items: baseline; justify-content: space-between;
+    gap: 10px; margin-top: 8px; padding-top: 8px;
+    border-top: 1px solid var(--line);
+  }
+  .faircol::before {
+    content: attr(data-label);
+    font-size: 13px; font-weight: 600; color: var(--text-2);
+  }
+  /* The left-edge rule means "column boundary" in the wide table; stacked,
+     the cell is a full-width block with no column to bound, so that same
+     border reads as a stray tick floating mid-card. An outline around the
+     label+value line instead reads as "this line is flagged", which is
+     what the edge meant all along — no colour, no shadow, just a shape
+     change for a layout that no longer has columns. */
+  .board-table td.fairgap {
+    border-left: 0;
+    border: 1px solid var(--line-2);
+    border-radius: var(--r-s);
+    padding: 3px 8px;
+  }
 
   /* -- the two apps, stacked and named, so the choice stays explicit -- */
   .bookcol {

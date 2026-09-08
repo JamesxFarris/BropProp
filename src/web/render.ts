@@ -1003,7 +1003,11 @@ export function boardPage(o: {
             // not list — which is honest: there is no market probability, rather
             // than a market that thinks the chance is zero.
             const fair = devig(r.ud_over_price, r.ud_under_price);
-            const marketProb = fair === null ? null : play?.side === 'under' ? fair.under : fair.over;
+            // A market probability is a probability *of a side*. With no call
+            // there is no side to price, so there is nothing honest to show —
+            // falling through to "over" would silently pick a side the reader
+            // never chose and display it under a header that does not say which.
+            const marketProb = fair === null || play === null ? null : play.side === 'under' ? fair.under : fair.over;
             const gapToMarket = marketDisagreement(play?.hitRate ?? null, marketProb);
             return `<tr data-search="${rowKey(r.handle, r.match_title, statLabel(r.stat), r.league)}">
             <td class="c">${scoreCell(play)}</td>
@@ -1034,9 +1038,9 @@ export function boardPage(o: {
               <div class="meta">${esc(maps(r.map_start, r.map_end))}</div>
             </td>
             <td class="n formcol">${formCell(formOf(r), play)}</td>
-            <td class="n${
+            <td class="n faircol${
               gapToMarket !== null && Math.abs(gapToMarket) >= MARKET_GAP ? ' fairgap' : ''
-            }"${
+            }" data-label="Fair %"${
               gapToMarket !== null && Math.abs(gapToMarket) >= MARKET_GAP
                 ? ` title="${Math.round(Math.abs(gapToMarket) * 100)} points from what we think — worth a second look"`
                 : ''

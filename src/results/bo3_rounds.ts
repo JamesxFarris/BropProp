@@ -74,6 +74,7 @@ export async function backfillRounds(limit?: number): Promise<{ games: number; r
   for (let i = 0; i < ids.length; i += 100) {
     const batch = ids.slice(i, i + 100);
     const requested = new Set(batch);
+    batches++;
 
     const params = new URLSearchParams();
     params.set('filter[games.id][in]', batch.join(','));
@@ -105,7 +106,6 @@ export async function backfillRounds(limit?: number): Promise<{ games: number; r
       }
     }
 
-    batches++;
     const mins = (Date.now() - started) / 60000;
     const done = Math.min(i + 100, ids.length);
     const pct = Math.round((100 * done) / ids.length);

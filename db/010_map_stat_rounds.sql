@@ -18,8 +18,10 @@
 
 ALTER TABLE map_stat ADD COLUMN IF NOT EXISTS rounds smallint;
 
--- The projection draws a round-length distribution per league. Partial, since
--- every LoL row and every un-backfilled CS2 row is null and none of them are
--- ever selected by that query.
+-- `measure_rounds.ts` and `validate_kpr.ts` both scan for `rounds IS NOT
+-- NULL` by league — one to correlate kills-per-round against round length,
+-- the other to build a held-out round-length pool for validation. Partial,
+-- since every LoL row and every un-backfilled CS2 row is null and neither
+-- script ever selects those.
 CREATE INDEX IF NOT EXISTS map_stat_rounds_idx
   ON map_stat (league, rounds) WHERE rounds IS NOT NULL;

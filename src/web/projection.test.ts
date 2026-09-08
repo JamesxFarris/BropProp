@@ -1,12 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  evaluate,
-  recommend,
-  edgeProgress,
-  type FormStats,
-  type LineOption,
-} from './projection.js';
+import { evaluate, recommend, edgeProgress, type FormStats, type LineOption } from './projection.js';
 import { foldCombo, type ComboStatRow } from '../combo.js';
 
 /**
@@ -210,4 +204,3 @@ test('a combo whose members never played together makes no call', () => {
   assert.equal(f.mapValues.length, 0);
   assert.equal(evaluate({ form: f, options: [both('prizepicks', 5)], handle: 'A + B' }).play, null);
 });
-

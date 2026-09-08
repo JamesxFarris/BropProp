@@ -11,9 +11,13 @@
 -- when a query asks map_stat_dedup for `rounds` and gets "column does not
 -- exist" — or worse, if a looser caller tolerated a missing column and just
 -- got nulls back, which is how a real modelling input quietly stays empty.
--- `src/web/projection.ts` and `src/web/boardq.ts` read `rounds` off this view,
--- not off `map_stat` directly, so Task 5's backfilled data was invisible to
--- them until this ran.
+-- `src/results/measure_rounds.ts` and `src/results/validate_kpr.ts` read
+-- `rounds` off this view, not off `map_stat` directly, so the backfilled
+-- data was invisible to them until this ran. Nothing in `src/web` reads
+-- `rounds` off the view today, but that is exactly why this still has to
+-- run: a view that silently drops a column of its own underlying table is
+-- a trap for whatever reads it next, whether that is one of these two
+-- scripts or a future caller that assumes `SELECT *` means what it says.
 --
 -- The fix is the view definition from 008, re-run verbatim. `CREATE OR
 -- REPLACE VIEW` is allowed to append columns at the end of a view's column
