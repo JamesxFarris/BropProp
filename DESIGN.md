@@ -234,6 +234,36 @@ changed here: it decides money and deserves its own measurement.
 
 ## Log
 
+- **2026-09-08** — Rebuilt the board around the comparison it exists to make.
+  Their line and our number are a matched pair of chips now, gold against
+  teal, sat next to each other; before, the average lived in a grey column
+  band, right-aligned to the far edge of it, as far from the market it
+  described as the cell allowed. Dropped the Score column — with the engine
+  ranking on probability, score was `(p − 0.5) × 2` and said nothing Win %
+  did not. Added EV, blank wherever the book publishes no per-side price,
+  because a zero there would claim we had priced it and found nothing.
+- **2026-09-08** — One app at a time, PrizePicks by default. Two lines and
+  four O/U buttons per row implied a choice that never existed: on a market
+  where the apps differ, exactly one side of one app is the best available
+  price, and the engine already knows which. The other app's number survives
+  as the gap. `book=both` still compares them directly. With one app on
+  screen the line is printed once rather than in both the call and the take
+  cell, which was most of what made a row hard to read.
+- **2026-09-08** — Lifted the ground off near-black to a warm slate and moved
+  every signal to a pastel. Nothing was actually lit before, so surfaces read
+  as outlines and the page looked flat; and thirty saturated calls on one
+  board is thirty things shouting. League got its tint back — `fc8325c` was
+  right to cut it while gold was overloaded, but cyan has taken the chrome
+  job since, and "which game is this" is the first question on a mixed board.
+  Deliberately not the violet the reference designs use: the standing
+  constraint rules out violet-to-indigo, and it still holds.
+- **2026-09-08** — A real sign-in page, replacing the browser's basic-auth
+  dialog for people while keeping the header for `curl` and scripts. Same
+  credentials. The session is a signed cookie rather than a table: one user
+  and one password would make that a table with one row, a migration and a
+  cleanup job, where an HMAC keyed by the password gets revocation-on-change
+  for free. Kept as its own module so the auth boundary could be tested
+  without standing up a server.
 - **2026-09-06** — Constraints above set at project start. Scope narrowed to
   CS2 and LoL only; Apex and Valorant dropped from the default poll.
 - **2026-09-06** — Direction chosen: *technical instrument*, over a

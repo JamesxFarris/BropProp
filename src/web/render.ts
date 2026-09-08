@@ -158,9 +158,11 @@ function filterBar(path: string, f: Filters, leagues: string[], locked: string |
   const bookBtns = locked
     ? `<span class="seg-locked" aria-current="page">${bookName(locked)}</span>`
     : [
-        a(qs({ book: null }, f), 'Both', f.book === null),
+        // PrizePicks leads because it is the default. "Both" has to name
+        // itself in the URL now that an absent param means PrizePicks.
         a(qs({ book: 'prizepicks' }, f), 'PrizePicks', f.book === 'prizepicks'),
         a(qs({ book: 'underdog' }, f), 'Underdog', f.book === 'underdog'),
+        a(qs({ book: 'both' }, f), 'Both', f.book === null),
       ].join('');
 
   return `
@@ -283,6 +285,7 @@ function shell(o: {
     <span class="grow"></span>
     ${freshness(o.health.last_ok_poll)}
     <button type="button" class="icon-btn" id="theme">Theme</button>
+    <a class="icon-btn" href="/logout">Sign out</a>
   </div>
 </header>
 
@@ -605,6 +608,36 @@ function lockNotice(locked: string | null, blocked: string | null): string {
  * different claim from twenty, and a projection shown without its sample
  * invites exactly the confidence it hasn't earned.
  */
+/**
+ * What the "ours" number rests on, in a few words under the chip.
+ *
+ * The figure alone is a claim; this is the evidence behind it, and it is the
+ * difference between a number measured over the exact map range and one
+ * modelled from single maps. Both are shown as one chip, so the note is where
+ * the distinction has to live.
+ */
+function formNote(f: FormStats | undefined, play: Play | null): string {
+  if (!f) return '';
+  if (play?.method === 'maps' || f.series === 0) {
+    return `per map, ${f.mapValues.length} maps`;
+  }
+  return `${f.series} series`;
+}
+
+/**
+ * Expected value, where a price exists to compute it from.
+ *
+ * Only Underdog publishes per-side odds; PrizePicks charges through a flat
+ * multiplier whose break-even depends on the slip's eventual leg count, so
+ * there is no honest per-market number to print. A dash says that, where a
+ * zero would claim we had priced it and found nothing.
+ */
+function evCell(play: Play | null): string {
+  if (!play || play.ev === null) return '<span class="meta">—</span>';
+  const pct = play.ev * 100;
+  return `<span class="ev ${pct >= 0 ? 'pos' : 'neg'}">${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%</span>`;
+}
+
 function formCell(f: FormStats | undefined, play: Play | null): string {
   if (!f) return '<span class="meta">—</span>';
   // Show the number the call was actually made from, and say which it is.
@@ -686,21 +719,31 @@ function playCell(
   play: Play | null,
   why: NoCall | null,
   r: { is_combo: boolean; stat: string; handle: string },
+  /** The single app on screen, if there is one. */
+  only?: string | null,
 ): string {
   if (!play) {
     return `<span class="meta">${esc(why ? noCallText(why, r) : 'no call')}</span>`;
   }
   const dir = play.side === 'over' ? 'Over' : 'Under';
   const cls = play.side === 'over' ? 'o' : 'u';
-  const basis =
-    play.method === 'series'
-      ? `${Math.round(play.hitRate * 100)}% of ${play.series}`
-      : `${Math.round(play.hitRate * 100)}% modelled`;
+  // The hit rate has its own column and the sample size sits under the "ours"
+  // chip, so repeating either here was printing the same fact three times
+  // across one row. What is left is the one thing neither column says: how far
+  // the number is from the line, in the units the market is quoted in.
+  const basis = play.method === 'maps' ? 'modelled' : '';
+  // Name the app and its number only when more than one app is on screen.
+  // With a single app the same figure already sits in the line column two
+  // cells away, and printing it twice was most of why a row was hard to read.
+  const at =
+    only === null || only === undefined
+      ? `<span class="at">${bookName(play.book) === 'PrizePicks' ? 'PP' : 'UD'} ${play.line.toFixed(1)}</span>`
+      : '';
   return `<div class="play ${cls}">
       <span class="dir">${dir}</span>
-      <span class="at">${bookName(play.book) === 'PrizePicks' ? 'PP' : 'UD'} ${play.line.toFixed(1)}</span>
+      ${at}
     </div>
-    <div class="meta">${signed(play.edge)} in your favour, ${basis}${
+    <div class="meta">${signed(play.edge)} in your favour${basis ? `, ${basis}` : ''}${
       play.method === 'maps'
         ? ` <span class="est" title="Estimated by resampling ${play.sample} single maps, because too few series played this exact map range">est</span>`
         : ''
@@ -987,15 +1030,16 @@ export function boardPage(o: {
       </div>
       <div class="scroll cards-sm"><table class="board-table stack-sm" data-filter>
         <thead><tr>
-          <th class="c">Score</th>
           <th>Player</th>
-          <th>Market</th>
-          <th class="n">Averages</th>
-          <th class="n">Fair %</th>
-          <th>Take</th>
-          ${showPP ? '<th class="n">PrizePicks</th>' : ''}
+          <th>Prop</th>
+          <th class="c">Line</th>
+          <th class="c">Ours</th>
+          <th class="c">Lean</th>
+          <th class="c">Win %</th>
+          <th class="c evcol">EV</th>
+          ${showPP ? `<th class="n">${only ? 'Take' : 'PrizePicks'}</th>` : ''}
           <th class="c gapcol">${gapLabel}</th>
-          ${showUD ? '<th class="n">Underdog</th>' : ''}
+          ${showUD ? `<th class="n">${only ? 'Take' : 'Underdog'}</th>` : ''}
         </tr></thead>
         <tbody>${ranked
           .map((r, i) => {
@@ -1025,8 +1069,18 @@ export function boardPage(o: {
             // never chose and display it under a header that does not say which.
             const marketProb = fair === null || play === null ? null : play.side === 'under' ? fair.under : fair.over;
             const gapToMarket = marketDisagreement(play?.hitRate ?? null, marketProb);
+            // The two numbers the whole page exists to compare, set side by
+            // side as chips rather than as a figure and a distant column: the
+            // book's line, and what this player's own history says. A reader
+            // should not have to hold one in their head to reach the other.
+            const theirLine = play ? play.line : (only === 'underdog' ? r.ud_line : r.pp_line);
+            const f = formOf(r);
+            const ours = !f
+              ? null
+              : play?.method === 'maps' || f.series === 0
+                ? f.perMap
+                : f.mean;
             return `<tr data-search="${rowKey(r.handle, r.match_title, statLabel(r.stat), r.league)}">
-            <td class="c">${scoreCell(play)}</td>
             <td>
               <div class="who${sameAsPrev ? ' cont' : ''}">
                 ${sameAsPrev ? '<span class="tick"></span>' : leagueBadge(r.league)}
@@ -1053,19 +1107,35 @@ export function boardPage(o: {
               <div class="statname">${esc(statLabel(r.stat))}</div>
               <div class="meta">${esc(maps(r.map_start, r.map_end))}</div>
             </td>
-            <td class="n formcol">${formCell(formOf(r), play)}</td>
-            <td class="n faircol${
-              gapToMarket !== null && Math.abs(gapToMarket) >= MARKET_GAP ? ' fairgap' : ''
-            }" data-label="Fair %"${
-              gapToMarket !== null && Math.abs(gapToMarket) >= MARKET_GAP
-                ? ` title="${Math.round(Math.abs(gapToMarket) * 100)} points from what we think — worth a second look"`
-                : ''
-            }>${marketProb === null ? '—' : `${Math.round(marketProb * 100)}%`}</td>
-            <td>${playCell(play, statusOf(r).why, r)}</td>
+            <td class="c" data-label="Line">${
+              theirLine === null
+                ? '<span class="meta">—</span>'
+                : `<span class="chip-num book">${Number(theirLine).toFixed(1)}</span>`
+            }</td>
+            <td class="c" data-label="Ours">${
+              ours === null
+                ? '<span class="meta">—</span>'
+                : `<span class="chip-num model">${Number(ours).toFixed(1)}</span>
+                   <div class="meta">${formNote(formOf(r), play)}</div>`
+            }</td>
+            <td class="c" data-label="Lean">${playCell(play, statusOf(r).why, r, only)}</td>
+            <td class="c" data-label="Win %">${
+              play === null
+                ? '<span class="meta">—</span>'
+                : `<div class="prob">${Math.round(play.hitRate * 100)}%</div>
+                   <div class="meta${
+                     gapToMarket !== null && Math.abs(gapToMarket) >= MARKET_GAP ? ' fairgap' : ''
+                   }"${
+                     gapToMarket !== null && Math.abs(gapToMarket) >= MARKET_GAP
+                       ? ` title="${Math.round(Math.abs(gapToMarket) * 100)} points from what we think — worth a second look"`
+                       : ''
+                   }>${marketProb === null ? 'no market price' : `market ${Math.round(marketProb * 100)}%`}</div>`
+            }</td>
+            <td class="c evcol" data-label="EV">${evCell(play)}</td>
             ${
               showPP
                 ? `<td class="n bookcol" data-book="PrizePicks"><div class="bookcell">
-                <span class="fig${r.pp_line === null ? ' muted' : ''}">${num(r.pp_line)}</span>
+                ${only ? '' : `<span class="fig${r.pp_line === null ? ' muted' : ''}">${num(r.pp_line)}</span>`}
                 ${ouButtons(r.pp_prop_id, back, r.pp_side,
                   offeredSides('prizepicks', r.delta === null ? null : Number(r.delta), restrict),
                   play?.book === 'prizepicks' ? play.side : 'both',
@@ -1077,7 +1147,7 @@ export function boardPage(o: {
             ${
               showUD
                 ? `<td class="n bookcol" data-book="Underdog"><div class="bookcell">
-                <span class="fig${r.ud_line === null ? ' muted' : ''}">${num(r.ud_line)}</span>
+                ${only ? '' : `<span class="fig${r.ud_line === null ? ' muted' : ''}">${num(r.ud_line)}</span>`}
                 ${ouButtons(r.ud_prop_id, back, r.ud_side,
                   offeredSides('underdog', r.delta === null ? null : Number(r.delta), restrict),
                   play?.book === 'underdog' ? play.side : 'both',
@@ -1606,4 +1676,54 @@ export function buildPage(o: {
       Slips page will eventually settle.</div>
       ${body}`,
   });
+}
+
+/**
+ * The sign-in page.
+ *
+ * Deliberately not the app shell: there is no board to navigate, no slip to
+ * carry and no freshness to report, and a nav bar full of links that all
+ * bounce back here would be furniture pretending to be a page. Same
+ * stylesheet, same palette, so it reads as the same product.
+ *
+ * A plain form posting to itself, like every other write in this app — the
+ * one screen you might meet on a bad connection is the last place to require
+ * a script to run.
+ */
+export function loginPage(o: { next: string; error?: string }): string {
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BropProp — Sign in</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="theme-color" content="#171a21">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body class="login-body">
+  <main class="login">
+    <h1 class="brand login-brand">Brop<span>Prop</span></h1>
+    <p class="login-sub">Esports prop research. Sign in to see the board.</p>
+    <form class="login-card" method="post" action="/login">
+      <input type="hidden" name="next" value="${esc(o.next)}">
+      ${o.error ? `<p class="login-error" role="alert">${esc(o.error)}</p>` : ''}
+      <label class="login-field">
+        <span>Username</span>
+        <input name="user" autocomplete="username" autocapitalize="none"
+               autocorrect="off" spellcheck="false" required autofocus>
+      </label>
+      <label class="login-field">
+        <span>Password</span>
+        <input name="password" type="password" autocomplete="current-password" required>
+      </label>
+      <button class="login-go" type="submit">Sign in</button>
+    </form>
+    <p class="login-foot">Your session lasts 30 days on this device.</p>
+  </main>
+</body>
+</html>`;
 }

@@ -1,47 +1,82 @@
 /* BropProp
    ---------------------------------------------------------------------
-   Colour carries exactly three meanings on a row, plus cyan for chrome,
-   and nothing else:
+   Every hue on a row answers a question, and no hue answers two:
 
-     gold   this is worth your money   (the strength score, the place button)
-     green  over
-     red    under
-     cyan   the view you have chosen   (nav, filters, freshness)
+     gold   the book's number      (the line chip, the place button)
+     teal   our number             (the model chip)
+     green  over, and value        red  under, and no value
+     cyan   the view you chose     (nav, filters, freshness — chrome only)
+     pastel amber / pastel blue    which game this is (league badge only)
 
-   Cyan is the chrome voice and never appears on a row; gold, green and red
-   are the data voices and never appear in the chrome. That separation is the
-   point: gold used to do double duty as both "selected filter" and "worth
-   your money", which is one hue making two claims on the same screen.
+   Cyan is the chrome voice and never appears on a row; the data voices never
+   appear in the chrome. That separation is the point: gold once did double
+   duty as both "selected filter" and "worth your money", which is one hue
+   making two claims on the same screen.
 
-   Everything else — leagues, books — is neutral. Four competing colour
-   languages is what made the board hard to read; league identity is a
-   labelled chip, because the label already says which game it is.
+   Gold-versus-teal is the newest pair and the most important. The board exists
+   to compare two numbers — what the app is offering and what this player
+   actually does — and those two sat in different columns, one of them inside
+   a grey box, right-aligned away from the market it described. As a matched
+   pair of chips the comparison needs no reading at all.
+
+   League got its tint back after `fc8325c` had cut it. That commit was right
+   at the time, when gold was overloaded; cyan has taken the chrome job since,
+   which frees the slot, and "which game is this" really is the first question
+   on a mixed board.
+
+   Everything is pastel on purpose. Thirty saturated calls on one board is
+   thirty things shouting; a tint keeps the meaning and lets the figures stay
+   the loudest thing in the row.
 
    Dark is the default: this is a tool used at night, next to a stream. */
 
 :root {
   color-scheme: dark;
 
-  --bg:        #101216;
-  --surface:   #171a1f;
-  --surface-2: #1f232a;
-  --raised:    #222730;
-  --line:      #2c313a;
-  --line-2:    #414855;
+  /* A warm slate rather than near-black. The old ground was #101216, which is
+     a hair off pure black and made every surface above it read as an outline
+     rather than as a surface — the page looked flat because nothing was
+     actually lit. Lifting the floor and warming the hue very slightly (a blue
+     of 0.06 rather than 0.10 relative to red) gives the cards somewhere to sit
+     and takes the clinical edge off without turning anything beige. */
+  --bg:        #171a21;
+  --surface:   #1e222b;
+  --surface-2: #262b36;
+  --raised:    #2d3340;
+  --line:      #363d4b;
+  --line-2:    #4a5265;
 
-  --text:      #f2f4f7;
-  --text-2:    #b9c1cc;
-  --text-3:    #8b95a3;
+  --text:      #f4f6fa;
+  --text-2:    #c3cad6;
+  --text-3:    #939cac;
 
   /* Brand. A warm gold — the one thing on the page that means "good". */
-  --brand:     #f0b429;
-  --brand-dim: #f0b42926;
+  --brand:     #f5c265;
+  --brand-dim: #f5c26522;
   --brand-ink: #1a1d22;
 
-  --over:      #34d399;
-  --over-bg:   #34d39922;
-  --under:     #fb7185;
-  --under-bg:  #fb718522;
+  /* Pastels, not saturated signals. At the old #34d399 / #fb7185 a board with
+     thirty calls on it was thirty competing shouts; softening both toward a
+     tint keeps the meaning (green is over, red is under) while letting the
+     figure they sit beside stay the loudest thing in the row. */
+  --over:      #7fdcae;
+  --over-bg:   #7fdcae1f;
+  --under:     #f6a0ad;
+  --under-bg:  #f6a0ad1f;
+
+  /* The two numbers the board compares. The book's line wears the brand gold;
+     ours wears a soft teal that appears nowhere else, so "their number" and
+     "our number" are never mistaken for one another at a glance. Deliberately
+     NOT the violet the reference designs use — DESIGN.md rules out
+     violet-to-indigo, and a teal reads as calmly against a warm ground. */
+  --model:     #86d7d0;
+  --model-bg:  #86d7d01f;
+
+  /* League identity, pastel. A chip, never a row background. */
+  --cs2:       #f3c98b;
+  --cs2-bg:    #f3c98b1c;
+  --lol:       #9fd3ef;
+  --lol-bg:    #9fd3ef1c;
 
   /* Chrome. One hue for "where you are", so gold can mean only one thing. */
   --nav:       #3fc9e4;
@@ -428,9 +463,17 @@ td.match .sub2 {
   font-size: 13px; font-weight: 700; letter-spacing: .02em;
   border: 1px solid transparent;
 }
-.lg.cs2, .lg.lol, .lg.other {
-  color: var(--text-2); background: var(--surface-2); border-color: var(--line-2);
-}
+/* League gets its hue back, in pastel.
+   `fc8325c` had cut this to neutral to hold the colour language to three
+   meanings, and that was right while gold was doing double duty as both
+   "selected" and "worth your money". Cyan took the chrome job since, which
+   frees a slot — and "which game is this" really is the first question when
+   scanning a mixed board, so a labelled chip that also carries a tint answers
+   it before the label is read. Pastel and confined to the badge, so it tints
+   the row's identity without competing with the figures. */
+.lg.cs2   { color: var(--cs2); background: var(--cs2-bg); border-color: #f3c98b3d; }
+.lg.lol   { color: var(--lol); background: var(--lol-bg); border-color: #9fd3ef3d; }
+.lg.other { color: var(--text-2); background: var(--surface-2); border-color: var(--line-2); }
 
 .chip {
   display: inline-block; padding: 3px 9px; border-radius: var(--r-s);
@@ -793,13 +836,46 @@ button.link:hover { color: var(--under); text-decoration: underline; }
    buys in prominence. The tone is one step off the card, and the flagged
    Fair % cell sits one step further, so the two read as a hierarchy rather
    than as the same treatment twice. */
-.board-table td.formcol {
-  background: var(--surface-2);
+/* The old treatment painted the whole Averages column one step lighter than
+   the card, which read as a grey box drawn around the number rather than as
+   emphasis, and right-aligned the figure to the far edge of that box — as far
+   from the market it describes as the cell allowed. Both are gone: the two
+   numbers are chips now, set next to each other so the comparison is the
+   thing you see. */
+.board-table td.formcol { background: none; }
+.board-table td.formcol .fig { color: var(--text); font-size: 18px; }
+
+/* ---- the paired numbers -------------------------------------------------
+   Their line and our number, one chip each. Same size, same shape, different
+   hue, sat side by side: the entire question the board answers is whether
+   these two disagree, and that should take no reading at all. */
+.chip-num {
+  display: inline-block;
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+  font-size: 16px; font-weight: 600; letter-spacing: -.01em;
+  padding: 5px 10px; border-radius: var(--r-s);
+  border: 1px solid transparent;
 }
-.board-table td.formcol .fig {
-  color: var(--text);
-  font-size: 18px;
+.chip-num.book  { color: var(--brand); background: var(--brand-dim); border-color: #f5c26533; }
+.chip-num.model { color: var(--model); background: var(--model-bg);  border-color: #86d7d033; }
+
+/* Our probability. The largest plain figure in the row, because after the two
+   chips it is the number that decides. */
+.prob {
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+  font-size: 17px; font-weight: 600; color: var(--text);
 }
+
+/* Expected value. Only Underdog prices both sides, so this is blank more often
+   than not — which is honest, and why it is a quiet column rather than a
+   headline one. */
+.evcol { width: 78px; }
+.ev {
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+  font-size: 15px; font-weight: 600;
+}
+.ev.pos { color: var(--over); }
+.ev.neg { color: var(--under); }
 
 /* Kick-off. Quiet until it matters — a market that has already started is
    the one thing here you cannot act on. */
@@ -949,21 +1025,71 @@ button.link:hover { color: var(--under); text-decoration: underline; }
   .only-sm { display: block; }
   .statcol .statname, .statcol .sub2 { font-size: 15px; }
 
-  /* -- board: the score leads, then the call, then the two apps -- */
-  .board-table tr { padding-left: 64px; }
-  .board-table td.c:first-child {
-    position: absolute; left: 12px; top: 12px;
-    width: 44px; text-align: left;
-  }
+  /* -- board: who, what, the two numbers, then the call --
+     The wide table's columns become one card, and the order is the order the
+     question is asked in: who and what, then their number against ours, then
+     what we make of it. Laid out rather than left to stack: five columns each
+     becoming a full-width block made the phone board half as long again as
+     the page it replaced. */
+  /* The card is a flex row that wraps, not a stack of blocks. Relying on the
+     cells being inline-level left it to whitespace in the markup to decide
+     what shared a line, which it did badly: five short numbers took five
+     full-width rows and made the phone board half as long again. Identity and
+     market claim a whole line each because they are prose; the numbers share
+     lines because they are numbers. */
+  .board-table tbody tr { display: flex; flex-wrap: wrap; align-items: baseline; }
+  .board-table tbody td:nth-child(1),
+  .board-table tbody td:nth-child(2) { flex: 1 1 100%; }
+
   .score.hi { font-size: 26px; }
   .score.mid { font-size: 22px; }
-  .formcol, .gapcol { display: none !important; }
-  .play { margin-top: 8px; }
-  .play .dir { font-size: 18px; }
+  .gapcol { display: none !important; }
+  .play { margin-top: 0; }
+  .play .dir { font-size: 17px; }
 
-  /* Fair % has no header once thead is gone, so — like the book columns
-     below — it gets its own label from an attribute via ::before rather
-     than repeating the header text into the markup for every row. */
+  /* Every stacked cell names itself from its own data-label. Repeating the
+     header text into the markup on every row would be the same string in a
+     hundred places, and the header is already gone at this width. */
+  .board-table td[data-label] {
+    display: flex !important; align-items: baseline; gap: 8px;
+  }
+  .board-table td[data-label]::before {
+    content: attr(data-label);
+    font-size: 12px; font-weight: 600; color: var(--text-3);
+    min-width: 42px; flex: none;
+  }
+
+  /* Their number and ours, side by side on one line — the comparison the
+     board exists to make, and the one thing that must not need scrolling
+     past to complete. */
+  .board-table td[data-label="Line"],
+  .board-table td[data-label="Ours"] {
+    display: inline-flex !important;
+    width: auto; margin-top: 8px; padding-right: 16px;
+  }
+  /* The sample size rides alongside the chip rather than under it. A card per
+     phone screen is not a board you can scan, and every note that claimed its
+     own line cost eighteen lines across the page. */
+  .board-table td[data-label="Ours"] .meta { margin-left: 2px; }
+
+  /* One verdict line: lean, confidence, value. These are three short facts
+     about the same decision and they belong on the same line. */
+  .board-table td[data-label="Lean"],
+  .board-table td[data-label="Win %"],
+  .board-table td[data-label="EV"] {
+    display: inline-flex !important; width: auto; padding-right: 14px;
+    margin-top: 6px;
+  }
+  .board-table td[data-label="Lean"]::before,
+  .board-table td[data-label="Win %"]::before,
+  .board-table td[data-label="EV"]::before { display: none; }
+  .board-table td[data-label="Lean"] .play { display: flex; gap: 7px; align-items: baseline; }
+  .board-table td[data-label="Lean"] .meta { font-size: 13px; }
+  /* What the market thinks is a second opinion, and the phone has room for
+     one. It stays on the wide board, where the column exists to hold it. */
+  .board-table td[data-label="Win %"] .meta { display: none; }
+
+  .formcol { display: none !important; }
   .faircol {
     display: flex !important; align-items: baseline; justify-content: space-between;
     gap: 10px; margin-top: 8px; padding-top: 8px;
@@ -1138,3 +1264,58 @@ body.searching .tick { display: none; }
   border-left: 2px solid var(--line-2); height: 18px; margin-left: 8px;
 }
 .statname { font-size: 16px; font-weight: 600; letter-spacing: -.005em; }
+
+/* ---- sign in --------------------------------------------------------
+   One card on the page ground, and nothing else. No nav, because every link
+   in it would lead back here; no freshness gauge, because there is no board
+   yet to be stale. The warmth has to come from the palette rather than from
+   decoration, which is the same rule the board follows. */
+.login-body {
+  min-height: 100vh;
+  display: grid; place-items: center;
+  padding: 24px;
+  background: var(--bg);
+}
+.login { width: 100%; max-width: 380px; text-align: center; }
+/* `display:block` undoes the shell's flex, which exists to space the wordmark
+   from the page-name pill. There is no pill here, so flex only inserted a
+   10px gap into the middle of the name. */
+.login-brand { display: block; font-size: 34px; margin: 0 0 6px; }
+.login-brand span { color: var(--nav); }
+.login-sub { color: var(--text-3); margin: 0 0 26px; font-size: 15px; }
+
+.login-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  box-shadow: var(--lift);
+  padding: 22px 20px;
+  text-align: left;
+  display: grid; gap: 15px;
+}
+.login-field { display: grid; gap: 6px; }
+.login-field span { font-size: 13px; font-weight: 600; color: var(--text-2); }
+.login-field input {
+  font: inherit; font-size: 16px;      /* 16px so iOS does not zoom on focus */
+  padding: 11px 12px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-s);
+}
+.login-field input:focus-visible {
+  outline: 2px solid var(--focus); outline-offset: 1px; border-color: var(--focus);
+}
+.login-go {
+  font: inherit; font-size: 16px; font-weight: 700;
+  min-height: 46px; margin-top: 2px;
+  color: var(--brand-ink); background: var(--brand);
+  border: 0; border-radius: var(--r-s); cursor: pointer;
+}
+.login-go:hover { filter: brightness(1.06); }
+.login-error {
+  margin: 0; padding: 9px 11px; border-radius: var(--r-s);
+  font-size: 14px; color: var(--under);
+  background: var(--under-bg); border: 1px solid var(--under);
+}
+.login-foot { margin: 16px 0 0; font-size: 13px; color: var(--text-3); }

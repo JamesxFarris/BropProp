@@ -2,6 +2,9 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { readFile } from 'node:fs/promises';
 import { join, extname, normalize } from 'node:path';
 import { timingSafeEqual } from 'node:crypto';
+import {
+  SESSION_COOKIE, SESSION_DAYS, mintSession, sessionValid, parseCookies, safeNext,
+} from './session.js';
 import { pool } from '../db.js';
 import { config } from '../config.js';
 import { movements, health, leagues } from './queries.js';
@@ -10,7 +13,7 @@ import {
   openPicks, addPick, removePick, placeSlip, clearOpenSlip, slips, slipPicks,
   openSlipBook, WrongBookError, SideUnavailableError,
 } from './picks.js';
-import { boardPage, edgesPage, slipsPage, historyPage, buildPage } from './render.js';
+import { boardPage, edgesPage, slipsPage, historyPage, buildPage, loginPage } from './render.js';
 import { buildEntries } from './optimize.js';
 import { projectMarkets } from './projection.js';
 
@@ -30,13 +33,40 @@ function safeEqual(a: string, b: string): boolean {
   return timingSafeEqual(ab, bb);
 }
 
+/**
+ * The session cookie, and why it is signed rather than stored.
+ *
+ * One user and one password, so a session table would be a table with one row
+ * in it and a migration to maintain. Instead the cookie carries its own expiry
+ * and an HMAC over it, keyed by the dashboard password — which means changing
+ * the password invalidates every outstanding session for free, and a forged
+ * cookie needs the password it was trying to avoid typing.
+ *
+ * Not a JWT: there are no claims to carry beyond "this browser typed the
+ * password, until this time", and a library would be more surface than value.
+ */
+const secret = () => config.dashboardPassword ?? '';
+
+/**
+ * Basic auth still works alongside the cookie.
+ *
+ * The form is what a person should meet, but `curl -u` and
+ * `railway ssh … npm run report`-style access predate it and are how this gets
+ * debugged. Dropping the header would have broken those for no gain.
+ */
 function authorized(req: IncomingMessage): boolean {
   if (!config.dashboardPassword) return true;
+  if (sessionValid(parseCookies(req.headers.cookie)[SESSION_COOKIE], secret())) return true;
   const header = req.headers.authorization ?? '';
   if (!header.startsWith('Basic ')) return false;
   const [user, ...rest] = Buffer.from(header.slice(6), 'base64').toString('utf8').split(':');
   const pass = rest.join(':');
   return safeEqual(user ?? '', config.dashboardUser) && safeEqual(pass, config.dashboardPassword);
+}
+
+function credentialsMatch(user: string, pass: string): boolean {
+  if (!config.dashboardPassword) return true;
+  return safeEqual(user, config.dashboardUser) && safeEqual(pass, config.dashboardPassword);
 }
 
 async function readBody(req: IncomingMessage): Promise<URLSearchParams> {
@@ -110,7 +140,56 @@ const server = createServer(async (req, res) => {
       }
     }
 
+    // Sign in and out. Both sit ahead of the auth gate for the obvious reason
+    // that you cannot reach a login page you have to be logged in to see.
+    if (url.pathname === '/login') {
+      if (req.method === 'POST') {
+        const body = await readBody(req);
+        const next = safeNext(body.get('next'));
+        if (credentialsMatch(body.get('user') ?? '', body.get('password') ?? '')) {
+          const secure = (req.headers['x-forwarded-proto'] ?? '') === 'https' ? '; Secure' : '';
+          res.writeHead(303, {
+            location: next,
+            'set-cookie':
+              `${SESSION_COOKIE}=${mintSession(secret())}; Path=/; HttpOnly; SameSite=Lax` +
+              `; Max-Age=${SESSION_DAYS * 86400}${secure}`,
+          });
+          res.end();
+          return;
+        }
+        // 401 rather than 200: a wrong password is a failed request, and
+        // saying so keeps a password manager from storing what did not work.
+        res.writeHead(401, { 'content-type': 'text/html; charset=utf-8' });
+        res.end(loginPage({ next, error: 'That username and password did not match.' }));
+        return;
+      }
+      if (authorized(req)) {
+        res.writeHead(303, { location: '/board' });
+        res.end();
+        return;
+      }
+      return html(res, loginPage({ next: safeNext(url.searchParams.get('next')) }));
+    }
+
+    if (url.pathname === '/logout') {
+      res.writeHead(303, {
+        location: '/login',
+        'set-cookie': `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`,
+      });
+      res.end();
+      return;
+    }
+
     if (!authorized(req)) {
+      // A browser gets the form; anything else keeps the header it expects.
+      // Curl and the odd script have used basic auth here since before there
+      // was a page, and a 303 to HTML would break both silently.
+      const wantsHtml = (req.headers.accept ?? '').includes('text/html');
+      if (wantsHtml && req.method === 'GET') {
+        res.writeHead(303, { location: `/login?next=${encodeURIComponent(url.pathname + url.search)}` });
+        res.end();
+        return;
+      }
       res.writeHead(401, {
         'www-authenticate': 'Basic realm="BropProp", charset="UTF-8"',
         'content-type': 'text/plain',
@@ -211,7 +290,22 @@ const server = createServer(async (req, res) => {
     const bookParam = url.searchParams.get('book');
     const filters = {
       league: wanted && known.includes(wanted) ? wanted : null,
-      book: bookParam === 'prizepicks' || bookParam === 'underdog' ? bookParam : null,
+      /**
+       * One app at a time, and PrizePicks unless told otherwise.
+       *
+       * Showing both put two lines and four O/U buttons on every row, when at
+       * most one side of one app is ever the right take — a market where the
+       * apps differ has exactly one best price, and the engine already knows
+       * which. The second pair was never actionable; it was the thing making
+       * the row hard to read. The other app's number survives as the gap,
+       * because knowing your number is worse elsewhere is the whole point.
+       *
+       * `book=both` is still reachable for comparing the two directly.
+       */
+      book:
+        bookParam === 'both' ? null
+          : bookParam === 'underdog' ? 'underdog' as const
+            : 'prizepicks' as const,
       matched: url.searchParams.get('matched') === '1',
       search: url.searchParams.get('q')?.trim() || null,
       // On by default once an app is chosen — the reason to narrow to one app
@@ -227,7 +321,7 @@ const server = createServer(async (req, res) => {
     // from the other one can't join this entry, so showing them as takeable
     // would be offering something that cannot be done.
     const lockedBook = await openSlipBook();
-    if (lockedBook) filters.book = lockedBook;
+    if (lockedBook === 'prizepicks' || lockedBook === 'underdog') filters.book = lockedBook;
     const blocked = url.searchParams.get('locked');
 
     const propMatch = url.pathname.match(/^\/prop\/(\d+)$/);
