@@ -242,6 +242,25 @@ existed before the series being predicted. Recorded so they are not retried.
 | **Magnitude (kernel-smoothed CDF)** | Better, but by 0.0005 Brier, and the bandwidth is scale-dependent. Not shipped — see the note in `projection.ts`. |
 | **More history (20 → 30 series)** | Shipped. Same Brier, better MAE on the total (6.37 vs 6.43). Past 40 the gain is gone. |
 
+**No stat type is softer than another.** Every experiment above was CS2 kills,
+so the same walk-forward was run per stat. On absolute offsets assists looked
+far more predictable (Brier 0.2164 against kills' 0.2415) — but that was the
+offsets, not the market: ±2.5 is 0.68 of a standard deviation on assists and
+0.32 on kills, so the fixed number handed the tighter stat an easier question.
+Scaled to each stat's own spread, they collapse into each other:
+
+| | Brier (spread-relative) |
+|---|---|
+| kills | 0.2398 |
+| headshots | 0.2394 |
+| assists | 0.2389 |
+| deaths | 0.2390 |
+
+A range of 0.0009 across four markets. **Do not go hunting for a soft stat.**
+Note the shape of that mistake — a fixed absolute threshold compared across
+different variances — because it is the third time it has produced a false
+signal here, after `MIN_EDGE` and the kernel bandwidth.
+
 The pattern across all four: **a CS2 player's own flat long-run average is
 hard to beat, and the book knows it too.** Every estimator tried lands
 between Brier 0.2410 and 0.2427 against 0.25 for a coin flip. Projection is
