@@ -61,6 +61,16 @@ export type Play = {
   edge: number;          // stat units in your favour at that line
   edgeSd: number | null; // edge relative to how much this player swings
   hitRate: number;       // share of past series that would have won this side
+  /**
+   * What `hitRate` was computed from, before shrinking — "8 of 8" behind a
+   * displayed 72%.
+   *
+   * Null on the modelled path, where the counts describe 4,000 resampled
+   * draws rather than games this player played. Null means "do not show a
+   * count", not "zero".
+   */
+  rawWins: number | null;
+  rawOf: number | null;
   series: number;
   strength: number;      // ranking score, not a probability
   score: number;         // strength on a 0-99 scale, for reading at a glance
@@ -384,7 +394,14 @@ export function evaluate(o: Evaluation): CallStatus {
     const raw = wins / settled;
     // Shrink toward the market where there is one, toward a coin flip where
     // there isn't. See the note on `anchorFor`.
-    return (raw * observations + (anchor ?? 0.5) * prior) / (observations + prior);
+    const p = (raw * observations + (anchor ?? 0.5) * prior) / (observations + prior);
+    // The counts are returned so the board can show what the number is made
+    // of — "8 of 8, shrunk" says in four words what 72% hides. They are only
+    // real counts on the series path: the modelled path counts resampled
+    // draws, where "2,914 of 4,000" would describe the resampler rather than
+    // the player. `useSeries` decides, and the caller must not show them
+    // otherwise.
+    return { p, wins, settled };
   };
 
   /**
@@ -449,8 +466,9 @@ export function evaluate(o: Evaluation): CallStatus {
    */
   const assess = (o: LineOption, side: 'over' | 'under') => {
     const anchor = anchorFor(o, side);
-    const p = rateAt(o.line, side, anchor);
-    if (p === null) return null;
+    const at = rateAt(o.line, side, anchor);
+    if (at === null) return null;
+    const p = at.p;
     const price = side === 'over' ? o.overPrice : o.underPrice;
     // A quoted price wins; a flat-multiplier break-even is the fallback.
     const be =
@@ -464,7 +482,10 @@ export function evaluate(o: Evaluation): CallStatus {
     const ev = be === null || price === null || price === undefined
       ? null
       : p * (price < 0 ? 100 / -price : price / 100) - (1 - p);
-    return { side, book: o.book, line: o.line, p, breakEven: be, bar, ev, margin: p - bar };
+    return {
+      side, book: o.book, line: o.line, p, breakEven: be, bar, ev, margin: p - bar,
+      rawWins: at.wins, rawOf: at.settled,
+    };
   };
 
   // Every takeable side of every book, rather than the best line per direction
@@ -533,6 +554,9 @@ export function evaluate(o: Evaluation): CallStatus {
       edge,
       edgeSd,
       hitRate,
+      // Only where they count real series — see the note on the type.
+      rawWins: useSeries ? pick.rawWins : null,
+      rawOf: useSeries ? pick.rawOf : null,
       series: form.series,
       strength,
       method: useSeries ? 'series' : 'maps',

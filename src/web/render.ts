@@ -1169,7 +1169,7 @@ export function boardPage(o: {
           <th scope="col" class="c">Line</th>
           <th scope="col" class="c">Ours</th>
           <th scope="col" class="c">Lean</th>
-          <th scope="col" class="c">Win %</th>
+          <th scope="col" class="c">Hit rate</th>
           ${showEv ? '<th scope="col" class="c evcol">EV</th>' : ''}
           ${showPP ? `<th scope="col" class="n">${only ? 'Take' : 'PrizePicks'}</th>` : ''}
           <th scope="col" class="c gapcol">${gapLabel}</th>
@@ -1202,6 +1202,15 @@ export function boardPage(o: {
             // falling through to "over" would silently pick a side the reader
             // never chose and display it under a header that does not say which.
             const marketProb = fair === null || play === null ? null : play.side === 'under' ? fair.under : fair.over;
+            // A symmetric price is a correct devig of exactly 0.500, and it is
+            // not an opinion. 397 of Underdog's 434 priced markets sit at
+            // -112/-112 — flat vig on both sides, no side taken. Reporting
+            // that as "market 50%" invites the reader to treat a default as a
+            // second estimate agreeing with ours, so the three cases are told
+            // apart: no price at all, a price with no view, and a real view.
+            const flatVig =
+              r.ud_over_price !== null && r.ud_under_price !== null
+              && Number(r.ud_over_price) === Number(r.ud_under_price);
             const gapToMarket = marketDisagreement(play?.hitRate ?? null, marketProb);
             // The two numbers the whole page exists to compare, set side by
             // side as chips rather than as a figure and a distant column: the
@@ -1258,17 +1267,33 @@ export function boardPage(o: {
                    <div class="meta">${formNote(formOf(r), play)}</div>`
             }</td>
             <td class="c" data-label="Lean">${staleCell(r)}${playCell(play, statusOf(r).why, r, only)}</td>
-            <td class="c${play ? ` strength s${Math.min(4, Math.max(1, Math.ceil((play.hitRate - 0.5) * 20)))}` : ''}" data-label="Win %">${
+            <td class="c${play ? ` strength s${Math.min(4, Math.max(1, Math.ceil((play.hitRate - 0.5) * 20)))}` : ''}" data-label="Hit rate">${
               play === null
                 ? '<span class="meta">—</span>'
-                : `<div class="prob">${Math.round(play.hitRate * 100)}%</div>
+                : `<div class="prob" title="${
+                     play.rawOf === null
+                       ? 'Modelled from single maps, then shrunk toward a coin flip.'
+                       : `${play.rawWins} of ${play.rawOf} past series won this side. ` +
+                         `Shrunk toward a coin flip because ${play.rawOf} is a small sample.`
+                   }">${Math.round(play.hitRate * 100)}%</div>
+                   ${
+                     play.rawOf === null
+                       ? '<div class="meta raw">modelled</div>'
+                       : `<div class="meta raw">${play.rawWins} of ${play.rawOf}, shrunk</div>`
+                   }
                    <div class="meta${
-                     gapToMarket !== null && Math.abs(gapToMarket) >= MARKET_GAP ? ' fairgap' : ''
+                     gapToMarket !== null && Math.abs(gapToMarket) >= MARKET_GAP && !flatVig ? ' fairgap' : ''
                    }"${
-                     gapToMarket !== null && Math.abs(gapToMarket) >= MARKET_GAP
+                     gapToMarket !== null && Math.abs(gapToMarket) >= MARKET_GAP && !flatVig
                        ? ` title="${Math.round(Math.abs(gapToMarket) * 100)} points from what we think — worth a second look"`
                        : ''
-                   }>${marketProb === null ? 'no market price' : `market ${Math.round(marketProb * 100)}%`}</div>`
+                   }>${
+                     marketProb === null
+                       ? 'no market price'
+                       : flatVig
+                         ? '<span title="Both sides priced identically — the book is charging flat vig, not taking a side.">no market view</span>'
+                         : `market ${Math.round(marketProb * 100)}%`
+                   }</div>`
             }</td>
             ${showEv ? `<td class="c evcol" data-label="EV">${evCell(play)}</td>` : ''}
             ${
