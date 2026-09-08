@@ -124,7 +124,26 @@ async function finishedMatches(since: string, cap: number): Promise<Bo3Match[]> 
       out.push(m);
     }
     if (rows.length < 100) break;
+    // This loop is the longest silent stretch of a deep backfill — five
+    // minutes of paging before a single stat is fetched, during which an
+    // empty log looks exactly like a hang. One line per thousand is enough to
+    // tell them apart without filling the scrollback.
+    if (out.length % 1000 < 100) {
+      console.log(`bo3: listing matches… ${out.length} so far, back to ${
+        out[out.length - 1]?.start_date?.slice(0, 10) ?? '?'}`);
+    }
     await sleep(GAP_MS);
+  }
+  // Silent truncation is how a two-year request quietly became a shorter one.
+  // The loop stops AT the cap, so the true total is unknown — all we can say
+  // is that we stopped because of the cap rather than because the archive ran
+  // out, and that matches are newest-first so it is the old end being lost.
+  if (out.length >= cap) {
+    const oldest = out[cap - 1]?.start_date?.slice(0, 10) ?? '?';
+    console.warn(
+      `bo3: WARNING — hit the ${cap}-match cap, so this run reaches back only ` +
+      `to ${oldest}, not the full ${since}. Matches are newest-first and the ` +
+      `list is cut at the old end. Raise maxMatches to cover the window.`);
   }
   return out.slice(0, cap);
 }
@@ -349,7 +368,14 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const started = Date.now();
   let last = 0;
   await fetchBo3({
-    days, allPlayers: all, refetch, maxMatches: 20000,
+    days, allPlayers: all, refetch,
+    // Scaled to the window, not a flat 20,000. Matches come back newest-first
+    // and the list is then truncated to this cap, so a cap smaller than the
+    // window holds silently keeps the NEWEST n and never reaches the far end
+    // — a `bo3 730` that found exactly 20,000 was really a `bo3 ~400`. CS2
+    // ran about 27 finished matches a day over the last two years; 60 is
+    // headroom over that, and the floor keeps short runs unchanged.
+    maxMatches: Math.max(20000, Math.ceil(days * 60)),
     sink: storeStats,
     onProgress: (p) => {
       // Every 25 matches, or the last one. Enough to watch an hour-long run
