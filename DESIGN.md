@@ -234,6 +234,28 @@ changed here: it decides money and deserves its own measurement.
 
 ## Log
 
+- **2026-09-08** — Line movement is now louder than the model's own lean, and
+  that ordering is the point. Four experiments have failed to beat a player's
+  flat average, so the projection is the weaker evidence on the row. "UD moved
+  +2.0, PP still 28.5" is an observation about two numbers; "we say 61%" is a
+  forecast about a person, and only one of those has a measured edge behind it
+  (the lagging book agrees with the mover about 6.5 to 1). Phrased as what
+  happened rather than as a recommendation, and the tooltip says outright that
+  it is not yet proven profitable.
+- **2026-09-08** — Added a Stats page, and deliberately made it about the
+  archive rather than about profit. The honest headline here is a year of
+  per-map history nobody sells; the graded record is five settled picks. So
+  the collection counters and the history-by-week chart lead, and the record
+  sits last, captioned as too small to read anything into. A page that opened
+  with a win rate on five bets would be projecting confidence the data cannot
+  carry — the same rule that keeps an empty results panel out of the board.
+  Closing line value sits between them because it is the one measure that
+  works at this sample size.
+- **2026-09-08** — Charts are inline SVG with no library and no gridlines.
+  Same reasoning as having no framework: a dependency arrives with a default
+  look that then has to be fought, and this is a dozen rectangles. Structural
+  devices should encode information, and a gridline behind a growth curve
+  encodes nothing the bars do not already say.
 - **2026-09-08** — The ground is a deep forest green, and nothing on the page
   is grey. Four attempts at this and the first three were all a flavour of
   grey: near-black, then blue-grey (which was OddsJam), then warm grey (which
