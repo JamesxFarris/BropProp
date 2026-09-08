@@ -153,6 +153,54 @@ Recorded so nobody spends money or a verification queue on a solved problem.
   hands over better stats than a demo parse would yield, for none of the
   compute, storage or effort.
 
+## More books, and what a sharp line is actually worth
+
+Probed 2026-09-08. The short version: the sharp-sportsbook idea does not pay
+off the way it should, and the reason is a fact about CS2 rather than about
+any API.
+
+**Opponent strength does not predict a player's kills.** Measured over 1,874
+series and 4,403 walk-forward predictions, adding an opponent adjustment —
+how many kills that opponent has been conceding, versus the league — made the
+forecast *worse*: MAE 6.56 against 6.49 for the player's own history alone,
+and the correlation between the opponent effect and the residual it was meant
+to explain was **r = 0.018**. Nothing.
+
+Kills are close to conserved in CS2, which is why. A map runs its rounds and
+distributes its kills whoever is playing; a stronger opponent kills you more
+but also trades more. The same thing shows in match tier, which is nearly flat
+on kills per map: **14.88 (tier b), 14.88 (c), 14.67 (a), 14.29 (s)**.
+
+So a sharp book's moneyline or handicap would not have helped, and neither
+would the free team rankings bo3.gg publishes. **Do not build an opponent
+adjustment for kills.** The one live version of the idea is narrower: a
+market's *total maps* line prices whether a Bo3 goes to three, which is
+exactly the void risk on a maps 1-3 prop. That was not tested and is worth
+testing separately.
+
+**What more books are actually worth** is line disagreement. Two books
+pricing the same player differently is signal that does not depend on our
+model being right — and our model is near its ceiling. That argues for more
+DFS apps, which carry player props, over sharp sportsbooks, which do not.
+
+### Book reachability, measured
+
+| Book | State |
+|---|---|
+| **Bovada** | Open, no auth, real prices — but **four esports events, total**. Not worth an adapter. |
+| **Pinnacle** | Matchup list open: **131 CS2 matchups**, right down to tier-C qualifiers. Prices return `401 No authorization token provided`. |
+| **Sleeper** | `sleeper.app/graphql` open, introspection ON, 240 query fields. The DFS board is `my_picks_init` and needs a session. **A login away, not a wall away.** |
+| **ParlayPlay** | Cloudflare bot wall on every path. No unwalled host found (`partner-api`, `api-prod`, `backend` all fail DNS). |
+| **Betr, Chalkboard** | No web API at all. `www.betr.app` is a **Webflow marketing site**; chalkboard.io's only call is Tinybird analytics. Mobile apps only. |
+| **HotStreak, BetOnline** | Cloudflare wall. |
+| **Dabble, Boom, Vivid, Jock MKT, Fliff** | No reachable web API. |
+| **Thunderpick, Rivalry** | Answer, but returned empty. |
+| **The Odds API** | Free tier exists, needs a signup key. |
+
+Pinnacle's own web client ships a fixed guest key. Using it to get past that
+401 was deliberately **not** done — reading an open endpoint is one thing,
+presenting a lifted credential to defeat an auth check is another.
+
 ### Dead ends — do not re-test
 
 - **PandaScore free**: fixtures only; every stats endpoint 403s. Paid
