@@ -282,7 +282,11 @@ better measurement, and it has never been tried.
 | **ParlayPlay** | Cloudflare bot wall on every path. No unwalled host found (`partner-api`, `api-prod`, `backend` all fail DNS). |
 | **Betr, Chalkboard** | No web API at all. `www.betr.app` is a **Webflow marketing site**; chalkboard.io's only call is Tinybird analytics. Mobile apps only. |
 | **HotStreak, BetOnline** | Cloudflare wall. |
-| **Dabble, Boom, Vivid, Jock MKT, Fliff** | No reachable web API. |
+| **Dabble** | Re-probed 2026-09-09: `api.dabble.com` is **open JSON, no auth** — `/competitions` lists 270 including CS2, LoL, Dota 2, Valorant, and `/competitions/{id}/sport-fixtures` returns real matches. But CS2 held **3 fixtures, all tier-1** (BIG vs G2, Astralis, FURIA) against our 61-match board, LoL held **0**, and no markets/selections path was found (six shapes tried, all 404). Open but too thin to price against. |
+| **Boom, Vivid, Jock MKT, Fliff** | No reachable web API. `production-boom-dfs-backend.boomfantasy.com` does not resolve. |
+| **Pick6 (DraftKings)** | Host answers, guessed paths 404. Real endpoint not found. |
+| **Rebet** | `api.rebet.app` answers `403 Forbidden`. |
+| **Stake** | Cloudflare interstitial on `/_api/graphql`. |
 | **Thunderpick, Rivalry** | Answer, but returned empty. |
 | **The Odds API** | Free tier exists, needs a signup key. |
 
