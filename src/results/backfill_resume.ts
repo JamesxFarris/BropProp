@@ -43,19 +43,37 @@ const iso = (d: Date) => d.toISOString().slice(0, 10);
 export type Chunk = { since: string; until: string };
 
 /**
- * The windows covering `days` back from today, newest first.
+ * Fixed point the window grid is measured from.
+ *
+ * The grid MUST NOT depend on when the job runs. Boundaries derived from
+ * "today" shift every midnight, and since the ledger is keyed on (since,
+ * until) a shifted window is a window nobody has done — so every date change
+ * silently re-walked a month. Observed in production on 2026-09-08: five
+ * windows walked twice, ten overlapping seams in the ledger, all of them a
+ * day apart. Anchoring to a constant makes a window's identity depend only on
+ * the calendar and the chunk size.
+ */
+const GRID_EPOCH = Date.UTC(2020, 0, 1);
+
+/**
+ * The windows covering `days` back from now, newest first, on a fixed grid.
  *
  * Exported for the tests: boundaries have to tile exactly, with no gap and no
- * overlap, or a backfill silently skips a day at every seam.
+ * overlap, or a backfill silently skips a day at every seam — and they have to
+ * be the SAME boundaries tomorrow, or the ledger stops matching.
  */
 export function chunksFor(days: number, chunkDays: number, now = Date.now()): Chunk[] {
+  const span = chunkDays * 864e5;
+  // The end of the grid cell `now` falls in, so the newest window covers today
+  // and every older boundary is a multiple of the span from the epoch.
+  const top = GRID_EPOCH + (Math.floor((now - GRID_EPOCH) / span) + 1) * span;
+  const floor = now - days * 864e5;
+
   const out: Chunk[] = [];
-  for (let end = 0; end < days; end += chunkDays) {
-    const start = Math.min(end + chunkDays, days);
-    out.push({
-      since: iso(new Date(now - start * 864e5)),
-      until: iso(new Date(now - end * 864e5)),
-    });
+  for (let end = top; end - span >= floor - span; end -= span) {
+    const start = end - span;
+    out.push({ since: iso(new Date(start)), until: iso(new Date(end)) });
+    if (start <= floor) break;
   }
   return out;
 }
@@ -100,16 +118,26 @@ export async function resumeBackfill(opts: {
     }
 
     const started = Date.now();
+    // Count what the sink actually stored. `stats` comes back EMPTY when a
+    // sink is supplied — that is the point of the sink, memory stays flat —
+    // so reading `stats.length` recorded 0 written for every window in the
+    // ledger and made the column useless.
+    let rows = 0;
+    const sink = async (batch: Parameters<typeof storeStats>[0]) => {
+      const n = await storeStats(batch);
+      rows += n;
+      return n;
+    };
+
     // Generous per-window cap: a 30-day CS2 window is ~800 matches against the
     // ~27 a day the archive actually holds, so this never binds and never
     // silently truncates the way the flat 20,000 did over two years.
-    const { stats } = await fetchBo3({
+    await fetchBo3({
       since: c.since,
       until: c.until,
       maxMatches: Math.max(2000, chunkDays * 60),
-      sink: storeStats,
+      sink,
     });
-    const rows = stats.length;
     written += rows;
     ran++;
 
