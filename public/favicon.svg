@@ -1,8 +1,24 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="#101216"/>
-  <!-- Money bag: tie at the neck, round body, currency mark. -->
-  <path d="M24 15h16l-4.5 6.5h-7z" fill="#f0b429"/>
-  <path d="M35.5 21.5h-7C20 25 14 33 14 41.5 14 49 20 54 32 54s18-5 18-12.5c0-8.5-6-16.5-14.5-20z" fill="#f0b429"/>
-  <text x="32" y="46" font-family="Barlow, Segoe UI, sans-serif" font-size="20" font-weight="700"
-        text-anchor="middle" fill="#101216">$</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="BropProp">
+  <!--
+    A sprout, on nothing.
+
+    No background plate: the old icon sat on a dark rounded square, which shows
+    as a black tile in a light tab strip and boxes the mark in everywhere else.
+    Transparent lets the browser's own tab colour carry it.
+
+    Every colour therefore has to survive both a white and a near-black tab, so
+    these are mid-tones rather than the light mints the board uses on its dark
+    surfaces — #7fdcae would disappear on white, and the first pass used
+    #2f7d52 for the stem, which held on white but went murky on a dark tab.
+    These two sit in the band that reads on both.
+
+    Three solid pieces, nothing thinner than 5 units, because this is seen at
+    16px far more often than at 64: an outlined leaf or a hairline stem turns
+    to grey mush at that size.
+  -->
+  <g transform="translate(0,-3)">
+    <path d="M32 58V34" fill="none" stroke="#3f9a67" stroke-width="6" stroke-linecap="round"/>
+    <path d="M32 36c8-2 16-9 19-21-11 1-18 9-19 21z" fill="#63c890"/>
+    <path d="M31 45c-6-2-12-7-14-15 9 1 14 7 14 15z" fill="#3f9a67"/>
+  </g>
 </svg>
