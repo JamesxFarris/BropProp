@@ -556,3 +556,29 @@ per-leg multipliers multiply on top of the base and need no configuration.
 
 Check the numbers against the app before entering them, and re-check when a
 book changes its table — nothing here can detect that it has gone stale.
+
+### Why the Build page asks what a slip NEEDS
+
+Researched 2026-09-08. PrizePicks publishes no payout multiplier anywhere
+reachable:
+
+- the projections payload has no payout attribute, no payout object in
+  `included` (`new_player`, `stat_type`, `league`, `game`, `team`, `duration`,
+  `projection_type`) and no payout relationship (`duration`, `game`, `league`,
+  `new_player`, `projection_type`, `score`, `stat_type`)
+- `adjusted_odds` is a boolean flag, not a value
+- `/payout_tables`, `/multipliers`, `/payouts`, `/wager_types`, `/configs`,
+  `/settings` and `/projection_types` all 404 on partner-api
+
+It is applied client-side when the slip is built, per prop. So no table we
+could store would stay correct, and entering one would only make the app
+confidently wrong.
+
+The question is therefore inverted. **`1 / P(all legs win)` is the multiplier
+at which an entry breaks even.** It needs nothing from the book, cannot go
+stale, and is the whole decision: compare it against the number the app is
+showing and take the slip only if the app pays more.
+
+Setting `PAYOUT_TABLE` still works and adds the EV reading back for books whose
+table you trust — Underdog's per-side multipliers already ride on top of it.
+But nothing needs it any more, which is why it stays empty by default.

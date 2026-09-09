@@ -1837,11 +1837,23 @@ export function buildPage(o: {
        ${esc(bookName(o.book))} right now. Legs need a projection, a playable side, and a match
        that hasn't started.</div></div>`
     : o.entries.map((e) => {
-        // Payout and EV are quoted only where the book's table is known.
-        // Neither book pays a flat rate by leg count any more — PrizePicks
-        // prices per prop and publishes the multiplier nowhere in its API —
-        // so with an unset PAYOUT_TABLE the honest output is the legs and
-        // their joint probability, and silence about what it returns.
+        /**
+         * What the slip NEEDS, not what it returns.
+         *
+         * PrizePicks publishes no multiplier anywhere reachable — the
+         * projections payload has no payout object, no payout relationship,
+         * and /payout_tables, /multipliers, /payouts and /wager_types are all
+         * 404. It is applied client-side when the slip is built, and per prop,
+         * so no table we could store would stay right.
+         *
+         * So the question gets turned around. `1 / P(all legs win)` is the
+         * multiplier at which this entry breaks even, it needs nothing from
+         * the book to compute, and it cannot go stale. The reader compares it
+         * against the number their app is showing them: above it is value,
+         * below it is not. That is the whole decision, and it survives every
+         * repricing both books do.
+         */
+        const needed = e.winProb > 0 ? 1 / e.winProb : null;
         const ev = e.evMultiple;
         const cls = ev === null ? 'flat' : ev >= 1.15 ? 'up' : ev >= 1 ? 'flat' : 'down';
         return `<div class="card">
@@ -1856,11 +1868,17 @@ export function buildPage(o: {
         }</span>
       </div>
       <div class="evbar">
-        <span class="evnum ${cls}">${ev === null ? '—' : `${ev.toFixed(2)}×`}</span>
+        <span class="evnum ${ev === null ? 'flat' : cls}">${
+          ev === null
+            ? (needed === null ? '—' : `${needed.toFixed(2)}×`)
+            : `${ev.toFixed(2)}×`
+        }</span>
         <span class="evlab">${
           ev === null
-            ? 'payout not known for this book — read the multiplier off the app before staking'
-            : `expected return per unit staked${ev < 1 ? ' — below break-even' : ''}`
+            ? `needed to break even — take it only if your app pays more than this`
+            : `expected return per unit staked${ev < 1 ? ' — below break-even' : ''}${
+                needed === null ? '' : `, needs ${needed.toFixed(2)}×`
+              }`
         }</span>
         <span class="grow"></span>
         <form method="post" action="/build/stage" class="inline">
@@ -1901,11 +1919,13 @@ export function buildPage(o: {
     body: `<div class="notice">Each entry takes the highest-value legs available, where value is
       win probability times what the leg pays. One leg per player, at most two per match — legs
       from one match move together, and both books reprice correlated entries.</div>
-      <div class="notice warn-notice">Treat the expected return as an upper bound, not a
-      forecast. Picking the best few legs out of a hundred estimates selects for the ones that
-      got lucky, so the number shown is optimistic even after probabilities are shrunk toward a
-      coin flip. Nothing here has been checked against a graded result yet — that is what the
-      Slips page will eventually settle.</div>
+      <div class="notice warn-notice"><b>The break-even figure is a floor, and the real one is
+      higher.</b> It is computed from our own win probabilities, and those have been graded:
+      across settled markets these calls claim about 59% and realise about 52%, which is close
+      enough to a coin flip that a four-leg entry needs roughly <b>13×</b> rather than the ~8×
+      our numbers imply. Picking the best few legs out of a hundred estimates also selects for
+      the ones that got lucky, so the bar shown is optimistic even after every probability is
+      shrunk toward a coin flip. Treat a slip that only just clears it as one that does not.</div>
       ${body}`,
   });
 }
