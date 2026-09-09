@@ -1,4 +1,5 @@
 import { q } from '../db.js';
+import { config } from '../config.js';
 import { comboParts } from '../normalize.js';
 import { foldCombo, type ComboStatRow } from '../combo.js';
 import { americanToProb, devig } from '../devig.js';
@@ -925,12 +926,22 @@ export async function projectMarkets(
  * error is in the safe direction here (correlated legs win together more often
  * than independence implies, so a real parlay clears a lower bar than this).
  */
-const FLAT_PAYOUT: Record<number, number> = { 2: 3, 3: 5, 4: 10, 5: 20, 6: 37.5 };
-
-export function flatBreakEven(legs: number): number | null {
+export function flatBreakEven(
+  legs: number,
+  book = 'prizepicks',
+  /** Injected so tests pin the arithmetic, not the environment. */
+  payouts: Record<string, Record<number, number>> = config.payoutTable,
+): number | null {
   // An entry needs at least two legs; a slip being built is one leg short of
   // the entry it will become, so the caller adds the leg it is considering.
   const n = Math.max(2, Math.min(6, Math.round(legs)));
-  const mult = FLAT_PAYOUT[n];
+  // Unknown unless someone has entered the book's real table. The multipliers
+  // that used to live here were written when both books paid a flat rate by
+  // leg count, and neither does now — PrizePicks prices per prop and publishes
+  // the multiplier nowhere in its API. Returning null makes the caller fall
+  // back to MIN_P, which is the honest bar when the price is unknown; a stale
+  // number here would instead move the gate by a few points in a direction
+  // nobody could see.
+  const mult = payouts[book]?.[n];
   return mult === undefined ? null : Math.pow(1 / mult, 1 / n);
 }

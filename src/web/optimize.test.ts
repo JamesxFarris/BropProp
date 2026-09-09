@@ -98,11 +98,29 @@ test('concentration still has a ceiling', () => {
 });
 
 test('the payout is the book base times each leg multiplier', () => {
+  // The table is injected rather than read from the environment. It used to be
+  // a hardcoded constant, which made this test a test of that constant; both
+  // books have since moved off a flat rate by leg count, so the default is now
+  // empty and the arithmetic is pinned against a table supplied here.
   const e = bestEntry(
     [cand({ match: 'm1', side: 'over', mult: 0.5 }), cand({ match: 'm2', side: 'over' })],
-    2, 'prizepicks',
+    2, 'prizepicks', 4, { prizepicks: { 2: 3 } },
   );
   assert.ok(e);
-  // PrizePicks pays 3x on two legs; a demoted leg halves it.
-  assert.ok(Math.abs(e!.payout - 3 * 0.5) < 1e-9);
+  assert.ok(Math.abs(e!.payout! - 3 * 0.5) < 1e-9);
+});
+
+test('an unknown payout table yields legs but no payout or EV', () => {
+  // The failure this guards against is inventing a multiplier. PrizePicks
+  // prices per prop and publishes nothing usable in its API, so with no table
+  // configured the entry must still pick its legs and must not quote a return.
+  const e = bestEntry(
+    [cand({ match: 'm1', side: 'over' }), cand({ match: 'm2', side: 'over' })],
+    2, 'prizepicks', 4, {},
+  );
+  assert.ok(e, 'legs should still be chosen without a payout table');
+  assert.equal(e!.payout, null);
+  assert.equal(e!.evMultiple, null);
+  assert.ok(e!.winProb > 0, 'the win probability does not depend on the payout');
+  assert.equal(e!.legs.length, 2);
 });

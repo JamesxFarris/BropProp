@@ -32,6 +32,28 @@ export const config = {
   // window is done.
   backfillDays: Number(process.env.BACKFILL_DAYS ?? 0),
   backfillChunkDays: Number(process.env.BACKFILL_CHUNK_DAYS ?? 30),
+
+  /**
+   * Base payout per entry size, per book — and empty until someone fills it in.
+   *
+   * These used to be hardcoded as `{2:3, 3:5, 4:10, 5:20, 6:37.5}` for
+   * PrizePicks and `{2:3, 3:6, 4:10, 5:20}` for Underdog, written when both
+   * books paid a flat rate by leg count. They no longer do: PrizePicks prices
+   * per prop (its live board is mostly demon and goblin, and the multiplier
+   * for those appears nowhere in the API), and Underdog attaches a payout
+   * multiplier to each side.
+   *
+   * A stale table is worse than none, because every EV and break-even built on
+   * it is confidently wrong rather than visibly missing. So the default is
+   * unknown, and the app declines to quote a payout it cannot stand behind.
+   * Set it when the real numbers are to hand:
+   *
+   *   PAYOUT_TABLE='{"prizepicks":{"2":3,"3":5},"underdog":{"2":3,"3":6}}'
+   *
+   * Underdog's per-leg multipliers are separate and ARE published per prop, so
+   * they keep working either way.
+   */
+  payoutTable: parsePayouts(process.env.PAYOUT_TABLE),
   leagues: (process.env.LEAGUES ?? 'CS2,LOL')
     .split(',')
     .map((s) => s.trim().toUpperCase())
@@ -48,3 +70,35 @@ export const config = {
   dashboardPassword: process.env.DASHBOARD_PASSWORD ?? null,
   rawDir: process.env.RAW_DIR ?? './raw',
 };
+
+/**
+ * Read the payout table from the environment, tolerating anything malformed.
+ *
+ * A bad JSON string must not stop the logger booting, and must not silently
+ * become a half-populated table either — either it parses into numbers or the
+ * book is treated as unknown, which is the safe state.
+ */
+export type PayoutTable = Record<string, Record<number, number>>;
+
+function parsePayouts(raw: string | undefined): PayoutTable {
+  if (!raw) return {};
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    console.warn('PAYOUT_TABLE is not valid JSON — treating every payout as unknown');
+    return {};
+  }
+  if (typeof parsed !== 'object' || parsed === null) return {};
+  const out: PayoutTable = {};
+  for (const [book, sizes] of Object.entries(parsed as Record<string, unknown>)) {
+    if (typeof sizes !== 'object' || sizes === null) continue;
+    const row: Record<number, number> = {};
+    for (const [n, mult] of Object.entries(sizes as Record<string, unknown>)) {
+      const size = Number(n), value = Number(mult);
+      if (Number.isFinite(size) && Number.isFinite(value) && value > 0) row[size] = value;
+    }
+    if (Object.keys(row).length > 0) out[book] = row;
+  }
+  return out;
+}

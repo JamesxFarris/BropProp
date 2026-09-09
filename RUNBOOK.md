@@ -516,3 +516,41 @@ are applied exactly once, so redeploys are safe.
 - `prop` / `prop_snapshot` — what the books offered, and every time it moved
 - `result_run` / `poll_run` — audit of every fetch, so a job that quietly stopped
   is visible
+
+## Payout tables — unset on purpose
+
+The app quotes no slip payout, EV or break-even until someone tells it what the
+books actually pay. That is deliberate. The tables used to be hardcoded —
+PrizePicks `{2:3, 3:5, 4:10, 5:20, 6:37.5}`, Underdog `{2:3, 3:6, 4:10, 5:20}`,
+plus power/flex/single for the slip panel — written when both books paid a flat
+rate by leg count. Neither does now:
+
+- **PrizePicks prices per prop.** Its live board is mostly demon and goblin
+  (measured 2026-09-08: standard 4,721, demon 19,305, goblin 5,515) and the
+  multiplier for those appears **nowhere in the API**. The payload carries
+  `odds_type`, `is_promo`, `flash_sale_line_score`, `adjusted_odds` and
+  `allowed_wager_types` — no payout figure at all. It is applied when the slip
+  is built in their app.
+- **Underdog prices per side**, and that one we do capture:
+  `over_multiplier` / `under_multiplier` per prop, 670 of 720 upcoming markets
+  at 1.0 and the rest spread 0.87–1.09. Those keep working regardless.
+
+A stale table is worse than none, because every EV built on it is confidently
+wrong rather than visibly missing — so the default is unknown and the Build
+page says "payout not known for this book — read the multiplier off the app
+before staking".
+
+To switch it back on, set one env var on the logger and the dashboard:
+
+```bash
+railway variables set 'PAYOUT_TABLE={"prizepicks":{"2":3,"3":5},"underdog":{"2":3,"3":6},"power":{"3":5},"flex":{"3":2.25}}' \
+  --service bropprop-dashboard --environment production
+```
+
+Keys are either a book (`prizepicks`, `underdog`) or a slip type (`power`,
+`flex`, `single`); values are base payout by leg count. Malformed JSON logs a
+warning and leaves everything unknown rather than half-configured. Underdog's
+per-leg multipliers multiply on top of the base and need no configuration.
+
+Check the numbers against the app before entering them, and re-check when a
+book changes its table — nothing here can detect that it has gone stale.

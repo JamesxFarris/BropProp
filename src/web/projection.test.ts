@@ -511,21 +511,33 @@ test('an expensive good line loses to a cheap slightly worse one', () => {
   assert.equal(s.play?.book, 'prizepicks');
 });
 
-test('a flat multiplier implies a real break-even, and it is not monotone', () => {
-  // PrizePicks power play: 2 legs at 3x, 3 at 5x, 4 at 10x, 5 at 20x.
-  // A single assumed figure would be wrong in both directions.
-  assert.ok(Math.abs(flatBreakEven(2)! - Math.pow(1 / 3, 1 / 2)) < 1e-9);   // 57.7%
-  assert.ok(Math.abs(flatBreakEven(3)! - Math.pow(1 / 5, 1 / 3)) < 1e-9);   // 58.5%
-  assert.ok(Math.abs(flatBreakEven(5)! - Math.pow(1 / 20, 1 / 5)) < 1e-9);  // 54.9%
+/** A stand-in table, supplied explicitly — the shipped default is empty. */
+const TABLE = { prizepicks: { 2: 3, 3: 5, 4: 10, 5: 20, 6: 37.5 } };
+
+test('a payout table implies a real break-even, and it is not monotone', () => {
+  assert.ok(Math.abs(flatBreakEven(2, 'prizepicks', TABLE)! - Math.pow(1 / 3, 1 / 2)) < 1e-9);
+  assert.ok(Math.abs(flatBreakEven(3, 'prizepicks', TABLE)! - Math.pow(1 / 5, 1 / 3)) < 1e-9);
+  assert.ok(Math.abs(flatBreakEven(5, 'prizepicks', TABLE)! - Math.pow(1 / 20, 1 / 5)) < 1e-9);
   // Three legs demand MORE per leg than five do — the reason this is a table
   // and not a constant.
-  assert.ok(flatBreakEven(3)! > flatBreakEven(5)!);
+  assert.ok(flatBreakEven(3, 'prizepicks', TABLE)! > flatBreakEven(5, 'prizepicks', TABLE)!);
+});
+
+test('an unknown payout table quotes no break-even at all', () => {
+  // The default. Both books moved off a flat rate by leg count, so shipping a
+  // stale table would move the price gate by a few points in a direction
+  // nobody could see. Null sends the caller back to MIN_P, which is the honest
+  // bar when the price is not known.
+  assert.equal(flatBreakEven(2), null);
+  assert.equal(flatBreakEven(3, 'underdog'), null);
+  assert.equal(flatBreakEven(3, 'prizepicks', {}), null);
 });
 
 test('an entry is at least two legs and at most six, whatever it is asked', () => {
-  assert.equal(flatBreakEven(1), flatBreakEven(2), 'a one-leg slip prices as the entry it must become');
-  assert.equal(flatBreakEven(0), flatBreakEven(2));
-  assert.equal(flatBreakEven(99), flatBreakEven(6));
+  const be = (n: number) => flatBreakEven(n, 'prizepicks', TABLE);
+  assert.equal(be(1), be(2), 'a one-leg slip prices as the entry it must become');
+  assert.equal(be(0), be(2));
+  assert.equal(be(99), be(6));
 });
 
 test('a PrizePicks market clears the entry bar, not just MIN_P', () => {
@@ -536,7 +548,7 @@ test('a PrizePicks market clears the entry bar, not just MIN_P', () => {
     totals: [...Array(15).fill(30), ...Array(10).fill(10)],
     mapValues: [], perMap: 20,
   });
-  const bar = flatBreakEven(2)!;
+  const bar = flatBreakEven(2, 'prizepicks', TABLE)!;
   const gated = evaluate({
     form: sample,
     options: [{ book: 'prizepicks', line: 20, overOk: true, underOk: true, breakEven: bar }],

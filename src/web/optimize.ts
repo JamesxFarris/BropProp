@@ -1,3 +1,4 @@
+import { config } from '../config.js';
 import type { MarketRow } from './boardq.js';
 import type { FormStats, Play } from './projection.js';
 import { recommend, type LineOption } from './projection.js';
@@ -19,10 +20,17 @@ import { comboParts } from '../normalize.js';
  * probabilities too much.
  */
 
-const BASE: Record<string, Record<number, number>> = {
-  prizepicks: { 2: 3, 3: 5, 4: 10, 5: 20, 6: 37.5 },
-  underdog: { 2: 3, 3: 6, 4: 10, 5: 20 },
-};
+/**
+ * Base payout by entry size, from config — empty until the real numbers are
+ * entered.
+ *
+ * The tables that used to sit here assumed a flat rate by leg count, which
+ * neither book pays any more: PrizePicks prices per prop and its live board is
+ * mostly demon and goblin, whose multipliers appear nowhere in the API, and
+ * Underdog attaches a multiplier to each side. A stale table makes every EV
+ * confidently wrong rather than visibly absent, so unknown is the default.
+ */
+const BASE = config.payoutTable;
 
 export type Candidate = {
   row: MarketRow;
@@ -43,9 +51,11 @@ export type Entry = {
   size: number;
   book: 'prizepicks' | 'underdog';
   legs: Candidate[];
-  payout: number;        // base x product of leg multipliers
+  /** base x product of leg multipliers. Null when the book's table is unknown. */
+  payout: number | null;
   winProb: number;       // product of leg probabilities
-  evMultiple: number;    // payout x winProb; above 1.0 is profitable
+  /** payout x winProb; above 1.0 is profitable. Null without a payout. */
+  evMultiple: number | null;
   discounted: number;    // legs paying below standard
 };
 
@@ -155,9 +165,18 @@ export function bestEntry(
   size: number,
   book: 'prizepicks' | 'underdog',
   maxPerMatch = 4,
+  /**
+   * Payout table to price the entry with. Injected so a test can pin the
+   * arithmetic without depending on what happens to be in the environment,
+   * and so the default can be empty without making the behaviour untestable.
+   */
+  payouts: Record<string, Record<number, number>> = BASE,
 ): Entry | null {
-  const base = BASE[book]?.[size];
-  if (base === undefined) return null;
+  // An unknown payout is not a reason to refuse to pick legs. The entry is
+  // still the best N markets; it just cannot be told what it pays, so the
+  // payout and EV come back null and the page says so rather than inventing
+  // a multiplier.
+  const base = payouts[book]?.[size] ?? null;
 
   const legs: Candidate[] = [];
   const players = new Set<string>();
@@ -206,7 +225,7 @@ export function bestEntry(
 
   if (legs.length < size) return null;
 
-  const payout = legs.reduce((acc, l) => acc * l.mult, base);
+  const payout = base === null ? null : legs.reduce((acc, l) => acc * l.mult, base);
   const winProb = legs.reduce((acc, l) => acc * l.p, 1);
 
   return {
@@ -215,7 +234,7 @@ export function bestEntry(
     legs,
     payout,
     winProb,
-    evMultiple: payout * winProb,
+    evMultiple: payout === null ? null : payout * winProb,
     discounted: legs.filter((l) => Math.abs(l.mult - 1) > 0.005).length,
   };
 }

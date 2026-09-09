@@ -2,6 +2,7 @@ import type { Movement, Health } from './queries.js';
 import type { PickRow, SlipSummary } from './picks.js';
 import type { MarketRow, PropHistory, PlayerGame } from './boardq.js';
 import type { FormStats, Play, CallStatus, NoCall } from './projection.js';
+import { config } from '../config.js';
 import { evaluate, edgeProgress, type LineOption, flatBreakEven } from './projection.js';
 import { staleLine } from './stale.js';
 import type { Counters, ScoreRow } from './statsq.js';
@@ -87,12 +88,19 @@ const clock = (iso: string) =>
  * would be misleading. The field is left empty and these are offered as a hint
  * only; whatever gets typed is what is stored on the slip.
  */
-const BASE_PAYOUTS: Record<string, Record<number, number>> = {
-  power:  { 2: 3, 3: 5, 4: 10, 5: 20, 6: 37.5 },
-  flex:   { 3: 2.25, 4: 5, 5: 10, 6: 25 },
-  single: { 1: 1.9 },
-};
-const basePayout = (type: string, legs: number) => BASE_PAYOUTS[type]?.[legs] ?? null;
+/**
+ * Entry-type payouts, from the same config table as the per-book ones — and
+ * empty until someone fills them in.
+ *
+ * These were hardcoded as power `{2:3, 3:5, 4:10, 5:20, 6:37.5}`, flex
+ * `{3:2.25, 4:5, 5:10, 6:25}` and single `1.9`, from when the books paid a
+ * flat rate by leg count. They no longer do, so the numbers are a guess
+ * wearing the authority of a constant. The slip estimates nothing it cannot
+ * source; the payout field on the slip form still accepts whatever the app
+ * actually offers, which is where the real figure has always come from.
+ */
+const basePayout = (type: string, legs: number) =>
+  config.payoutTable[type]?.[legs] ?? null;
 
 /**
  * Legs from the same match on the same app. PrizePicks reprices these rather
@@ -1829,19 +1837,30 @@ export function buildPage(o: {
        ${esc(bookName(o.book))} right now. Legs need a projection, a playable side, and a match
        that hasn't started.</div></div>`
     : o.entries.map((e) => {
+        // Payout and EV are quoted only where the book's table is known.
+        // Neither book pays a flat rate by leg count any more — PrizePicks
+        // prices per prop and publishes the multiplier nowhere in its API —
+        // so with an unset PAYOUT_TABLE the honest output is the legs and
+        // their joint probability, and silence about what it returns.
         const ev = e.evMultiple;
-        const cls = ev >= 1.15 ? 'up' : ev >= 1 ? 'flat' : 'down';
+        const cls = ev === null ? 'flat' : ev >= 1.15 ? 'up' : ev >= 1 ? 'flat' : 'down';
         return `<div class="card">
       <div class="card-head">
         <h2>${e.size}-pick</h2>
-        <span class="sub">${e.payout.toFixed(2)}× payout for a ${(e.winProb * 100).toFixed(1)}% chance of hitting every leg${
+        <span class="sub">${
+          e.payout === null
+            ? `${(e.winProb * 100).toFixed(1)}% chance of hitting every leg`
+            : `${e.payout.toFixed(2)}× payout for a ${(e.winProb * 100).toFixed(1)}% chance of hitting every leg`
+        }${
           e.discounted ? `, with ${e.discounted} discounted leg${e.discounted === 1 ? '' : 's'}` : ''
         }</span>
       </div>
       <div class="evbar">
-        <span class="evnum ${cls}">${ev.toFixed(2)}×</span>
-        <span class="evlab">expected return per unit staked${
-          ev < 1 ? ' — below break-even' : ''
+        <span class="evnum ${cls}">${ev === null ? '—' : `${ev.toFixed(2)}×`}</span>
+        <span class="evlab">${
+          ev === null
+            ? 'payout not known for this book — read the multiplier off the app before staking'
+            : `expected return per unit staked${ev < 1 ? ' — below break-even' : ''}`
         }</span>
         <span class="grow"></span>
         <form method="post" action="/build/stage" class="inline">
