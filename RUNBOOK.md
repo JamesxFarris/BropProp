@@ -256,11 +256,27 @@ pricing the same player differently is signal that does not depend on our
 model being right — and our model is near its ceiling. That argues for more
 DFS apps, which carry player props, over sharp sportsbooks, which do not.
 
+**Re-examined 2026-09-09, and the second half of that needs qualifying.** It
+is true that no sharp book prices player kills — Bovada's esports feed is
+three market types wide (moneyline, map spread, total maps) and carries zero
+player props, so the OddsJam model of "compare the DFS line to a sharp line
+for the same market" has nothing to compare against. Pinnacle access would not
+fix that; the market does not exist there either.
+
+What sharp books DO price is the match, and that is not nothing. Total maps
+2.5 is the market's probability that a third map happens — which decides
+whether a maps-1-3 prop settles at all, and speaks directly to the map-3 over
+bias measured at +3.13. Spread and moneyline measure how one-sided the series
+is expected to be, and a blowout means fewer rounds and fewer kills for
+everyone. Our own opponent-strength feature failed at r = 0.018, but it was
+built from box scores; a market-implied mismatch is a different and much
+better measurement, and it has never been tried.
+
 ### Book reachability, measured
 
 | Book | State |
 |---|---|
-| **Bovada** | Open, no auth, real prices — but **four esports events, total**. Not worth an adapter. |
+| **Bovada** | Open, no auth, real prices, and **77 live esports events** covering **61 of 61** of our upcoming CS2 matches (re-measured 2026-09-09). An earlier note here said "four esports events, total, not worth an adapter" — that was sampled at a dead hour and is wrong; it is why this avenue sat unused. Match markets only: moneyline, map spread, total maps. **No player props.** |
 | **Pinnacle** | Matchup list open: **131 CS2 matchups**, right down to tier-C qualifiers. Prices return `401 No authorization token provided`. |
 | **Sleeper** | `sleeper.app/graphql` open, introspection ON, 240 query fields. The DFS board is `my_picks_init` and needs a session. **A login away, not a wall away.** |
 | **ParlayPlay** | Cloudflare bot wall on every path. No unwalled host found (`partner-api`, `api-prod`, `backend` all fail DNS). |
