@@ -1188,7 +1188,7 @@ export function boardPage(o: {
           <th scope="col" class="c">Line</th>
           <th scope="col" class="c">Ours</th>
           <th scope="col" class="c">Lean</th>
-          <th scope="col" class="c">Hit rate</th>
+          <th scope="col" class="c">Record</th>
           ${showEv ? '<th scope="col" class="c evcol">EV</th>' : ''}
           ${showPP ? `<th scope="col" class="n">${only ? 'Take' : 'PrizePicks'}</th>` : ''}
           <th scope="col" class="c gapcol">${gapLabel}</th>
@@ -1294,7 +1294,7 @@ export function boardPage(o: {
                    <div class="meta">${formNote(formOf(r), play)}</div>`
             }</td>
             <td class="c" data-label="Lean">${staleCell(r)}${playCell(play, statusOf(r).why, r, only)}</td>
-            <td class="c${play ? ` strength s${Math.min(4, Math.max(1, Math.ceil((play.hitRate - 0.5) * 20)))}` : ''}" data-label="Hit rate">${
+            <td class="c${play ? ` strength s${Math.min(4, Math.max(1, Math.ceil((play.hitRate - 0.5) * 20)))}` : ''}" data-label="Record">${
               play === null
                 ? '<span class="meta">—</span>'
                   // Two lines, not three. The market line used to print on
@@ -1302,17 +1302,35 @@ export function boardPage(o: {
                   // "no market price" — the same non-information three hundred
                   // times. Only ~2 markets on a full board carry a real
                   // devigged number, so only those get a third line.
+                  // A record, not a percentage.
+                  //
+                  // This column used to read "72%", which every reader takes
+                  // as the chance this leg wins. It is not that. It is a
+                  // shrunk count of past series, and measured against settled
+                  // outcomes the board's calls claim 58.9% and realise 52.2%
+                  // — with AUC 0.521, meaning a call shown at 72% wins no
+                  // more often than one shown at 56%. A number that reads as
+                  // odds, is inflated by seven points, and carries no
+                  // ordering is the most misleading thing the board could
+                  // print, so it does not print it any more.
+                  //
+                  // What is left is what actually happened: 23 of 30. A fact
+                  // about the past makes no promise about this bet, and the
+                  // reader can size it themselves — "5 of 6" and "23 of 30"
+                  // are visibly different claims in a way 83% and 77% are not.
                 : `<div class="prob" title="${
                      play.rawOf === null
-                       ? 'Modelled from single maps, then shrunk toward a coin flip.'
-                       : `${play.rawWins} of ${play.rawOf} past series won this side, ` +
-                         `shrunk toward a coin flip because ${play.rawOf} is a small sample. ` +
-                         `Neither book prices this market, so there is nothing to compare against.`
-                   }">${Math.round(play.hitRate * 100)}%</div>
+                       ? 'Modelled by resampling single maps — there are too few series over this exact map range to count directly.'
+                       : `${play.rawWins} of this player's last ${play.rawOf} series would have won this side. ` +
+                         `That is what happened before, not the chance it happens again: across settled markets ` +
+                         `these calls have realised about 52%, near a coin flip, however strong the record looks.`
+                   }">${
+                     play.rawOf === null ? '—' : `${play.rawWins}<span class="of">of</span>${play.rawOf}`
+                   }</div>
                    ${
                      play.rawOf === null
                        ? '<div class="meta raw">modelled</div>'
-                       : `<div class="meta raw">${play.rawWins} of ${play.rawOf}</div>`
+                       : '<div class="meta raw">past series</div>'
                    }
                    ${
                      marketProb === null || flatVig

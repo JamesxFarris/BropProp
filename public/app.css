@@ -1679,3 +1679,12 @@ body.searching .tick { display: none; }
   background: var(--surface-2); border: 1px solid var(--line);
 }
 .meter-fill { height: 100%; background: var(--over); }
+
+/* "23 of 30" as the figure, with the joining word set back so the two counts
+   read as the number and "of" reads as punctuation. The column used to be a
+   percentage; a percentage there was taken as the odds on this leg, which it
+   never was. */
+.prob .of {
+  font-size: 12px; font-weight: 500; color: var(--text-3);
+  margin: 0 4px;
+}
