@@ -51,8 +51,10 @@ pulling a popular public file, so it has nothing to do with our usage and no
 schedule can be inferred from it. Probe before assuming either way; the check
 above costs one request.
 
-This is why LoL is the starving half of the board: **39 of 68 LoL players**
-clear the projection threshold against **259 of 373** for CS2.
+LoL used to be the starving half at 39 of 68 board players clearing the
+projection threshold. After the 2022-2026 load on 2026-09-08 it is **19 of 19
+on the live board, median 136 series**, against **250 of 270** for CS2. Keep
+re-running it each season; the gap comes back as new players appear.
 
 ### 2. Leaguepedia backfill — only if you want gaps filled
 
