@@ -106,9 +106,14 @@ export async function resumeBackfill(opts: {
   const done = await completed();
 
   let ran = 0, skipped = 0, written = 0;
+  // How many of THIS grid's windows are already recorded — not how many rows
+  // the ledger holds. Those differ whenever the grid changes, and printing the
+  // ledger size under the words "already done" read as progress against the
+  // current run when it was nothing of the kind.
+  const alreadyDone = chunks.filter((c) => done.has(`${c.since}|${c.until}`)).length;
   console.log(
     `backfill: ${chunks.length} windows of ${chunkDays}d over ${days}d — ` +
-    `${done.size} already done`);
+    `${alreadyDone} already done, ${done.size} in the ledger`);
 
   for (const c of chunks) {
     if (done.has(`${c.since}|${c.until}`)) { skipped++; continue; }
