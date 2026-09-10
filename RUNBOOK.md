@@ -226,6 +226,77 @@ Recorded so nobody spends money or a verification queue on a solved problem.
   hands over better stats than a demo parse would yield, for none of the
   compute, storage or effort.
 
+
+## THE FIRST SIGNIFICANT FINDING: both books shade the line, and the under wins
+
+Measured 2026-09-10 against the books' own closing lines, every settled prop.
+
+```
+settled legs 2137, pushed 24
+over-rate  ALL                    44.7%   (2137)
+           prizepicks CS2         44.8%    (973)
+           underdog   CS2         44.8%    (975)
+           prizepicks CS2 standard 45.0%   (800)
+           prizepicks CS2 demon    43.9%    (98)
+           prizepicks CS2 goblin   44.0%    (75)
+           CS2 kills              44.1%   (1035)
+           CS2 headshots          45.7%    (913)
+
+INDEPENDENT SERIES 133
+series leaning over  50-83
+exact two-sided sign test  p = 0.0053
+```
+
+**This is the first result in this project to clear the series-level bar.**
+Everything before it — the projection at AUC 0.495, opponent strength at
+r = 0.018, the stale line at 41-41, the market anchor at p = 1.00 — failed. This
+one does not, and it is the same test that failed them.
+
+It is also remarkably uniform: both books, both stats, standard and demon and
+goblin all land between 43.9% and 45.7%. That is the signature of a line shaded
+against the over, which is what a DFS book does when its customers love overs.
+
+### What it means for a stacked slip
+
+The correlation work above says a concentrated all-must-win entry is worth far
+more than the flat payout ladder assumes. Put the two together, and the
+DIRECTION turns out to matter more than the structure:
+
+| 6-pick, 5 on one team + 1 opponent, at a **measured** 22x | per leg | P(all 6) | needs | EV |
+|---|---:|---:|---:|---:|
+| **all overs** | 44.7% | 4.33% | 23.09x | **0.953** |
+| **all unders** | 55.3% | 9.22% | 10.85x | **2.028** |
+
+Same shape, same multiplier, same match. Overs lose 5%; unders roughly double.
+The break-even per-leg rate at 22x is **45.32%**, and the measured over-rate of
+44.7% sits just below it while the under rate clears it by **10 points**.
+
+**So: stack unders on one team.** The correlation is the same either way — the
+measured both-under lift is 1.209 against both-over 1.211 — so the structure
+works identically and only the side changes.
+
+### Before betting the house on it
+
+- **133 series from a four-day window.** Logging began 2026-09-06. A single
+  patch or meta could produce a league-wide dip in kills, and this would look
+  exactly the same. The structural warning elsewhere in this file still holds:
+  a line-shade finding can only be confirmed FORWARD.
+- **1,848 legs are unsettled against 2,137 settled**, because the stat feed does
+  not cover every match. No mechanism is obvious by which "we have the stats"
+  would correlate with "the player went under", but it is unchecked.
+- The correlation figure is measured against our own line convention (prior
+  median + 0.5), not the books'. The physical driver — map count, pace — should
+  carry across, but that is an argument rather than a measurement.
+- `shrink()` and the projection are NOT involved in any of this. The claim is
+  entirely about the book's line and the shape of the slip.
+
+Re-run both as the sample grows:
+
+```bash
+npm run validate:correlation    # the teammate effect, on 8,923 series
+npm run validate:calls          # includes the over/under baseline
+```
+
 ## Consensus across books — the one signal that is not our projection
 
 Built 2026-09-10, **and not yet measured**. Read this before trusting anything
