@@ -6,6 +6,7 @@ import { comboParts } from '../normalize.js';
 import type { BookCode } from '../books.js';
 import { devig } from '../devig.js';
 import { pricedEdges, edgeProbability } from './consensus.js';
+import { probAllWin, requiredMultiplier, marginalLegWorthIt, type SlipLeg } from './slip.js';
 
 /**
  * Building the best entry of a given size.
@@ -71,10 +72,32 @@ export type Entry = {
   legs: Candidate[];
   /** base x product of leg multipliers. Null when the book's table is unknown. */
   payout: number | null;
-  winProb: number;       // product of leg probabilities
+  /**
+   * P(every leg wins), with same-match correlation applied.
+   *
+   * Was a plain product, which is the arithmetic for independent legs and
+   * understates a stacked slip by up to 1.87x. See `slip.ts`.
+   */
+  winProb: number;
+  /** What the same slip would have been worth under the old independence assumption. */
+  winProbIndependent: number;
+  /**
+   * The multiplier at which this entry breaks even: 1 / winProb.
+   *
+   * The number to compare against what the app is showing. PrizePicks' own
+   * rules say a lineup's multiplier moves with pick combinations, special
+   * projections and promotions — a 6-pick is not always 37.5x, it can be 23x or
+   * 28x — so this is the only side of the comparison we can compute.
+   */
+  requiredMultiplier: number | null;
   /** payout x winProb; above 1.0 is profitable. Null without a payout. */
   evMultiple: number | null;
   discounted: number;    // legs paying below standard
+  /**
+   * Legs that fail the marginal test: their own win probability is below the
+   * payout step they have to buy. Null where the book's ladder is unknown.
+   */
+  legsBelowMarginalBar: number | null;
 };
 
 /**
@@ -328,7 +351,41 @@ export function bestEntry(
   if (legs.length < size) return null;
 
   const payout = base === null ? null : legs.reduce((acc, l) => acc * l.mult, base);
-  const winProb = legs.reduce((acc, l) => acc * l.p, 1);
+
+  /**
+   * P(all win), correlated.
+   *
+   * Legs from one match move together — a long, bloody series lifts everyone's
+   * kills — so the product this used to compute was the wrong arithmetic for
+   * exactly the entries the constraints below encourage. Both numbers are kept
+   * so the page can show what the assumption was worth.
+   */
+  const slipLegs: SlipLeg[] = legs.map((l) => ({
+    p: l.p, matchKey: l.matchKey, side: l.play.side,
+  }));
+  const winProb = probAllWin(slipLegs);
+  const winProbIndependent = legs.reduce((acc, l) => acc * l.p, 1);
+
+  /**
+   * How many legs are not worth their own payout step.
+   *
+   * Adding an nth leg to an all-must-win entry only helps when that leg wins
+   * more often than `M_{n-1} / M_n`. On PrizePicks that is 50%, **60%**, 50%,
+   * 53.3% — the fourth leg is the expensive one. Counting the failures is more
+   * useful than silently dropping them: the entry is still the best N markets
+   * available, and the reader deserves to know N was the wrong N.
+   */
+  let belowBar: number | null = null;
+  if (base !== null) {
+    belowBar = 0;
+    for (let i = 1; i < legs.length; i++) {
+      const prev = payouts[book]?.[i] ?? null;
+      const next = payouts[book]?.[i + 1] ?? null;
+      const ok = marginalLegWorthIt(legs[i]!.p, prev, next);
+      if (ok === false) belowBar++;
+      if (ok === null) { belowBar = null; break; }
+    }
+  }
 
   return {
     size,
@@ -336,16 +393,32 @@ export function bestEntry(
     legs,
     payout,
     winProb,
+    winProbIndependent,
+    requiredMultiplier: requiredMultiplier(slipLegs),
     evMultiple: payout === null ? null : payout * winProb,
     discounted: legs.filter((l) => Math.abs(l.mult - 1) > 0.005).length,
+    legsBelowMarginalBar: belowBar,
   };
 }
+
+/**
+ * Default sizes: the ones actually played, and 4 is not among them.
+ *
+ * A four-pick is the worst product on the PrizePicks board — 37.5% hold, and a
+ * fourth leg has to win 60% of the time to be worth adding to a three-pick.
+ * Nothing here has ever produced an honest 60% leg; `shrink()`'s Beta(8) prior
+ * makes it nearly unreachable by construction. Offering a 4-pick by default was
+ * the app recommending the shape its own maths says to avoid.
+ *
+ * See docs/STRATEGY.md for the full break-even table.
+ */
+export const DEFAULT_SIZES = [3, 5, 6];
 
 export function buildEntries(
   rows: MarketRow[],
   form: Map<string, FormStats>,
   book: BookCode,
-  sizes = [3, 4, 5, 6],
+  sizes = DEFAULT_SIZES,
 ): Entry[] {
   const cands = candidatesFor(rows, form, book);
   return sizes

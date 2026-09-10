@@ -1948,7 +1948,10 @@ export function buildPage(o: {
          * below it is not. That is the whole decision, and it survives every
          * repricing both books do.
          */
-        const needed = e.winProb > 0 ? 1 / e.winProb : null;
+        // From the correlated model in slip.ts, not 1 / product-of-p. On a
+        // stacked entry the product understates P(all win) by up to 1.87x,
+        // which made this bar look far higher than it is.
+        const needed = e.requiredMultiplier;
         const ev = e.evMultiple;
         const cls = ev === null ? 'flat' : ev >= 1.15 ? 'up' : ev >= 1 ? 'flat' : 'down';
         return `<div class="card">
@@ -1983,7 +1986,7 @@ export function buildPage(o: {
         }</span>
         <span class="evlab">${
           ev === null
-            ? `needed to break even — take it only if your app pays more than this`
+            ? `needed to break even. Read the multiplier off your app and take it only if that number is bigger — a 6-pick is not always 37.5×, it moves with the props you picked`
             : `expected return per unit staked${ev < 1 ? ' — below break-even' : ''}${
                 needed === null ? '' : `, needs ${needed.toFixed(2)}×`
               }`
