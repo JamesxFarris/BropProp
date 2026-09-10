@@ -458,6 +458,73 @@ worth gives a direction that never touches the projection.
 Crucially, and unlike the three-book consensus, **this is backtestable on data
 already logged** — both books' snapshots go back to the start of logging.
 
+**One correction worth keeping.** I first assumed this only worked on the thin
+slice where Underdog's two prices differ, since 397 of its 434 priced markets
+sit at a flat -112/-112. That was wrong, and it nearly killed the idea. A
+book's LINE is its own 50/50 point, so flat vig does not mean "no
+information" — it means the information is entirely in where they put the
+number. Underdog anchors all 434 markets; the price only refines the 37 where
+it leans. Built 2026-09-10 as `consensus.fairLine`, which returns a crowd
+consensus where one exists and falls back to the priced book otherwise, so a
+third book would need no further rewrite.
+
+
+### Aggregators: the OddsJam model, and what it can and cannot give us
+
+Probed 2026-09-10. Every aggregator answers with a clean **401/403 auth gate,
+not a wall** — these are signup-and-get-a-key services, which is how OddsJam
+actually works. It does not scrape a hundred books one at a time; it consumes
+feeds. Two are worth knowing about, and they answer different questions.
+
+| | Esports? | Player props? | Access |
+|---|---|---|---|
+| **OddsPapi** | Yes — CS2, LoL, Dota | **No.** Match markets only | **Free tier**, key by signup |
+| **PandaScore** | Yes, esports-native | **Yes** — CS:GO player markets | B2B, sales contact, paid |
+| The Odds API | **No esports at all** | — | — |
+| OpticOdds, SportsGameOdds, Abios | gated, unverified | unverified | key required |
+
+**The Odds API is out.** Its own sports list covers NFL through lacrosse and
+politics, and contains no esports title at all. Do not spend a signup on it.
+
+**PandaScore is the only route to a genuine player-prop second opinion.** It is
+esports-native, was one of the first to launch esports player props, and its
+CS:GO player markets rank top-5. Note carefully *what it is*: PandaScore
+**produces** odds with its own trading team and computer-vision models — it is
+a pricing supplier to bookmakers, not an aggregator of their lines. For our
+purpose that is arguably better than another soft DFS app, because it is a
+professionally modelled price for the exact market we care about. It is also a
+sales conversation and a real budget line.
+
+**OddsPapi is free and reachable today**, but match markets only — no player
+props. `https://api.oddspapi.io/v4`, key as an `apiKey` query parameter,
+historical odds included on the free tier, and its book list includes
+**Pinnacle** along with Bet365, Stake, 1xBet and Polymarket. Verified live:
+every path returns a well-formed `MISSING_API_KEY` JSON error, so the service
+exists and behaves.
+
+#### What a free Pinnacle match line is actually worth here
+
+Match markets do not price a player. They do price two things this project has
+written down as untested and valuable:
+
+1. **Total maps 2.5 is the market's probability that a third map happens** —
+   which is exactly the void risk on a maps 1-3 prop, and the runbook has
+   flagged that as "not tested and worth testing separately" since 2026-09-09.
+   It also bears on the map-3 over bias measured at +3.13.
+2. **Moneyline and handicap measure how one-sided a series is expected to be**,
+   and a blowout means fewer rounds and fewer kills for everyone. Our own
+   opponent-strength feature failed at r = 0.018 — but it was built from box
+   scores, and a *market-implied* mismatch is a different and much better
+   measurement that has never been tried.
+
+So the free key buys two experiments that are already on the list, from a sharp
+book rather than from our own history. It does not buy a consensus on kills.
+
+**To use it:** sign up for a free key at oddspapi.io, put it on the logger as
+`ODDSPAPI_KEY`, and the adapter can be written against the real payload. No
+adapter has been written yet, deliberately — writing a parser for a payload
+nobody has seen is how the Sleeper work nearly went wrong.
+
 ### Line movement: real information, but not a winning bet
 
 Measured 2026-09-08 over 2,101 snapshots and 316 markets priced by both
