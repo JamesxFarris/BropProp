@@ -4,54 +4,16 @@ import { q } from '../db.js';
 // A six-hour grace window keeps in-progress series visible.
 const LIVE_WINDOW = `(cl.scheduled_at IS NULL OR cl.scheduled_at > now() - interval '6 hours')`;
 
-export type Disagreement = {
-  canon_handle: string;
-  handle: string;
-  league: string;
-  stat: string;
-  map_start: number;
-  map_end: number;
-  pp_line: number;
-  ud_line: number;
-  delta: number;
-  ud_over_price: number | null;
-  ud_under_price: number | null;
-  match_title: string | null;
-  scheduled_at: string | null;
-  observed_at: string;
-  confirmed_at: string;
-};
-
 /**
- * Same player, same stat, same map range, priced differently by the two books.
- * Restricted to PrizePicks' `standard` variant: goblin and demon lines are
- * deliberately shifted, so comparing them to Underdog would report a
- * disagreement that is really just a different product.
+ * The old `disagreements()` query lived here and has been removed.
+ *
+ * It self-joined PrizePicks against Underdog to find markets they priced
+ * differently, which is the board's whole job and is now done in `boardq.ts`
+ * over any number of books. Nothing called it. It is noted rather than simply
+ * deleted because a two-book self-join is an easy thing to reinvent, and the
+ * reason not to is that it cannot answer the question that matters — which
+ * book is the outlier — without a third book to break the tie.
  */
-export async function disagreements(league: string | null): Promise<Disagreement[]> {
-  return q<Disagreement>(
-    `WITH cl AS (SELECT * FROM current_line)
-     SELECT pp.canon_handle, pp.handle, pp.league, pp.stat, pp.map_start, pp.map_end,
-            pp.line AS pp_line, ud.line AS ud_line,
-            (pp.line - ud.line) AS delta,
-            ud.over_price AS ud_over_price, ud.under_price AS ud_under_price,
-            COALESCE(pp.match_title, ud.match_title) AS match_title,
-            COALESCE(pp.scheduled_at, ud.scheduled_at) AS scheduled_at,
-            GREATEST(pp.observed_at, ud.observed_at) AS observed_at,
-            -- The older of the two confirmations: a pair is only as fresh as
-            -- its stalest side.
-            LEAST(pp.last_seen_at, ud.last_seen_at) AS confirmed_at
-     FROM (SELECT * FROM cl WHERE cl.book = 'prizepicks' AND cl.variant = 'standard' AND ${LIVE_WINDOW}) pp
-     JOIN (SELECT * FROM cl WHERE cl.book = 'underdog' AND ${LIVE_WINDOW}) ud
-       ON  pp.canon_handle = ud.canon_handle
-       AND pp.league = ud.league AND pp.stat = ud.stat
-       AND pp.map_start = ud.map_start AND pp.map_end = ud.map_end
-     WHERE pp.line <> ud.line
-       AND ($1::text IS NULL OR pp.league = $1)
-     ORDER BY abs(pp.line - ud.line) DESC, pp.handle`,
-    [league],
-  );
-}
 
 export type Movement = {
   prop_id: number;

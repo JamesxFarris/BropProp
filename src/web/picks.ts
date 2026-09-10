@@ -31,8 +31,14 @@ export async function openSlipBook(): Promise<string | null> {
 }
 
 export class WrongBookError extends Error {
-  constructor(public readonly locked: string) {
-    super(`slip is locked to ${locked}`);
+  /**
+   * Both books are carried, because with more than two of them neither can be
+   * inferred from the other. The notice used to name the prop's book as
+   * "whichever one isn't the slip's", which is only an answer while there are
+   * exactly two.
+   */
+  constructor(public readonly locked: string, public readonly attempted: string) {
+    super(`slip is locked to ${locked}, prop is on ${attempted}`);
   }
 }
 
@@ -70,7 +76,7 @@ export async function addPick(propId: number, side: 'over' | 'under'): Promise<v
   // submittable form, and a mixed slip is not an entry that could ever be
   // placed on either app.
   const locked = await openSlipBook();
-  if (locked && locked !== line.book) throw new WrongBookError(locked);
+  if (locked && locked !== line.book) throw new WrongBookError(locked, line.book);
 
   const slip = await openSlip();
   await q(

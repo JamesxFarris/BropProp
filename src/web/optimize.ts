@@ -3,6 +3,8 @@ import type { MarketRow } from './boardq.js';
 import type { FormStats, Play } from './projection.js';
 import { recommend, type LineOption } from './projection.js';
 import { comboParts } from '../normalize.js';
+import type { BookCode } from '../books.js';
+import { devig } from '../devig.js';
 
 /**
  * Building the best entry of a given size.
@@ -49,7 +51,7 @@ export type Candidate = {
 
 export type Entry = {
   size: number;
-  book: 'prizepicks' | 'underdog';
+  book: BookCode;
   legs: Candidate[];
   /** base x product of leg multipliers. Null when the book's table is unknown. */
   payout: number | null;
@@ -95,7 +97,7 @@ function evidenceCount(play: Play, maps: number): number {
 export function candidatesFor(
   rows: MarketRow[],
   form: Map<string, FormStats>,
-  book: 'prizepicks' | 'underdog',
+  book: BookCode,
 ): Candidate[] {
   const out: Candidate[] = [];
   const now = Date.now();
@@ -110,15 +112,36 @@ export function candidatesFor(
     const parts = comboParts(r.handle);
     if (r.is_combo && parts.length < 2) continue;
 
-    const line = book === 'prizepicks' ? r.pp_line : r.ud_line;
-    const propId = book === 'prizepicks' ? r.pp_prop_id : r.ud_prop_id;
-    if (line === null || propId === null) continue;
+    const mine = r.books.find((b) => b.book === book);
+    if (!mine) continue;
+
+    /**
+     * A market probability for this line from whoever publishes one.
+     *
+     * PrizePicks quotes no odds — it prices by moving the line — but another
+     * book often lists the same market at the same number, and that devigged
+     * probability is a read on this line too. It only transfers when the
+     * numbers match exactly: at a different line it is a different bet.
+     *
+     * Any priced book will do, not just Underdog. The old version hardcoded
+     * one, which meant a third book publishing prices would have been ignored
+     * while the anchor sat empty.
+     */
+    const twin = r.books.find(
+      (b) => b.book !== book && b.line === mine.line
+        && b.over_price !== null && b.under_price !== null,
+    );
+    const fair = twin ? devig(twin.over_price, twin.under_price) : null;
 
     const options: LineOption[] = [{
       book,
-      line: Number(line),
-      overOk: book === 'prizepicks' ? r.pp_over_ok : r.ud_over_ok,
-      underOk: book === 'prizepicks' ? r.pp_under_ok : r.ud_under_ok,
+      line: Number(mine.line),
+      overOk: mine.over_ok,
+      underOk: mine.under_ok,
+      overPrice: mine.over_price === null ? null : Number(mine.over_price),
+      underPrice: mine.under_price === null ? null : Number(mine.under_price),
+      anchorOver: fair?.over ?? null,
+      anchorUnder: fair?.under ?? null,
     }];
 
     const maps = r.map_end - r.map_start + 1;
@@ -127,14 +150,11 @@ export function candidatesFor(
     if (!play) continue;
 
     const p = shrink(play.hitRate, evidenceCount(play, maps));
-    const rawMult =
-      book === 'underdog'
-        ? play.side === 'over' ? r.ud_over_mult : r.ud_under_mult
-        : null;
+    const rawMult = play.side === 'over' ? mine.over_mult : mine.under_mult;
     const mult = rawMult === null ? 1 : Number(rawMult);
 
     out.push({
-      row: r, play, propId, p, mult,
+      row: r, play, propId: mine.prop_id, p, mult,
       value: p * mult,
       matchKey: r.match_title ?? `?${r.canon_handle}`,
       players: parts.length >= 2 ? parts : [r.canon_handle],
@@ -163,7 +183,7 @@ export function candidatesFor(
 export function bestEntry(
   candidates: Candidate[],
   size: number,
-  book: 'prizepicks' | 'underdog',
+  book: BookCode,
   maxPerMatch = 4,
   /**
    * Payout table to price the entry with. Injected so a test can pin the
@@ -242,7 +262,7 @@ export function bestEntry(
 export function buildEntries(
   rows: MarketRow[],
   form: Map<string, FormStats>,
-  book: 'prizepicks' | 'underdog',
+  book: BookCode,
   sizes = [3, 4, 5, 6],
 ): Entry[] {
   const cands = candidatesFor(rows, form, book);

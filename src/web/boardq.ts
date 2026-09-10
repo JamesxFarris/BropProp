@@ -1,12 +1,40 @@
 import { q } from '../db.js';
+import type { BookCode } from '../books.js';
 
 /**
- * One row per MARKET, not per book.
+ * One row per MARKET, with every book that prices it nested inside.
  *
- * The old board listed each book separately, so the same player/stat appeared
- * twice and you had to hold both numbers in your head to see the gap. Pairing
- * them is the whole point of the product: the comparison is the row.
+ * The old shape pivoted books into fixed columns — `pp_line`, `ud_line`,
+ * `ud_over_price` — which made "there are exactly two books" a fact about the
+ * type, repeated at sixty-nine call sites. Every DFS comparison tool worth
+ * copying works by consensus across MANY books, and a consensus needs at least
+ * three: the median of two numbers is their midpoint, and which of the two is
+ * the outlier is undefined. A pivot cannot express that, so it had to go.
+ *
+ * The pairing is still the point of the row — the comparison is the row, not
+ * the book. What changed is that the row now holds a list.
  */
+export type BookLine = {
+  book: BookCode;
+  prop_id: number;
+  line: number;
+  over_price: number | null;
+  under_price: number | null;
+  /** Some markets are listed one way only; offering the missing side is offering an unplaceable bet. */
+  over_ok: boolean;
+  under_ok: boolean;
+  /** Underdog pays some legs below a standard one. Null where a book doesn't say. */
+  over_mult: number | null;
+  under_mult: number | null;
+  /** Total drift since this prop was first logged. */
+  moved: number | null;
+  /** The most recent single step, and when — for the stale-line signal. */
+  last_move: number | null;
+  last_move_at: string | null;
+  /** Side of an open pick on this prop, if there is one. */
+  side: string | null;
+};
+
 export type MarketRow = {
   canon_handle: string;
   handle: string;
@@ -16,46 +44,34 @@ export type MarketRow = {
   map_end: number;
   is_combo: boolean;
 
-  pp_prop_id: number | null;
-  pp_line: number | null;
-  ud_prop_id: number | null;
-  ud_line: number | null;
-  ud_over_price: number | null;
-  ud_under_price: number | null;
+  /** Every book pricing this market, in a stable order. Never empty. */
+  books: BookLine[];
 
-  // Some markets are listed one way only, and Underdog pays some legs less
-  // than a standard one. Both are published; both were being ignored.
-  pp_over_ok: boolean;
-  pp_under_ok: boolean;
-  ud_over_ok: boolean;
-  ud_under_ok: boolean;
-  ud_over_mult: number | null;
-  ud_under_mult: number | null;
+  /**
+   * Widest disagreement on the row: highest line minus lowest.
+   *
+   * Replaces the old signed `pp_line - ud_line`. A signed difference only has
+   * a meaning once you know which book is which way round, which is exactly
+   * the assumption being removed. Direction now comes from comparing a book
+   * against the others in `books`, which works for any number of them.
+   */
+  spread: number | null;
 
-  delta: number | null;
   match_title: string | null;
   scheduled_at: string | null;
   confirmed_at: string;
-  pp_side: string | null;
-  ud_side: string | null;
-  moved: number | null;
-  /** The most recent single step each book took, and when — for the stale-line signal. */
-  pp_last_move: number | null;
-  pp_last_move_at: string | null;
-  ud_last_move: number | null;
-  ud_last_move_at: string | null;
 };
 
 /**
  * `best` drops markets where the selected app has no price advantage.
  *
  * "Better on PrizePicks" is a property of a SIDE, not of a prop: if PP posts
- * 28.0 and UD 30.5, PP is better for the over (cheaper line) and UD is better
- * for the under (more room). So a market where the two lines differ always
- * favours the selected app on exactly one side, and a market where they match
- * favours it on neither — those are the ones worth hiding, along with nothing
- * else. Markets the other app doesn't list at all are kept: no comparison
- * exists, so they can't be called worse.
+ * 28.0 and another book 30.5, PP is better for the over (cheaper line) and the
+ * other is better for the under (more room). So a market where lines differ
+ * favours the selected app on exactly one side, and a market where every book
+ * agrees favours it on neither — those are the ones worth hiding, along with
+ * nothing else. Markets no other app lists are kept: no comparison exists, so
+ * they can't be called worse.
  */
 export async function markets(opts: {
   league: string | null;
@@ -90,8 +106,34 @@ export async function markets(opts: {
               (array_agg(observed_at ORDER BY observed_at DESC))[1] AS last_move_at
        FROM prop_snapshot GROUP BY prop_id HAVING count(*) > 1
      ),
+     -- One row per market per BOOK.
+     --
+     -- DISTINCT ON matters here. A book can list the same market twice, and the
+     -- old pivot took max(line) and max(prop_id) as separate aggregates — which
+     -- could return a line from one prop and the id of another, so the button
+     -- staked a different number than the cell displayed. Picking a whole row
+     -- keeps the line and the id that belong together, and the freshest
+     -- observation is the one the board should be showing anyway.
+     bl AS (
+       SELECT DISTINCT ON (c.canon_handle, c.league, c.stat, c.map_start, c.map_end, c.book)
+              c.canon_handle, c.league, c.stat, c.map_start, c.map_end,
+              c.book, c.prop_id, c.line, c.is_combo, c.handle,
+              c.match_title, c.scheduled_at, c.last_seen_at,
+              c.over_price, c.under_price, c.over_ok, c.under_ok,
+              c.over_multiplier, c.under_multiplier,
+              -- Selected because it is ordered on. Nothing downstream reads
+              -- it; leaving it out of the list is the kind of thing that works
+              -- until a Postgres upgrade decides it shouldn't.
+              c.observed_at,
+              mv.moved, mv.last_move, mv.last_move_at, op.side
+       FROM cl c
+       LEFT JOIN moves mv ON mv.prop_id = c.prop_id
+       LEFT JOIN open_picks op ON op.prop_id = c.prop_id
+       ORDER BY c.canon_handle, c.league, c.stat, c.map_start, c.map_end, c.book,
+                c.observed_at DESC, c.prop_id DESC
+     ),
      m AS (
-       SELECT c.canon_handle, c.league, c.stat, c.map_start, c.map_end,
+       SELECT b.canon_handle, b.league, b.stat, b.map_start, b.map_end,
               -- NOT a grouping key. A combo's canon_handle is the members run
               -- together ("binxunknight") and can't collide with a real
               -- player's, so grouping by it already keeps combos separate.
@@ -100,57 +142,52 @@ export async function markets(opts: {
               -- the CS2 player eraa a combo and Underdog lists the same kills
               -- market as an ordinary player, so the pair never met and the
               -- board showed two half-rows with no gap between them.
-              bool_or(c.is_combo)                                    AS is_combo,
-              max(c.handle)                                          AS handle,
-              max(c.match_title)                                     AS match_title,
-              min(c.scheduled_at)                                    AS scheduled_at,
-              min(c.last_seen_at)                                    AS confirmed_at,
-              max(c.prop_id) FILTER (WHERE c.book = 'prizepicks')    AS pp_prop_id,
-              max(c.line)    FILTER (WHERE c.book = 'prizepicks')    AS pp_line,
-              max(c.prop_id) FILTER (WHERE c.book = 'underdog')      AS ud_prop_id,
-              max(c.line)    FILTER (WHERE c.book = 'underdog')      AS ud_line,
-              max(c.over_price)  FILTER (WHERE c.book = 'underdog')  AS ud_over_price,
-              max(c.under_price) FILTER (WHERE c.book = 'underdog')  AS ud_under_price,
-              COALESCE(bool_or(c.over_ok)  FILTER (WHERE c.book = 'prizepicks'), false) AS pp_over_ok,
-              COALESCE(bool_or(c.under_ok) FILTER (WHERE c.book = 'prizepicks'), false) AS pp_under_ok,
-              COALESCE(bool_or(c.over_ok)  FILTER (WHERE c.book = 'underdog'), false)   AS ud_over_ok,
-              COALESCE(bool_or(c.under_ok) FILTER (WHERE c.book = 'underdog'), false)   AS ud_under_ok,
-              max(c.over_multiplier)  FILTER (WHERE c.book = 'underdog') AS ud_over_mult,
-              max(c.under_multiplier) FILTER (WHERE c.book = 'underdog') AS ud_under_mult
-       FROM cl c
-       GROUP BY c.canon_handle, c.league, c.stat, c.map_start, c.map_end
+              bool_or(b.is_combo)   AS is_combo,
+              max(b.handle)         AS handle,
+              max(b.match_title)    AS match_title,
+              min(b.scheduled_at)   AS scheduled_at,
+              min(b.last_seen_at)   AS confirmed_at,
+              count(*)              AS n_books,
+              -- NULL, not zero, when only one book prices it. With one line
+              -- there is no disagreement to measure, and "max - min = 0" would
+              -- render as "same" — telling the reader the books agree about a
+              -- market only one of them has heard of.
+              CASE WHEN count(*) > 1 THEN max(b.line) - min(b.line) END AS spread,
+              count(*) FILTER (WHERE b.book = $2) > 0    AS has_sel,
+              json_agg(json_build_object(
+                'book',          b.book,
+                'prop_id',       b.prop_id,
+                'line',          b.line::float8,
+                'over_price',    b.over_price,
+                'under_price',   b.under_price,
+                'over_ok',       b.over_ok,
+                'under_ok',      b.under_ok,
+                'over_mult',     b.over_multiplier::float8,
+                'under_mult',    b.under_multiplier::float8,
+                'moved',         b.moved::float8,
+                'last_move',     b.last_move::float8,
+                'last_move_at',  b.last_move_at,
+                'side',          b.side
+              ) ORDER BY b.book)                         AS books
+       FROM bl b
+       GROUP BY b.canon_handle, b.league, b.stat, b.map_start, b.map_end
      )
-     SELECT m.*,
-            (m.pp_line - m.ud_line) AS delta,
-            pp_pick.side AS pp_side,
-            ud_pick.side AS ud_side,
-            COALESCE(mv_pp.moved, mv_ud.moved) AS moved,
-            -- Per book, so the row can tell that one of them moved and the
-            -- other did not. Measured over 147 such events, the lagging book
-            -- agreed with the leader 6.5 to 1 when it responded at all, and
-            -- two thirds of the time it never moved — which is the gap.
-            mv_pp.last_move AS pp_last_move,
-            mv_pp.last_move_at AS pp_last_move_at,
-            mv_ud.last_move AS ud_last_move,
-            mv_ud.last_move_at AS ud_last_move_at
+     SELECT m.canon_handle, m.league, m.stat, m.map_start, m.map_end,
+            m.is_combo, m.handle, m.match_title, m.scheduled_at, m.confirmed_at,
+            m.books, m.spread::float8 AS spread
      FROM m
-     LEFT JOIN open_picks pp_pick ON pp_pick.prop_id = m.pp_prop_id
-     LEFT JOIN open_picks ud_pick ON ud_pick.prop_id = m.ud_prop_id
-     LEFT JOIN moves mv_pp ON mv_pp.prop_id = m.pp_prop_id
-     LEFT JOIN moves mv_ud ON mv_ud.prop_id = m.ud_prop_id
      WHERE ($1::text IS NULL OR m.league = $1)
-       AND ($2::text IS NULL
-            OR ($2 = 'prizepicks' AND m.pp_prop_id IS NOT NULL)
-            OR ($2 = 'underdog'   AND m.ud_prop_id IS NOT NULL))
-       AND (NOT $3::boolean OR (m.pp_prop_id IS NOT NULL AND m.ud_prop_id IS NOT NULL))
+       AND ($2::text IS NULL OR m.has_sel)
+       AND (NOT $3::boolean OR m.n_books > 1)
        AND ($4::text IS NULL OR m.handle ILIKE '%' || $4 || '%'
             OR m.match_title ILIKE '%' || $4 || '%')
+       -- "No price advantage" generalises to "every book pricing this market
+       -- agrees with the selected one". With only one book listing it there is
+       -- no comparison to lose, so the market is kept.
        AND (NOT $5::boolean OR $2::text IS NULL
-            OR ($2 = 'prizepicks' AND (m.ud_line IS NULL OR m.pp_line <> m.ud_line))
-            OR ($2 = 'underdog'   AND (m.pp_line IS NULL OR m.pp_line <> m.ud_line)))
-     ORDER BY (m.pp_line IS NOT NULL AND m.ud_line IS NOT NULL
-               AND m.pp_line <> m.ud_line) DESC,
-              abs(COALESCE(m.pp_line - m.ud_line, 0)) DESC,
+            OR m.n_books = 1 OR m.spread > 0)
+     ORDER BY (m.spread > 0) DESC NULLS LAST,
+              m.spread DESC NULLS LAST,
               m.scheduled_at NULLS LAST, m.handle, m.stat`,
     [opts.league, opts.book, opts.matched, opts.search, opts.best ?? false],
   );

@@ -18,6 +18,7 @@ import { counters, historyByWeek, coverage, record, sources, scoreHistory } from
 import { clv } from './clv.js';
 import { buildEntries } from './optimize.js';
 import { projectMarkets } from './projection.js';
+import { KNOWN_BOOKS, type BookCode } from '../books.js';
 
 const PORT = Number(process.env.PORT ?? 3000);
 const PUBLIC = 'public';
@@ -234,7 +235,7 @@ const server = createServer(async (req, res) => {
             // that silently looks unchanged.
             if (err instanceof WrongBookError) {
               const sep = back.includes('?') ? '&' : '?';
-              return redirect(res, `${backTo(null)}${sep}locked=${encodeURIComponent(err.locked)}#m${propId}`);
+              return redirect(res, `${backTo(null)}${sep}locked=${encodeURIComponent(err.locked)}&on=${encodeURIComponent(err.attempted)}#m${propId}`);
             }
             if (err instanceof SideUnavailableError) {
               const sep = back.includes('?') ? '&' : '?';
@@ -305,9 +306,9 @@ const server = createServer(async (req, res) => {
        * `book=both` is still reachable for comparing the two directly.
        */
       book:
-        bookParam === 'both' ? null
-          : bookParam === 'underdog' ? 'underdog' as const
-            : 'prizepicks' as const,
+        bookParam === 'both' || bookParam === 'all' ? null
+          : bookParam && KNOWN_BOOKS.includes(bookParam) ? bookParam
+            : 'prizepicks',
       matched: url.searchParams.get('matched') === '1',
       search: url.searchParams.get('q')?.trim() || null,
       // On by default once an app is chosen — the reason to narrow to one app
@@ -323,8 +324,11 @@ const server = createServer(async (req, res) => {
     // from the other one can't join this entry, so showing them as takeable
     // would be offering something that cannot be done.
     const lockedBook = await openSlipBook();
-    if (lockedBook === 'prizepicks' || lockedBook === 'underdog') filters.book = lockedBook;
+    if (lockedBook) filters.book = lockedBook;
     const blocked = url.searchParams.get('locked');
+    // Which book the refused prop was on. Carried separately because with more
+    // than two books it cannot be inferred from the slip's own.
+    const blockedOn = url.searchParams.get('on');
 
     const propMatch = url.pathname.match(/^\/prop\/(\d+)$/);
     if (propMatch) {
@@ -358,14 +362,16 @@ const server = createServer(async (req, res) => {
           map_start: r.map_start, map_end: r.map_end,
         })),
       );
-      return html(res, boardPage({ rows, picks, health: h, leagues: known, filters, lockedBook, blocked, form }));
+      return html(res, boardPage({ rows, picks, health: h, leagues: known, filters, lockedBook, blocked, blockedOn, form }));
     }
 
     if (url.pathname === '/build') {
       const bookParam = url.searchParams.get('book');
-      const book: 'prizepicks' | 'underdog' =
-        (lockedBook as 'prizepicks' | 'underdog' | null) ??
-        (bookParam === 'underdog' ? 'underdog' : 'prizepicks');
+      // Any book with an adapter can be built against. Unknown codes fall back
+      // to PrizePicks rather than querying for a book that does not exist.
+      const book: BookCode =
+        lockedBook ??
+        (bookParam && KNOWN_BOOKS.includes(bookParam) ? bookParam : 'prizepicks');
       const rows = await markets({ league: filters.league, book, matched: false, search: null });
       const form = await projectMarkets(
         rows.map((r) => ({
@@ -402,7 +408,7 @@ const server = createServer(async (req, res) => {
         openPicks(),
         health(filters.league),
       ]);
-      return html(res, edgesPage({ rows, mov, picks, health: h, leagues: known, filters, lockedBook, blocked }));
+      return html(res, edgesPage({ rows, mov, picks, health: h, leagues: known, filters, lockedBook, blocked, blockedOn }));
     }
 
     res.writeHead(404, { 'content-type': 'text/plain' }).end('Not found');

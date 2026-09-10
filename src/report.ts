@@ -34,14 +34,17 @@ console.log(table(await q(`
   FROM prop p JOIN book b ON b.id = p.book_id
   GROUP BY 1,2 ORDER BY 1,2`)));
 
-section('Cross-book disagreements (PrizePicks vs Underdog, same market)');
+section('Cross-book disagreements (widest gap per market, any books)');
 console.log(table(await q(`
-  SELECT pp_handle AS player, league, stat,
+  SELECT handle AS player, league, stat,
          map_start||'-'||map_end AS maps,
-         pp_line AS pp, ud_line AS ud, line_diff AS diff,
+         books,
+         low_book||' '||low_line   AS low,
+         high_book||' '||high_line AS high,
+         line_diff AS diff,
          COALESCE(left(match_title,34),'') AS match
   FROM cross_book_diff
-  ORDER BY abs(line_diff) DESC, player LIMIT 20`)));
+  ORDER BY line_diff DESC, player LIMIT 20`)));
 
 section('Line movement (props whose line has moved since first logged)');
 console.log(table(await q(`

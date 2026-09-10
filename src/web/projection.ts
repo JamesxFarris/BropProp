@@ -3,6 +3,7 @@ import { config } from '../config.js';
 import { comboParts } from '../normalize.js';
 import { foldCombo, type ComboStatRow } from '../combo.js';
 import { americanToProb, devig } from '../devig.js';
+import type { BookCode } from '../books.js';
 
 /**
  * What a player has actually done over the same map range, and how that sits
@@ -57,7 +58,7 @@ export type FormStats = {
 
 export type Play = {
   side: 'over' | 'under';
-  book: 'prizepicks' | 'underdog';
+  book: BookCode;
   line: number;
   edge: number;          // stat units in your favour at that line
   edgeSd: number | null; // edge relative to how much this player swings
@@ -223,7 +224,7 @@ export function resampleTotals(mapValues: number[], maps: number, seed: string):
  * would be a coin flip wearing a decimal point.
  */
 export type LineOption = {
-  book: 'prizepicks' | 'underdog';
+  book: BookCode;
   line: number;
   overOk: boolean;
   underOk: boolean;

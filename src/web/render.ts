@@ -1,6 +1,6 @@
 import type { Movement, Health } from './queries.js';
 import type { PickRow, SlipSummary } from './picks.js';
-import type { MarketRow, PropHistory, PlayerGame } from './boardq.js';
+import type { MarketRow, BookLine, PropHistory, PlayerGame } from './boardq.js';
 import type { FormStats, Play, CallStatus, NoCall } from './projection.js';
 import { config } from '../config.js';
 import { evaluate, edgeProgress, type LineOption, flatBreakEven } from './projection.js';
@@ -10,6 +10,8 @@ import type { ClvSummary } from './clv.js';
 import type { Entry } from './optimize.js';
 import { isComboHandle } from '../normalize.js';
 import { devig } from '../devig.js';
+import { bookName, bookShort, orderBooks, KNOWN_BOOKS, type BookCode } from '../books.js';
+import { bestEdge, consensusLine, betterSide } from './consensus.js';
 
 export const esc = (s: unknown) =>
   String(s ?? '').replace(/[&<>"']/g, (c) =>
@@ -25,8 +27,14 @@ const STAT_LABEL: Record<string, string> = {
 };
 const statLabel = (s: string) => STAT_LABEL[s] ?? s.replace(/_/g, ' ');
 
-const bookName = (b: string) => (b === 'prizepicks' ? 'PrizePicks' : 'Underdog');
-const otherBook = (b: string) => (b === 'prizepicks' ? 'underdog' : 'prizepicks');
+/**
+ * Book display names come from the registry now, not from a ternary.
+ *
+ * `b === 'prizepicks' ? 'PrizePicks' : 'Underdog'` appeared a dozen times in
+ * this file, and every one of them silently renamed a third book to
+ * "Underdog". A lookup that falls back to the code itself is wrong in a way
+ * you can see on screen rather than wrong in a way you cannot.
+ */
 
 /** Stats a projection can be built from. Fantasy points use a scoring formula
  *  the books don't publish, so deriving one would be a guess. */
@@ -169,11 +177,12 @@ function filterBar(path: string, f: Filters, leagues: string[], locked: string |
   const bookBtns = locked
     ? `<span class="seg-locked" aria-current="page">${bookName(locked)}</span>`
     : [
-        // PrizePicks leads because it is the default. "Both" has to name
-        // itself in the URL now that an absent param means PrizePicks.
-        a(qs({ book: 'prizepicks' }, f), 'PrizePicks', f.book === 'prizepicks'),
-        a(qs({ book: 'underdog' }, f), 'Underdog', f.book === 'underdog'),
-        a(qs({ book: 'both' }, f), 'Both', f.book === null),
+        // PrizePicks leads because it is the default. "All" has to name itself
+        // in the URL now that an absent param means PrizePicks. One button per
+        // book with an adapter, so a new one appears here on the day it ships
+        // rather than needing this list edited.
+        ...KNOWN_BOOKS.map((b) => a(qs({ book: b }, f), bookName(b), f.book === b)),
+        a(qs({ book: 'all' }, f), 'All', f.book === null),
       ].join('');
 
   /**
@@ -530,7 +539,7 @@ function slipRail(picks: PickRow[], back: string): string {
             <span class="nm">${esc(p.handle)}</span>
           </div>
           <div class="l2">${esc(statLabel(p.stat))}, ${esc(maps(p.map_start, p.map_end).toLowerCase())} on ${esc(
-            p.book === 'prizepicks' ? 'PrizePicks' : 'Underdog',
+            bookName(p.book),
           )}</div>
         </div>
         <div style="text-align:right">
@@ -634,17 +643,17 @@ function slipRail(picks: PickRow[], back: string): string {
  * from both. Once a slip has its first leg the board narrows to that app, and
  * this says so, because otherwise the missing column just looks like a bug.
  */
-function lockNotice(locked: string | null, blocked: string | null): string {
+function lockNotice(locked: string | null, blocked: string | null, blockedOn: string | null): string {
   if (blocked) {
     return `<div class="notice warn-notice">
-      That prop is on ${esc(bookName(blocked === 'prizepicks' ? 'underdog' : 'prizepicks'))},
-      but your slip is on ${esc(bookName(blocked))}. Entries can't mix the two apps —
+      ${blockedOn ? `That prop is on ${esc(bookName(blockedOn))}, but your` : 'Your'}
+      slip is on ${esc(bookName(blocked))}. Entries can't mix apps —
       clear the slip to switch.</div>`;
   }
   if (locked) {
     return `<div class="notice">
       Showing ${esc(bookName(locked))} only, because your slip started there, and only the
-      markets where it prices better than ${esc(bookName(otherBook(locked)))}. A lower line is
+      markets where it prices better than the other apps. A lower line is
       the better over and a higher line the better under, so just one side of each market is
       offered. Turn off <strong>Best price only</strong> to see everything, or clear the slip
       to switch apps.</div>`;
@@ -787,13 +796,34 @@ function noCallText(why: NoCall, r: { stat: string; handle: string }): string {
  * the model's lean rather than above it, and the tooltip says the number.
  */
 function staleCell(r: MarketRow): string {
-  const s = staleLine(r);
+  const s = staleLine(r.books);
   if (!s) return '';
-  const who = (b: string) => (b === 'prizepicks' ? 'PP' : 'UD');
+  const staleAt = r.books.find((b) => b.book === s.book);
   return `<div class="stale ${s.side === 'over' ? 'o' : 'u'}"
-    title="${who(s.mover)} moved ${signed(s.move)} and ${who(s.book)} has not followed. Useful for choosing where to place a bet — but not a reason to make one: taking the stale side settled 50.0% (41-41) over 49 matches.">
-    <span class="stale-k">${who(s.mover)} ${signed(s.move)}</span>
-    <span class="stale-v">${who(s.book)} ${num(s.book === 'prizepicks' ? r.pp_line : r.ud_line)}</span>
+    title="${esc(bookShort(s.mover))} moved ${signed(s.move)} and ${esc(bookShort(s.book))} has not followed. Useful for choosing where to place a bet — but not a reason to make one: taking the stale side settled 50.0% (41-41) over 49 matches.">
+    <span class="stale-k">${esc(bookShort(s.mover))} ${signed(s.move)}</span>
+    <span class="stale-v">${esc(bookShort(s.book))} ${num(staleAt?.line)}</span>
+  </div>`;
+}
+
+/**
+ * Where this market sits against the crowd — the one cell whose direction does
+ * not come from our projection.
+ *
+ * Blank below three books, and that blankness is the honest state rather than a
+ * gap to be filled in. With PrizePicks and Underdog alone there is no consensus
+ * to be off: the midpoint of two numbers says nothing about which of them is
+ * wrong. See `consensus.ts`. The cell lights up when a third book lands.
+ */
+function edgeCell(r: MarketRow): string {
+  const e = bestEdge(r.books);
+  if (!e) return '';
+  const c = consensusLine(r.books);
+  const n = typeof c === 'string' ? r.books.length : c.n;
+  return `<div class="edge ${e.side === 'over' ? 'o' : 'u'}"
+    title="${esc(bookName(e.book))} prices this at ${num(e.line)} while the other ${n - 1} books median ${num(e.fair)}. That makes its ${e.side} ${e.gap.toFixed(1)} cheaper than the market. Direction is read off the other books, not from our projection.">
+    <span class="edge-k">${esc(bookShort(e.book))} ${e.side === 'over' ? 'O' : 'U'}</span>
+    <span class="edge-v">${e.gap.toFixed(1)} off ${num(e.fair)}</span>
   </div>`;
 }
 
@@ -819,7 +849,7 @@ function playCell(
   // cells away, and printing it twice was most of why a row was hard to read.
   const at =
     only === null || only === undefined
-      ? `<span class="at">${bookName(play.book) === 'PrizePicks' ? 'PP' : 'UD'} ${play.line.toFixed(1)}</span>`
+      ? `<span class="at">${esc(bookShort(play.book))} ${play.line.toFixed(1)}</span>`
       : '';
   return `<div class="play ${cls}">
       <span class="dir">${dir}</span>
@@ -898,12 +928,16 @@ function ouButtons(
   return `<div class="ou" id="m${propId}">${b('over', 'O', 'o')}${b('under', 'U', 'u')}</div>`;
 }
 
-/** Which side of a market is the better price on `book`. */
-function bestSide(book: string, delta: number | null): 'both' | 'over' | 'under' {
-  if (delta === null || delta === 0) return 'both';
-  const ppCheaper = delta < 0;
-  if (book === 'prizepicks') return ppCheaper ? 'over' : 'under';
-  return ppCheaper ? 'under' : 'over';
+/**
+ * Which side of a market is the better price on `book`.
+ *
+ * Delegates to `consensus.betterSide`, which answers it by comparing this
+ * book's line against every other book's rather than by reading the sign of a
+ * two-book difference. The old version took `delta = pp_line - ud_line` and
+ * branched on which book it had been handed — arithmetic with no third arm.
+ */
+function bestSide(books: BookLine[], book: BookCode): 'both' | 'over' | 'under' {
+  return betterSide(books, book);
 }
 
 /**
@@ -918,11 +952,11 @@ function bestSide(book: string, delta: number | null): 'both' | 'over' | 'under'
  * number, and the two pages must not disagree about which they are doing.
  */
 export function offeredSides(
-  book: string,
-  delta: number | null,
+  books: BookLine[],
+  book: BookCode,
   restrict: boolean,
 ): 'both' | 'over' | 'under' {
-  return restrict ? bestSide(book, delta) : 'both';
+  return restrict ? bestSide(books, book) : 'both';
 }
 
 /**
@@ -961,6 +995,8 @@ export function boardPage(o: {
   filters: Filters;
   lockedBook: string | null;
   blocked: string | null;
+  /** Which book the refused prop was on — see WrongBookError. */
+  blockedOn?: string | null;
   form?: Map<string, FormStats>;
 }): string {
   const back = `/board${qs({}, o.filters)}`;
@@ -987,37 +1023,41 @@ export function boardPage(o: {
    */
   const ppBreakEven = flatBreakEven(o.picks.length + 1);
 
-  const optionsFor = (r: MarketRow): LineOption[] => {
-    const opts: LineOption[] = [];
-    if (r.pp_line !== null && only !== 'underdog') {
-      // Underdog's devigged read counts as a read on PrizePicks' number only
-      // when it IS the same number. A probability is the chance of clearing
-      // the line it was quoted against, so lending 30.5's answer to 28.5 would
-      // anchor to a different question.
-      const sameLine = r.ud_line !== null && Number(r.ud_line) === Number(r.pp_line);
-      const fair = sameLine ? devig(r.ud_over_price, r.ud_under_price) : null;
-      opts.push({
-        book: 'prizepicks', line: Number(r.pp_line),
-        overOk: r.pp_over_ok, underOk: r.pp_under_ok,
-        // No per-side price to read, so the bar comes from the entry this leg
-        // would join. See ppBreakEven above.
-        breakEven: ppBreakEven,
-        anchorOver: fair?.over ?? null,
-        anchorUnder: fair?.under ?? null,
+  const optionsFor = (r: MarketRow): LineOption[] =>
+    r.books
+      .filter((b) => only === null || b.book === only)
+      .map((b) => {
+        // A devigged read from elsewhere counts as a read on this book's
+        // number only when it IS the same number. A probability is the chance
+        // of clearing the line it was quoted against, so lending 30.5's answer
+        // to 28.5 would anchor to a different question.
+        //
+        // Only books with no price of their own need borrowing one. Any priced
+        // book can lend it — the old version could only lend Underdog's, so a
+        // third book publishing odds would have gone unused.
+        const twin = b.over_price === null
+          ? r.books.find(
+              (o) => o.book !== b.book && o.line === b.line
+                && o.over_price !== null && o.under_price !== null,
+            )
+          : undefined;
+        const fair = twin ? devig(twin.over_price, twin.under_price) : null;
+        return {
+          book: b.book,
+          line: Number(b.line),
+          overOk: b.over_ok,
+          underOk: b.under_ok,
+          // Underdog publishes a price per side. PrizePicks charges through a
+          // flat multiplier on the whole entry, so it has no per-side price
+          // and the bar comes from the entry this leg would join — see
+          // ppBreakEven above.
+          overPrice: b.over_price === null ? null : Number(b.over_price),
+          underPrice: b.under_price === null ? null : Number(b.under_price),
+          breakEven: b.over_price === null ? ppBreakEven : null,
+          anchorOver: fair?.over ?? null,
+          anchorUnder: fair?.under ?? null,
+        };
       });
-    }
-    if (r.ud_line !== null && only !== 'prizepicks') {
-      opts.push({
-        book: 'underdog', line: Number(r.ud_line),
-        overOk: r.ud_over_ok, underOk: r.ud_under_ok,
-        // Only Underdog publishes these. PrizePicks charges through a flat
-        // multiplier, so it has no per-side price to clear.
-        overPrice: r.ud_over_price === null ? null : Number(r.ud_over_price),
-        underPrice: r.ud_under_price === null ? null : Number(r.ud_under_price),
-      });
-    }
-    return opts;
-  };
   // Evaluated once per row and kept. The modelled path resamples 4000 draws,
   // and the sort alone asks for each row's verdict a dozen times.
   const cache = new Map<MarketRow, CallStatus>();
@@ -1084,7 +1124,7 @@ export function boardPage(o: {
     // board sorted by a projection we have four experiments saying is at its
     // ceiling.
     o.filters.show === 'moved'
-      ? o.rows.filter((r) => staleLine(r) !== null)
+      ? o.rows.filter((r) => staleLine(r.books) !== null)
       : o.filters.show === 'calls'
       ? o.rows.filter((r) => playOf(r) !== null)
       : o.filters.show === 'live'
@@ -1131,8 +1171,19 @@ export function boardPage(o: {
   // One app selected (by filter or by an open slip) means one column. Showing
   // the other app's line with live take buttons offered a pick that cannot
   // join this entry.
-  const showPP = only === null || only === 'prizepicks';
-  const showUD = only === null || only === 'underdog';
+  /**
+   * One column per book actually on the board, in registry order.
+   *
+   * Was two fixed columns. Deriving the set from the rows means a new adapter
+   * shows up the day it starts returning data, with no layout edit — and a
+   * book that goes dark stops occupying a column of dashes.
+   */
+  const columns: BookCode[] = orderBooks(
+    [...new Set(o.rows.flatMap((r) => r.books.map((b) => b.book)))].filter(
+      (b) => only === null || b === only,
+    ),
+    (b) => b,
+  );
   /**
    * EV needs a per-side price, and only Underdog publishes one.
    *
@@ -1157,7 +1208,7 @@ export function boardPage(o: {
    * `Play.ev` stays populated so that record accumulates in the meantime.
    */
   const showEv = false;
-  const gapLabel = only ? `vs ${bookName(otherBook(only))}` : 'Gap';
+  const gapLabel = 'Gap';
   // Restrict sides only when an app is selected and best-price filtering is on.
   const restrict = Boolean(only) && o.filters.best;
 
@@ -1198,9 +1249,10 @@ export function boardPage(o: {
           <th scope="col" class="c">Lean</th>
           <th scope="col" class="c">Record</th>
           ${showEv ? '<th scope="col" class="c evcol">EV</th>' : ''}
-          ${showPP ? `<th scope="col" class="n">${only ? 'Take' : 'PrizePicks'}</th>` : ''}
+          ${columns
+            .map((b) => `<th scope="col" class="n">${only ? 'Take' : esc(bookName(b))}</th>`)
+            .join('')}
           <th scope="col" class="c gapcol">${gapLabel}</th>
-          ${showUD ? `<th scope="col" class="n">${only ? 'Take' : 'Underdog'}</th>` : ''}
         </tr></thead>
         <tbody>${ranked
           .map((r, i) => {
@@ -1210,20 +1262,28 @@ export function boardPage(o: {
             // read as duplicates. A continuation row keeps the identity quiet
             // and lets the market be the thing that differs.
             const sameAsPrev = i > 0 && ranked[i - 1]!.canon_handle === r.canon_handle;
-            const d = r.delta === null ? null : Number(r.delta);
+            // How far apart the books are on this row. Unsigned now: with more
+            // than two of them "PP minus UD" names a direction that no longer
+            // exists, and the useful fact is how wide the disagreement is.
+            const d = r.spread === null ? null : Number(r.spread);
             const gap =
               d === null
                 ? `<span class="gap-chip flat">—</span>`
                 : d === 0
                   ? `<span class="gap-chip flat">same</span>`
-                  : `<span class="gap-chip ${d > 0 ? 'up' : 'down'}">${signed(d)}</span>`;
-            const moved = r.moved === null ? null : Number(r.moved);
-            const histId = r.pp_prop_id ?? r.ud_prop_id;
+                  : `<span class="gap-chip up">${d.toFixed(1)}</span>`;
+            // The widest move any book on this row has made.
+            const movedAll = r.books.map((b) => b.moved).filter((m): m is number => m !== null);
+            const moved = movedAll.length
+              ? movedAll.reduce((a, b) => (Math.abs(b) > Math.abs(a) ? b : a))
+              : null;
+            const histId = r.books[0]?.prop_id ?? null;
             // Underdog's own price for the side we are calling, margin removed. Only
             // Underdog publishes odds, so this column is blank for a market it does
             // not list — which is honest: there is no market probability, rather
             // than a market that thinks the chance is zero.
-            const fair = devig(r.ud_over_price, r.ud_under_price);
+            const priced = r.books.find((b) => b.over_price !== null && b.under_price !== null);
+            const fair = priced ? devig(priced.over_price, priced.under_price) : null;
             // A market probability is a probability *of a side*. With no call
             // there is no side to price, so there is nothing honest to show —
             // falling through to "over" would silently pick a side the reader
@@ -1236,14 +1296,18 @@ export function boardPage(o: {
             // second estimate agreeing with ours, so the three cases are told
             // apart: no price at all, a price with no view, and a real view.
             const flatVig =
-              r.ud_over_price !== null && r.ud_under_price !== null
-              && Number(r.ud_over_price) === Number(r.ud_under_price);
+              priced !== undefined
+              && Number(priced.over_price) === Number(priced.under_price);
             const gapToMarket = marketDisagreement(play?.hitRate ?? null, marketProb);
             // The two numbers the whole page exists to compare, set side by
             // side as chips rather than as a figure and a distant column: the
             // book's line, and what this player's own history says. A reader
             // should not have to hold one in their head to reach the other.
-            const theirLine = play ? play.line : (only === 'underdog' ? r.ud_line : r.pp_line);
+            // With no call to name a book, show the line from the app being
+            // filtered to, or the first one pricing it.
+            const theirLine = play
+              ? play.line
+              : (only ? r.books.find((b) => b.book === only)?.line : r.books[0]?.line) ?? null;
             const f = formOf(r);
             // When there is a call, show the number the call was made from —
             // the average anchored toward the line, not the raw one. Showing
@@ -1353,29 +1417,26 @@ export function boardPage(o: {
                    }`
             }</td>
             ${showEv ? `<td class="c evcol" data-label="EV">${evCell(play)}</td>` : ''}
-            ${
-              showPP
-                ? `<td class="n bookcol" data-book="PrizePicks"><div class="bookcell">
-                ${only ? '' : `<span class="fig${r.pp_line === null ? ' muted' : ''}">${num(r.pp_line)}</span>`}
-                ${ouButtons(r.pp_prop_id, back, r.pp_side,
-                  offeredSides('prizepicks', r.delta === null ? null : Number(r.delta), restrict),
-                  play?.book === 'prizepicks' ? play.side : 'both',
-                  { over: r.pp_over_ok, under: r.pp_under_ok })}
-              </div></td>`
-                : ''
-            }
+            ${columns
+              .map((code) => {
+                const b = r.books.find((x) => x.book === code);
+                // A book that does not price this market gets an empty cell,
+                // not a missing one: the columns have to line up down the page.
+                if (!b) {
+                  return `<td class="n bookcol" data-book="${esc(bookName(code))}"><div class="bookcell">${
+                    only ? '' : '<span class="fig muted">—</span>'
+                  }</div></td>`;
+                }
+                return `<td class="n bookcol" data-book="${esc(bookName(code))}"><div class="bookcell">
+                ${only ? '' : `<span class="fig">${num(b.line)}</span>`}
+                ${ouButtons(b.prop_id, back, b.side,
+                  offeredSides(r.books, code, restrict),
+                  play?.book === code ? play.side : 'both',
+                  { over: b.over_ok, under: b.under_ok })}
+              </div></td>`;
+              })
+              .join('')}
             <td class="c gapcol">${gap}</td>
-            ${
-              showUD
-                ? `<td class="n bookcol" data-book="Underdog"><div class="bookcell">
-                ${only ? '' : `<span class="fig${r.ud_line === null ? ' muted' : ''}">${num(r.ud_line)}</span>`}
-                ${ouButtons(r.ud_prop_id, back, r.ud_side,
-                  offeredSides('underdog', r.delta === null ? null : Number(r.delta), restrict),
-                  play?.book === 'underdog' ? play.side : 'both',
-                  { over: r.ud_over_ok, under: r.ud_under_ok })}
-              </div></td>`
-                : ''
-            }
           </tr>`;
           })
           .join('')}</tbody>
@@ -1390,7 +1451,7 @@ export function boardPage(o: {
     health: o.health,
     filters: filterBar('/board', o.filters, o.leagues, o.lockedBook),
     rail: slipRail(o.picks, back),
-    body: lockNotice(o.lockedBook, o.blocked) + body,
+    body: lockNotice(o.lockedBook, o.blocked, o.blockedOn ?? null) + body,
   });
 }
 
@@ -1405,9 +1466,11 @@ export function edgesPage(o: {
   filters: Filters;
   lockedBook: string | null;
   blocked: string | null;
+  /** Which book the refused prop was on — see WrongBookError. */
+  blockedOn?: string | null;
 }): string {
   const back = `/${qs({}, o.filters)}`;
-  const gaps = o.rows.filter((r) => r.delta !== null && Number(r.delta) !== 0);
+  const gaps = o.rows.filter((r) => r.spread !== null && Number(r.spread) !== 0);
   // Same two lines as the board, and deliberately identical: an app chosen by
   // filter and an app forced by an open slip narrow this page the same way,
   // because the server has already collapsed the two into filters.book. Every
@@ -1415,6 +1478,10 @@ export function edgesPage(o: {
   // each is the better number — and only that one is offered.
   const only = o.lockedBook ?? o.filters.book;
   const restrict = Boolean(only) && o.filters.best;
+  const columns: BookCode[] = orderBooks(
+    [...new Set(o.rows.flatMap((r) => r.books.map((b) => b.book)))],
+    (b) => b,
+  );
 
   const gapsCard =
     gaps.length === 0
@@ -1429,17 +1496,30 @@ export function edgesPage(o: {
       <div class="scroll cards-sm"><table class="stack-sm gaps-table" data-filter>
         <thead><tr>
           <th scope="col">Player</th><th scope="col">Market</th>
-          <th scope="col" class="n">PrizePicks</th><th scope="col" class="c">Gap</th><th scope="col" class="n">Underdog</th>
+          ${columns.map((b) => `<th scope="col" class="n">${esc(bookName(b))}</th>`).join('')}
+          <th scope="col" class="c">Gap</th>
           <th scope="col">Better side</th><th scope="col" class="hide-sm">Match</th>
         </tr></thead>
         <tbody>${gaps
           .map((r) => {
-            const d = Number(r.delta);
-            // The lower of two lines is the cheaper over; name the side rather
-            // than leaving it to be worked out per row.
-            const cheaper = d < 0 ? 'Over on PrizePicks' : 'Over on Underdog';
-            const cls = d < 0 ? 'o' : 'u';
-            const histId = r.pp_prop_id ?? r.ud_prop_id;
+            const d = Number(r.spread);
+            /**
+             * Two different claims, and the row says which one it is making.
+             *
+             * With three books or more there is a consensus to be off, and the
+             * flagged book's cheap side is a real direction read off the other
+             * books. With two there is only a cheaper number — true, useful for
+             * deciding where to place a bet you had already chosen, and NOT a
+             * reason to make one. Labelling both the same way is how a price
+             * observation gets mistaken for an edge.
+             */
+            const edge = bestEdge(r.books);
+            const lowest = r.books.reduce((a, b) => (b.line < a.line ? b : a));
+            const cheaper = edge
+              ? `${edge.side === 'over' ? 'Over' : 'Under'} on ${bookName(edge.book)} — ${edge.gap.toFixed(1)} off ${num(edge.fair)}`
+              : `Over on ${bookName(lowest.book)} (cheaper line only)`;
+            const cls = edge ? (edge.side === 'over' ? 'o' : 'u') : 'o';
+            const histId = r.books[0]?.prop_id ?? null;
             return `<tr data-search="${rowKey(r.handle, r.match_title, statLabel(r.stat), r.league)}">
             <td class="idcol"><div class="who">${leagueBadge(r.league)}
               <div class="whobody">
@@ -1452,23 +1532,23 @@ export function edgesPage(o: {
               </div></div></td>
             <td class="statcol"><div class="statname">${esc(statLabel(r.stat))}</div>
                 <div class="meta">${esc(maps(r.map_start, r.map_end))}</div></td>
-            <td class="n bookcol" data-book="PrizePicks"><div class="bookcell"><span class="fig">${num(r.pp_line)}</span>
+            ${columns
+              .map((code) => {
+                const b = r.books.find((x) => x.book === code);
+                if (!b) {
+                  return `<td class="n bookcol" data-book="${esc(bookName(code))}"><div class="bookcell"><span class="fig muted">—</span></div></td>`;
+                }
+                return `<td class="n bookcol" data-book="${esc(bookName(code))}"><div class="bookcell"><span class="fig">${num(b.line)}</span>
               ${
-                o.lockedBook === 'underdog'
+                o.lockedBook !== null && o.lockedBook !== code
                   ? ''
-                  : ouButtons(r.pp_prop_id, back, r.pp_side,
-                      offeredSides('prizepicks', r.delta === null ? null : Number(r.delta), restrict),
-                      bestSide('prizepicks', r.delta === null ? null : Number(r.delta)))
-              }</div></td>
-            <td class="c gapcell"><span class="gap-chip ${d > 0 ? 'up' : 'down'}">${signed(d)}</span></td>
-            <td class="n bookcol" data-book="Underdog"><div class="bookcell"><span class="fig">${num(r.ud_line)}</span>
-              ${
-                o.lockedBook === 'prizepicks'
-                  ? ''
-                  : ouButtons(r.ud_prop_id, back, r.ud_side,
-                      offeredSides('underdog', r.delta === null ? null : Number(r.delta), restrict),
-                      bestSide('underdog', r.delta === null ? null : Number(r.delta)))
-              }</div></td>
+                  : ouButtons(b.prop_id, back, b.side,
+                      offeredSides(r.books, code, restrict),
+                      bestSide(r.books, code))
+              }</div></td>`;
+              })
+              .join('')}
+            <td class="c gapcell"><span class="gap-chip up">${d.toFixed(1)}</span></td>
             <td class="sidecol"><span class="pickside wide ${cls}">${cheaper}</span></td>
             <td class="match hide-sm"><span class="sub2" title="${esc(r.match_title ?? '')}">${esc(r.match_title ?? '—')}</span></td>
           </tr>`;
@@ -1520,7 +1600,7 @@ export function edgesPage(o: {
     health: o.health,
     filters: filterBar('/', o.filters, o.leagues, o.lockedBook),
     rail: slipRail(o.picks, back),
-    body: lockNotice(o.lockedBook, o.blocked) + gapsCard + movCard,
+    body: lockNotice(o.lockedBook, o.blocked, o.blockedOn ?? null) + gapsCard + movCard,
   });
 }
 
@@ -1756,7 +1836,7 @@ export function slipsPage(o: {
         </div>
         <div class="facts" style="padding-top:14px">
           <div class="fact"><div class="k">App</div><div class="v txt">${
-            s.book === 'mixed' ? 'Mixed' : s.book === 'prizepicks' ? 'PrizePicks' : 'Underdog'
+            s.book === 'mixed' ? 'Mixed' : s.book === null ? '—' : esc(bookName(s.book))
           }</div></div>
           <div class="fact"><div class="k">Entry</div><div class="v txt">${esc(s.entry_type)}</div></div>
           <div class="fact"><div class="k">Legs</div><div class="v">${s.legs}</div></div>
@@ -1816,7 +1896,7 @@ export function slipsPage(o: {
  */
 export function buildPage(o: {
   entries: Entry[];
-  book: 'prizepicks' | 'underdog';
+  book: BookCode;
   lockedBook: string | null;
   picks: PickRow[];
   health: Health;
