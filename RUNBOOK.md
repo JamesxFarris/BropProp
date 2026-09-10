@@ -297,6 +297,62 @@ npm run validate:correlation    # the teammate effect, on 8,923 series
 npm run validate:calls          # includes the over/under baseline
 ```
 
+
+### The blowout effect: the biggest number in the project
+
+Measured 2026-09-10 over **4,967 CS2 series** with walk-forward lines
+(`raw/blowout.mjs`). "Losing team" is inferred from team kill totals over the
+range, so this is measured AFTER the fact — which is the whole point.
+
+| | over | under | n |
+|---|---:|---:|---:|
+| **Losing team, blowout (≥20% kill margin)** | 34.0% | **66.0%** | 4,323 |
+| Losing team, clear (10–20%) | 38.6% | 61.4% | 2,182 |
+| Losing team, close (<10%) | 43.6% | 56.4% | 2,871 |
+| **Losing team, all** | 38.0% | **62.0%** | 9,376 |
+| Winning team, all | 51.8% | 48.2% | 15,296 |
+
+**4,180 independent series, losing team mostly under 2613-1567, p < 0.000001.**
+
+This dwarfs everything else measured here, and it also explains the teammate
+correlation: teammates share the loss.
+
+**But it is hindsight.** Knowing who got beaten requires the match to have been
+played. To act on it you need the market's opinion about who will lose BEFORE
+kick-off — which is exactly a moneyline or a maps handicap.
+
+#### What a market price is worth here
+
+```
+6-pick, 5 unders on one team + 1 opponent, at a real quoted 22x
+
+  blind unders (measured)          55.3% per leg   needs 10.85x   EV 2.03
+  dog priced ~25% to win (est.)    58.6%           needs  8.79x   EV 2.50
+  heavy dog ~15% (est.)            59.9%           needs  8.11x   EV 2.71
+  team that DID lose (hindsight)   62.0%           needs  7.15x   EV 3.08
+  team BLOWN OUT (hindsight)       66.0%           needs  5.67x   EV 3.88
+```
+
+The two middle rows are the realistic prize: a moneyline moves a leg from 55.3%
+to roughly 58–60%, worth about 25% more EV on the slip. The **maps handicap**
+is the better instrument, because the blowout band is where the effect lives and
+a handicap prices margin rather than just the winner.
+
+**We already have the key for this.** OddsPapi's free tier carries CS2
+`marketId 171` (Winner) and `1717-1745` (Maps Handicap), sourced from Pinnacle
+among others. 250 requests a month, so pull once per slate and cache. See the
+aggregator section below.
+
+#### The honest caveats
+
+- The 62% / 66% figures are **not achievable**. They assume perfect foreknowledge
+  of the result. Only the 58–60% band is real, and even that is an estimate
+  derived by mixing the measured rates by an assumed win probability — it has
+  not itself been measured.
+- Kill differential is a proxy for "lost". It is a good one in CS2, where kills
+  track rounds, but it is not the scoreboard.
+- Everything here is CS2. LoL has too few completed 1-3 ranges in the archive.
+
 ## Consensus across books — the one signal that is not our projection
 
 Built 2026-09-10, **and not yet measured**. Read this before trusting anything
