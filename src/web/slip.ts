@@ -35,23 +35,50 @@
  */
 
 /**
- * The same-match correlation, as a Gaussian copula parameter.
+ * How strongly two legs in the same match move together — MEASURED, properly,
+ * on 2026-09-10.
  *
- * Fitted to reproduce the measured pair rate: at the 46.15% marginal implied by
- * that study's own line convention, RHO = 0.213 gives P(both over) = 25.0%
- * against the 24.69% observed. Verified by simulation at 4M draws.
+ * `npm run validate:correlation` redid the old study with the three flaws
+ * fixed: lines are the median of each player's PRIOR series only (no
+ * look-ahead, and no era drift laundered into the correlation), significance is
+ * a cluster bootstrap over whole series rather than a test over pairs that
+ * assumes its own conclusion, and teammates are separated from opponents.
  *
- * **Treat this as an upper bound, not a measurement to bank.** Three reasons,
- * all recorded in docs/STRATEGY.md: the study set each player's line at their
- * career median over the whole sample, so anything shared by two players and
- * drifting over time (patch, meta, roster) is absorbed into it; it was never
- * tested over independent series; and it never separated teammates from
- * opponents, which almost certainly differ in sign and size.
+ * Over **41,852 player-series and 8,923 independent series** of CS2:
+ *
+ *   teammate pairs   48,297   phi = 0.193   both-over lift 1.211
+ *   opponent pairs   32,329   phi = 0.055   both-over lift 1.061
+ *
+ *   cluster bootstrap on teammate phi: 0.210, 95% CI [0.198, 0.222],
+ *   with 0 of 2000 resamples at or below zero.
+ *
+ * **The effect is real and it is overwhelmingly a TEAMMATE effect.** Opponents
+ * share only the length of the game; teammates share the win as well.
+ *
+ * phi is the correlation of the two binary outcomes. The Gaussian copula
+ * parameter is higher — for a symmetric binary, phi = (2/pi)·asin(rho) — so
+ * these are `sin(pi·phi/2)`. The old single RHO of 0.213 was the phi being
+ * used directly as a rho, which understated the effect.
  */
-export const RHO = 0.213;
+export const RHO_TEAMMATE = Math.sin(Math.PI * 0.210 / 2);   // ≈ 0.324
+export const RHO_OPPONENT = Math.sin(Math.PI * 0.055 / 2);   // ≈ 0.086
+
+/**
+ * The correlation used when we do not know whether two legs are teammates.
+ *
+ * `MarketRow` does not yet carry a team, so the board cannot tell a teammate
+ * pair from an opponent pair and this sits between the two. It is deliberately
+ * nearer the opponent figure: over-crediting correlation inflates P(all win),
+ * which shrinks the break-even multiplier and makes a slip look better than it
+ * is. Under-crediting only costs a bet that was there.
+ *
+ * **Plumbing team through is the single highest-value change left**, because
+ * the whole edge lives in the teammate number. See docs/STRATEGY.md.
+ */
+export const RHO = RHO_OPPONENT + 0.25 * (RHO_TEAMMATE - RHO_OPPONENT);
 
 /** Opposite sides of one match move against each other; same sides together. */
-export const RHO_OPPOSED = -0.213;
+export const RHO_OPPOSED = -RHO;
 
 const SQRT2 = Math.SQRT2;
 

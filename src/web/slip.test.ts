@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   normCdf, normInv, winCountDistribution, probAllWin, requiredMultiplier,
-  slipEV, marginalLegWorthIt, RHO, type SlipLeg,
+  slipEV, marginalLegWorthIt, RHO, RHO_TEAMMATE, RHO_OPPONENT, type SlipLeg,
 } from './slip.js';
 
 const leg = (p: number, matchKey: string, side: 'over' | 'under' = 'over'): SlipLeg =>
@@ -31,22 +31,33 @@ test('the distribution sums to one and has the right length', () => {
   near(d.reduce((a, b) => a + b, 0), 1, 1e-6);
 });
 
-test('it reproduces the measured same-match pair rate', () => {
-  // This is the anchor for the whole module. Measured over 35,702 same-match
-  // CS2 pairs: two overs from one match hit 24.69% where independence at that
-  // sample's 46.15% marginal predicts 21.30%.
-  const p = 0.4615;
-  const both = probAllWin([leg(p, 'm'), leg(p, 'm')]);
-  near(p * p, 0.2130, 5e-4, 'independence baseline');
-  near(both, 0.2469, 6e-3, 'observed pair rate');
-  assert.ok(both > p * p, 'same-match same-direction must beat independence');
+test('it reproduces the measured TEAMMATE pair rate', () => {
+  // The anchor for the whole module. Measured 2026-09-10 with walk-forward
+  // lines over 41,852 player-series: at a 47.73% over rate, two teammates both
+  // going over hit 27.59% where independence predicts 22.78%.
+  const p = 0.4773;
+  const both = probAllWin([leg(p, 'm'), leg(p, 'm')], RHO_TEAMMATE);
+  near(p * p, 0.2278, 1e-3, 'independence baseline');
+  near(both, 0.2759, 8e-3, 'observed teammate pair rate');
+  assert.ok(both > p * p, 'teammates must beat independence');
+});
+
+test('it reproduces the much weaker OPPONENT pair rate', () => {
+  // 24.16% observed against the same 22.78% independence. Opponents share only
+  // the length of the game; teammates share the win as well, and the gap
+  // between these two numbers is where the whole edge lives.
+  const p = 0.4773;
+  const both = probAllWin([leg(p, 'm'), leg(p, 'm')], RHO_OPPONENT);
+  near(both, 0.2416, 8e-3, 'observed opponent pair rate');
+  assert.ok(both < probAllWin([leg(p, 'm'), leg(p, 'm')], RHO_TEAMMATE),
+    'opponents must be weaker than teammates');
 });
 
 test('mixing directions in one match is worse than independence', () => {
   // The measured other half: an over paired with an under hit 20.56% against
   // 24.85% independence — about a sixth worse, where same-side is a sixth
   // better. A model that only knew about positive correlation would miss this.
-  const p = 0.4615;
+  const p = 0.4773;
   const opposed = probAllWin([leg(p, 'm', 'over'), leg(p, 'm', 'under')]);
   assert.ok(opposed < p * p, `opposed ${opposed} should trail independence ${p * p}`);
   const aligned = probAllWin([leg(p, 'm', 'over'), leg(p, 'm', 'over')]);
@@ -56,12 +67,12 @@ test('mixing directions in one match is worse than independence', () => {
 test('stacking one match beats spreading across matches, for all-must-win', () => {
   // The whole reason correlation matters to a Power play: correlated legs win
   // together, so concentration raises P(all win).
-  const stacked = probAllWin([leg(0.5, 'm'), leg(0.5, 'm'), leg(0.5, 'm'), leg(0.5, 'm')]);
+  const stacked = probAllWin([leg(0.5, 'm'), leg(0.5, 'm'), leg(0.5, 'm'), leg(0.5, 'm')], RHO_TEAMMATE);
   const spread = probAllWin([leg(0.5, 'a'), leg(0.5, 'b'), leg(0.5, 'c'), leg(0.5, 'd')]);
   assert.ok(stacked > spread, `stacked ${stacked} vs spread ${spread}`);
   near(spread, 0.0625, 1e-3, 'four independent coin flips');
-  // Simulated independently at 4M draws: 11.73%.
-  near(stacked, 0.1173, 6e-3, 'four correlated coin flips');
+  // Four teammates at the measured teammate correlation.
+  assert.ok(stacked > 0.13, `expected well above independence, got ${stacked}`);
 });
 
 test('the required multiplier is the reciprocal of P(all win)', () => {
@@ -72,22 +83,22 @@ test('the required multiplier is the reciprocal of P(all win)', () => {
   near(requiredMultiplier(legs)!, 8, 0.05);
 });
 
-test('a stacked four-pick needs more than PrizePicks pays', () => {
-  // 8.52x required against the 10x headline — and PrizePicks reprices same-game
-  // combinations by an amount it does not publish, so the real question is
-  // whether the haircut leaves more than 8.52x.
+test('a four-teammate stack clears the 10x PrizePicks pays a four-pick', () => {
+  // With the properly measured teammate correlation this crosses over, which
+  // it did not under the old understated figure. The catch is unchanged and
+  // decisive: PrizePicks reprices same-game combinations by an amount it does
+  // not publish, so what matters is whether the haircut leaves more than this.
   const stacked = [leg(0.5, 'm'), leg(0.5, 'm'), leg(0.5, 'm'), leg(0.5, 'm')];
-  near(requiredMultiplier(stacked)!, 8.52, 0.4);
+  const need = requiredMultiplier(stacked, RHO_TEAMMATE)!;
+  assert.ok(need < 10, `a four-teammate stack should need under 10x, needs ${need}`);
+  assert.ok(need > 5, `...but not absurdly little; got ${need}`);
 });
 
-test('at the marginal actually measured, even a stacked four-pick loses at 10x', () => {
-  // 46.15%, not 50%. This is the number that closes the correlation lead:
-  // EV 0.936 at a full undiscounted 10x, before any same-game haircut.
-  const p = 0.4615;
-  const stacked = [leg(p, 'm'), leg(p, 'm'), leg(p, 'm'), leg(p, 'm')];
-  const ev = 10 * probAllWin(stacked);
-  assert.ok(ev < 1, `expected a losing EV, got ${ev}`);
-  near(ev, 0.936, 0.05);
+test('spreading four legs across four matches does not clear 10x', () => {
+  // The control. Independence needs 16x against the 10x on offer, which is the
+  // 37.5% hold the break-even table reports.
+  const spread = [leg(0.5, 'a'), leg(0.5, 'b'), leg(0.5, 'c'), leg(0.5, 'd')];
+  near(requiredMultiplier(spread)!, 16, 0.2);
 });
 
 test('slipEV handles Power and Flex through one code path', () => {
@@ -127,8 +138,18 @@ test('an unknown payout is not a yes', () => {
   assert.equal(marginalLegWorthIt(0.9, 6, null), null);
 });
 
-test('RHO is the fitted value, not a round number someone guessed', () => {
-  assert.equal(RHO, 0.213);
+test('the correlation constants are the measured ones, converted properly', () => {
+  // phi is the correlation of two binary outcomes; the copula parameter is
+  // sin(pi*phi/2) and is larger. Using phi directly as rho — which the first
+  // version of this file did — understates the effect by about a third.
+  near(RHO_TEAMMATE, Math.sin(Math.PI * 0.210 / 2), 1e-9);
+  near(RHO_OPPONENT, Math.sin(Math.PI * 0.055 / 2), 1e-9);
+  assert.ok(RHO_TEAMMATE > 0.32 && RHO_TEAMMATE < 0.33, String(RHO_TEAMMATE));
+  assert.ok(RHO_OPPONENT > 0.08 && RHO_OPPONENT < 0.09, String(RHO_OPPONENT));
+  // The default sits between them and nearer the opponent value, because
+  // over-crediting correlation makes a slip look better than it is.
+  assert.ok(RHO > RHO_OPPONENT && RHO < RHO_TEAMMATE);
+  assert.ok(RHO - RHO_OPPONENT < RHO_TEAMMATE - RHO, 'default must lean conservative');
 });
 
 test('an empty slip is a certainty, not a crash', () => {
