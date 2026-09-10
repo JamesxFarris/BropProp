@@ -393,21 +393,70 @@ better measurement, and it has never been tried.
 |---|---|
 | **Bovada** | Open, no auth, real prices, and **77 live esports events** covering **61 of 61** of our upcoming CS2 matches (re-measured 2026-09-09). An earlier note here said "four esports events, total, not worth an adapter" — that was sampled at a dead hour and is wrong; it is why this avenue sat unused. Match markets only: moneyline, map spread, total maps. **No player props.** |
 | **Pinnacle** | Matchup list open: **131 CS2 matchups**, right down to tier-C qualifiers. Prices return `401 No authorization token provided`. |
-| **Sleeper** | `sleeper.app/graphql` open, introspection ON, 240 query fields. The DFS board is `my_picks_init` and needs a session. **A login away, not a wall away.** |
+| **Sleeper** | **DEAD — carries no esports at all.** Settled 2026-09-10 from its own unauthenticated `app_info`: the sports it knows are cfb, epl, golf, laliga, ligue1, mlb, nfl, soccer, wnba. No esport is mentioned anywhere in the payload, and `sport_info(sport:)` returns null for cs2, csgo, lol, val and dota while returning real data for nfl. No login needed to establish this, and none is worth getting. |
 | **ParlayPlay** | Cloudflare bot wall on every path. No unwalled host found (`partner-api`, `api-prod`, `backend` all fail DNS). |
 | **Betr, Chalkboard** | No web API at all. `www.betr.app` is a **Webflow marketing site**; chalkboard.io's only call is Tinybird analytics. Mobile apps only. |
 | **HotStreak, BetOnline** | Cloudflare wall. |
-| **Dabble** | Re-probed 2026-09-09: `api.dabble.com` is **open JSON, no auth** — `/competitions` lists 270 including CS2, LoL, Dota 2, Valorant, and `/competitions/{id}/sport-fixtures` returns real matches. But CS2 held **3 fixtures, all tier-1** (BIG vs G2, Astralis, FURIA) against our 61-match board, LoL held **0**, and no markets/selections path was found (six shapes tried, all 404). Open but too thin to price against. |
+| **Dabble** | Open JSON, no auth — and still too thin. Re-probed 2026-09-10: **3 CS2 fixtures**, **0 Dota**, **0 Valorant**, and no LoL competition at all, against our 61-match board. A further 14 markets-path shapes tried (20 across two sessions), every one 404. Even if the markets path were found, three fixtures cannot supply a consensus. |
 | **Boom, Vivid, Jock MKT, Fliff** | No reachable web API. `production-boom-dfs-backend.boomfantasy.com` does not resolve. |
 | **Pick6 (DraftKings)** | Host answers, guessed paths 404. Real endpoint not found. |
 | **Rebet** | `api.rebet.app` answers `403 Forbidden`. |
 | **Stake** | Cloudflare interstitial on `/_api/graphql`. |
-| **Thunderpick, Rivalry** | Answer, but returned empty. |
+| **Thunderpick, Rivalry** | Re-probed 2026-09-10 on the Bovada precedent, and this time the dismissal holds. Thunderpick answers **403 with a 4.5KB HTML wall** on every path tried. Rivalry's `/api/v1/matches` returns valid JSON with `data: []` — genuinely empty, not a wall — and `/api/sports` is behind Cloudflare. |
 | **The Odds API** | Free tier exists, needs a signup key. |
 
 Pinnacle's own web client ships a fixed guest key. Using it to get past that
 401 was deliberately **not** done — reading an open endpoint is one thing,
 presenting a lifted credential to defeat an auth check is another.
+
+
+### The third book does not exist, and that is the finding
+
+Settled 2026-09-10 after probing every remaining candidate. **There is no third
+DFS book carrying esports player props that is reachable from a server.**
+
+| Ruled out | How |
+|---|---|
+| Sleeper | Carries no esports. Its own `app_info` and `sport_info()` say so, unauthenticated. |
+| Dabble | Open, but 3 CS2 fixtures and no LoL. 20 markets-path shapes tried, all 404. |
+| Thunderpick, ParlayPlay, HotStreak, BetOnline, Stake | Cloudflare / 403 HTML wall. |
+| Rivalry | Answers with a genuinely empty `data: []`. |
+| Pick6 | Host answers, every guessed path 404s. |
+| Betr, Chalkboard, Boom, Vivid, Jock MKT, Fliff | Mobile apps only; no web API, and some hosts do not resolve. |
+
+One caveat on method: the probe used a plain browser user-agent and a JSON
+accept header, and **the Underdog control came back 426 Upgrade Required** —
+the shipped adapter reaches it fine, so the probe is a weak instrument for any
+book needing specific headers. A 403 above is strong evidence of a wall; it is
+not proof that no header set gets through.
+
+**The one avenue never tried is a mobile app's own API.** Betr, Chalkboard,
+Boom, Vivid and HotStreak all talk to some backend, and a phone app's endpoint
+is often *more* open than the web one because it never meets a browser
+challenge. Getting at it means proxying the phone once (HTTP Toolkit or
+mitmproxy, CA installed on the device), reading the endpoint and auth shape,
+then talking to it from the logger. Before spending that effort on any given
+app, check it actually lists CS2 or LoL props — Sleeper looked promising for
+weeks and carries none.
+
+### What to do with two books instead
+
+Since a three-book consensus cannot be assembled, the consensus module in
+`src/web/consensus.ts` stays dark. It is correct and tested and it will light
+up if a third book ever lands, but it is not a plan for now.
+
+The two-book move that DOES work rests on an asymmetry already in the data:
+**Underdog publishes genuine two-sided American odds and PrizePicks does not.**
+
+Two books cannot vote, because a line difference is symmetric — nothing in
+"28.5 versus 30.5" says which is wrong. But it stops being symmetric the moment
+one of them states a probability. `devig()` already turns Underdog's -112/-112
+into a fair chance for each side, and that is a *market* estimate rather than
+one of ours. Anchoring to it and then asking what PrizePicks' different line is
+worth gives a direction that never touches the projection.
+
+Crucially, and unlike the three-book consensus, **this is backtestable on data
+already logged** — both books' snapshots go back to the start of logging.
 
 ### Line movement: real information, but not a winning bet
 
