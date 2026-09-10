@@ -1,11 +1,31 @@
 import type pg from 'pg';
 import type { RawProp, RawTeam, RawMatch } from './adapters/types.js';
 import { canonHandle } from './normalize.js';
+import { bookMeta } from './books.js';
 
+/**
+ * The book's row id, creating the row the first time an adapter reports it.
+ *
+ * `prices_sides` comes from the registry in `books.ts` rather than from the
+ * column default, and that matters more than it looks. `current_line` decides
+ * which sides are takeable from that flag: a book that publishes odds says what
+ * it offers by omitting a price, and a book that does not says so in its
+ * payload. Defaulting a new book to false reads it through PrizePicks' payload
+ * shape, and a book whose `allowed_wager_types` key simply does not exist would
+ * then have both sides marked takeable — offering a bet that cannot be placed,
+ * which is the exact bug migration 006 was written to stop.
+ *
+ * A book absent from the registry still gets false, which is right: a pick'em
+ * app that quotes no odds is the common case, and the registry is where the
+ * exception gets recorded.
+ */
 export async function bookId(c: pg.PoolClient, code: string): Promise<number> {
   const r = await c.query('SELECT id FROM book WHERE code = $1', [code]);
   if (r.rows[0]) return r.rows[0].id;
-  const ins = await c.query('INSERT INTO book (code) VALUES ($1) RETURNING id', [code]);
+  const ins = await c.query(
+    'INSERT INTO book (code, prices_sides) VALUES ($1, $2) RETURNING id',
+    [code, bookMeta(code).pricesSides],
+  );
   return ins.rows[0].id;
 }
 
