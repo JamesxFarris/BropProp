@@ -5,7 +5,7 @@ import { recommend, type LineOption } from './projection.js';
 import { comboParts } from '../normalize.js';
 import type { BookCode } from '../books.js';
 import { devig } from '../devig.js';
-import { bookEdges, edgeProbability } from './consensus.js';
+import { pricedEdges, edgeProbability } from './consensus.js';
 
 /**
  * Building the best entry of a given size.
@@ -166,12 +166,14 @@ export function candidatesFor(
     const play = recommend(f, options, maps, seed);
 
     /**
-     * Prefer the crowd's answer to our own.
+     * Prefer the market's answer to our own.
      *
-     * The projection decides direction only where no consensus exists. Where
-     * three or more books price the market, the side comes from which of them
-     * is out of step and the probability comes from that gap measured against
-     * this player's spread — a chain with our own mean nowhere in it.
+     * The projection decides direction only where the market cannot. With
+     * three books that means a crowd consensus; with two it means the book
+     * that publishes odds anchoring the one that does not — see
+     * `consensus.fairLine`. Either way the side comes from where a book sits
+     * against that anchor, and the probability comes from the gap measured
+     * against this player's spread: a chain with our own mean nowhere in it.
      *
      * The two are NOT blended. Averaging a measured-useless estimate into a
      * measured-useful one only adds noise, and it would make the resulting
@@ -182,7 +184,7 @@ export function candidatesFor(
      * consensus wins outright. That is the intended behaviour: AUC 0.495 means
      * the model's opinion is worth nothing as a tiebreak either.
      */
-    const edge = bookEdges(r.books).find((e) => e.book === book && e.offered);
+    const edge = pricedEdges(r.books, f, maps, seed).find((e) => e.book === book && e.offered);
     const ep = edge ? edgeProbability(edge, f, maps, seed) : null;
     const useConsensus = edge !== undefined && ep !== null;
 

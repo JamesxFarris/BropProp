@@ -1,6 +1,7 @@
 import type { BookLine } from './boardq.js';
 import type { BookCode } from '../books.js';
 import { resampleTotals, type FormStats } from './projection.js';
+import { devig } from '../devig.js';
 
 /**
  * What the books, together, think a market is worth — and which one is off it.
@@ -170,8 +171,16 @@ export function bookEdges(books: BookLine[]): BookEdge[] {
  * not a bet — and the board has previously shown buttons for sides that could
  * not be placed, which is worse than showing nothing.
  */
-export function bestEdge(books: BookLine[]): BookEdge | null {
-  return bookEdges(books).find((e) => e.offered) ?? null;
+export function bestEdge(
+  books: BookLine[],
+  form?: FormStats,
+  maps = 1,
+  seed = '',
+): BookEdge | null {
+  // pricedEdges falls through to the crowd path when three books exist, so
+  // this is the one entry point callers need. Passing no form still works —
+  // an unpriced anchor needs no history — it just cannot refine a lean.
+  return pricedEdges(books, form, maps, seed).find((e) => e.offered) ?? null;
 }
 
 /**
@@ -267,19 +276,9 @@ export function edgeProbability(
   maps: number,
   seed: string,
 ): EdgeProb | null {
-  if (!form) return null;
-
-  // Real totals over the exact range are the honest sample: they carry the
-  // series-level swing that resampling flattens. Scarce, though — a Bo3 that
-  // ended 2-0 contributes nothing to a maps 1-3 market.
-  const MIN_TOTALS = 6;
-  const useTotals = form.totals.length >= MIN_TOTALS;
-  const sample = useTotals
-    ? form.totals
-    : form.mapValues.length > 0
-      ? resampleTotals(form.mapValues, maps, seed)
-      : [];
-  if (sample.length === 0) return null;
+  const s = sampleFor(form, maps, seed);
+  if (!s) return null;
+  const { sample, useTotals } = s;
 
   // Slide the sample so its middle sits on the crowd's line. After this, a
   // draw above `edge.fair` is exactly a 50/50 proposition — which is what the
@@ -304,6 +303,180 @@ export function edgeProbability(
   return {
     p: wins / decided,
     method: useTotals ? 'totals' : 'resampled',
-    n: useTotals ? form.totals.length : Math.floor(form.mapValues.length / Math.max(1, maps)),
+    n: useTotals ? form!.totals.length : Math.floor(form!.mapValues.length / Math.max(1, maps)),
   };
+}
+
+/**
+ * The distribution of range totals to measure a line against.
+ *
+ * Real totals over the exact range are the honest sample: they carry the
+ * series-level swing that resampling flattens. They are also scarce — a Bo3
+ * that ended 2-0 contributes nothing to a maps 1-3 market — so single maps get
+ * resampled into range totals when there are too few.
+ *
+ * Shared by `edgeProbability` and `fairLine` so the two cannot disagree about
+ * what this player's spread is.
+ */
+function sampleFor(
+  form: FormStats | undefined,
+  maps: number,
+  seed: string,
+): { sample: number[]; useTotals: boolean } | null {
+  if (!form) return null;
+  const MIN_TOTALS = 6;
+  const useTotals = form.totals.length >= MIN_TOTALS;
+  const sample = useTotals
+    ? form.totals
+    : form.mapValues.length > 0
+      ? resampleTotals(form.mapValues, maps, seed)
+      : [];
+  if (sample.length === 0) return null;
+  return { sample, useTotals };
+}
+
+// ------------------------------------------------- the fair line, two ways --
+
+/**
+ * What the market thinks the true 50/50 number is — from a crowd, or from a
+ * book that publishes odds.
+ *
+ * The crowd path is `consensusLine` above and needs three books. There are two.
+ * There is not going to be a third: settled 2026-09-10, Sleeper carries no
+ * esports at all, Dabble has three CS2 fixtures, and every other pick'em app is
+ * behind Cloudflare or has no web API. The only source of esports player-prop
+ * prices beyond these two is PandaScore, which produces its own odds and sells
+ * them B2B.
+ *
+ * So this is the path that actually runs, and it rests on an asymmetry already
+ * in the data: **Underdog publishes genuine two-sided American odds and
+ * PrizePicks cannot** — PrizePicks charges a flat multiplier on the whole entry
+ * and expresses price by moving the line instead.
+ *
+ * Two books cannot vote, because a line difference is symmetric: nothing in
+ * "28.5 versus 30.5" says which is wrong. It stops being symmetric the moment
+ * one of them states a probability.
+ *
+ * ## The correction that makes this worth building
+ *
+ * I first assumed this only worked where Underdog's two prices differ, since
+ * 397 of its 434 priced markets sit at a flat -112/-112 — no side taken. That
+ * was wrong, and it wrongly made the idea look like a thin-slice curiosity.
+ *
+ * A book's LINE is its own 50/50 point. Flat vig does not mean "no
+ * information", it means "the information is entirely in where they put the
+ * number". So Underdog's line IS the anchor on all 434, and the price only
+ * refines it on the 37 where they lean. The signal covers every market both
+ * books price, not a minority of it.
+ */
+export type FairLine = {
+  /** The line at which the market implies a coin flip. */
+  fair: number;
+  /** Where that came from, so a measurement can be split by provenance. */
+  method: 'crowd' | 'priced-book';
+  /** The book supplying it on the priced path; null on the crowd path. */
+  from: BookCode | null;
+  /** How many books stood behind it. */
+  n: number;
+};
+
+/**
+ * Slide a sample until the given share of it sits above `line`, and return the
+ * median of the slid sample.
+ *
+ * This is how a probability becomes a line. If Underdog's devigged price says
+ * the over at 30.5 wins 55% of the time, then 30.5 is not the middle — the
+ * middle is higher, and how much higher depends on how widely this player
+ * swings. That last part is the only thing history is asked for.
+ */
+function lineAtProbability(sample: number[], line: number, pOver: number): number | null {
+  if (sample.length === 0) return null;
+  // The shift that puts exactly pOver of the mass above `line` is the gap
+  // between `line` and the sample's own (1 - pOver) quantile.
+  const sorted = [...sample].sort((a, b) => a - b);
+  const idx = (1 - pOver) * (sorted.length - 1);
+  const lo = Math.floor(idx);
+  const hi = Math.ceil(idx);
+  const quantile = sorted[lo]! + (sorted[hi]! - sorted[lo]!) * (idx - lo);
+  const shift = line - quantile;
+  return median(sorted) + shift;
+}
+
+/**
+ * The market's fair line, preferring a crowd and falling back to a priced book.
+ *
+ * Returns null when neither exists — two books that both quote no odds cannot
+ * say which of them is wrong, and that is the honest answer rather than a
+ * midpoint dressed up as one.
+ */
+export function fairLine(
+  books: BookLine[],
+  form: FormStats | undefined,
+  maps: number,
+  seed: string,
+): FairLine | null {
+  const crowd = consensusLine(books);
+  if (typeof crowd !== 'string') {
+    return { fair: crowd.fair, method: 'crowd', from: null, n: crowd.n };
+  }
+
+  // Any book publishing two-sided odds will do. Underdog is the only one today,
+  // but naming it here is what made the old code unable to grow a third book.
+  const priced = books.find((b) => b.over_price !== null && b.under_price !== null);
+  if (!priced) return null;
+
+  const fair = devig(priced.over_price, priced.under_price);
+  if (!fair) return null;
+
+  // Flat vig is the common case and it is not a missing answer: it says the
+  // book's own line is its coin flip, which is exactly what we need.
+  if (Math.abs(fair.over - 0.5) < 1e-9) {
+    return { fair: priced.line, method: 'priced-book', from: priced.book, n: books.length };
+  }
+
+  // A real lean needs the player's spread to convert into a distance.
+  const s = sampleFor(form, maps, seed);
+  if (!s) {
+    return { fair: priced.line, method: 'priced-book', from: priced.book, n: books.length };
+  }
+  const shifted = lineAtProbability(s.sample, priced.line, fair.over);
+  return {
+    fair: shifted ?? priced.line,
+    method: 'priced-book',
+    from: priced.book,
+    n: books.length,
+  };
+}
+
+/**
+ * Every book whose line is off the market's fair number, worst first.
+ *
+ * The two-book sibling of `bookEdges`. The book supplying the anchor is never
+ * measured against itself — its own line is the baseline by construction, so it
+ * can only ever read as zero, and including it would put a permanent no-edge
+ * row next to every real one.
+ */
+export function pricedEdges(
+  books: BookLine[],
+  form: FormStats | undefined,
+  maps: number,
+  seed: string,
+): BookEdge[] {
+  const fl = fairLine(books, form, maps, seed);
+  if (!fl) return [];
+  if (fl.method === 'crowd') return bookEdges(books);
+
+  const out: BookEdge[] = [];
+  for (const b of books) {
+    if (b.book === fl.from) continue;
+    const gap = fl.fair - b.line;
+    if (gap === 0) continue;
+    const side = gap > 0 ? 'over' : 'under';
+    out.push({
+      book: b.book, propId: b.prop_id, side, line: b.line,
+      fair: fl.fair, gap: Math.abs(gap),
+      offered: side === 'over' ? b.over_ok : b.under_ok,
+    });
+  }
+  return out.sort((a, b) => b.gap - a.gap);
 }

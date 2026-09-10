@@ -246,3 +246,77 @@ test('resampled evidence is counted in maps, not in draws', () => {
   assert.equal(edgeProbability(edge(5, 6), f, 1, 's')!.n, 12);
   assert.equal(edgeProbability(edge(11, 13), f, 2, 's')!.n, 6);
 });
+
+// ----------------------------------------- the fair line from a priced book --
+
+import { fairLine, pricedEdges } from './consensus.js';
+
+/** A book that publishes two-sided American odds, like Underdog. */
+function priced(book: string, line: number, over: number, under: number): BookLine {
+  return { ...bl(book, line), over_price: over, under_price: under };
+}
+
+const spread = form([14, 16, 18, 20, 20, 22, 24, 26, 12, 28]);
+
+test('two unpriced books still cannot say which is wrong', () => {
+  // PrizePicks-shaped on both sides: no odds anywhere, so no anchor exists.
+  assert.equal(fairLine([bl('a', 28.5), bl('b', 30.5)], spread, 1, 's'), null);
+  assert.deepEqual(pricedEdges([bl('a', 28.5), bl('b', 30.5)], spread, 1, 's'), []);
+});
+
+test('flat vig is an answer, not a missing one', () => {
+  // -112/-112 devigs to exactly 0.500, so the book's own line IS its coin
+  // flip. This is the common case — 397 of Underdog's 434 priced markets —
+  // and treating it as "no information" would have thrown the signal away.
+  const books = [bl('prizepicks', 28.5), priced('underdog', 30.5, -112, -112)];
+  const fl = fairLine(books, spread, 1, 's')!;
+  assert.equal(fl.method, 'priced-book');
+  assert.equal(fl.from, 'underdog');
+  assert.equal(fl.fair, 30.5, 'the priced book\'s line is the anchor');
+});
+
+test('the unpriced book is measured against the priced one', () => {
+  const books = [bl('prizepicks', 28.5), priced('underdog', 30.5, -112, -112)];
+  const edges = pricedEdges(books, spread, 1, 's');
+  assert.equal(edges.length, 1, 'the anchor book is never measured against itself');
+  assert.equal(edges[0]!.book, 'prizepicks');
+  assert.equal(edges[0]!.side, 'over', 'two below the anchor makes the over cheap');
+  assert.equal(edges[0]!.gap, 2);
+});
+
+test('a real lean moves the fair line off the book\'s own number', () => {
+  // The over is the favourite here, so the book thinks the true middle sits
+  // above the number it posted.
+  const books = [bl('prizepicks', 20), priced('underdog', 20, -150, +120)];
+  const fl = fairLine(books, spread, 1, 's')!;
+  assert.ok(fl.fair > 20, `expected the fair line above 20, got ${fl.fair}`);
+});
+
+test('a lean the other way moves it the other way', () => {
+  const books = [bl('prizepicks', 20), priced('underdog', 20, +120, -150)];
+  const fl = fairLine(books, spread, 1, 's')!;
+  assert.ok(fl.fair < 20, `expected the fair line below 20, got ${fl.fair}`);
+});
+
+test('a crowd outranks a priced book when both are available', () => {
+  const books = [bl('a', 28.5), bl('b', 30.5), priced('c', 30.5, -150, +120)];
+  const fl = fairLine(books, spread, 1, 's')!;
+  assert.equal(fl.method, 'crowd', 'three books vote rather than deferring to one');
+  assert.equal(fl.n, 3);
+});
+
+test('with no history a leaning price still anchors on the line', () => {
+  // Converting a lean into a distance needs the player's spread. Without it,
+  // falling back to the posted line is right — it is the book's own estimate,
+  // just unrefined — and is far better than refusing to answer.
+  const books = [bl('prizepicks', 28.5), priced('underdog', 30.5, -150, +120)];
+  const fl = fairLine(books, undefined, 1, 's')!;
+  assert.equal(fl.fair, 30.5);
+});
+
+test('the fair line feeds the same probability machinery as the crowd path', () => {
+  const books = [bl('prizepicks', 26.5), priced('underdog', 30.5, -112, -112)];
+  const edge = pricedEdges(books, spread, 1, 's')[0]!;
+  const p = edgeProbability(edge, spread, 1, 's')!;
+  assert.ok(p.p > 0.5, 'four units below the anchor should beat a coin flip');
+});

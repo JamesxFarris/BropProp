@@ -11,7 +11,7 @@ import type { Entry } from './optimize.js';
 import { isComboHandle } from '../normalize.js';
 import { devig } from '../devig.js';
 import { bookName, bookShort, orderBooks, KNOWN_BOOKS, type BookCode } from '../books.js';
-import { bestEdge, consensusLine, betterSide } from './consensus.js';
+import { bestEdge, fairLine, betterSide } from './consensus.js';
 
 export const esc = (s: unknown) =>
   String(s ?? '').replace(/[&<>"']/g, (c) =>
@@ -815,13 +815,20 @@ function staleCell(r: MarketRow): string {
  * to be off: the midpoint of two numbers says nothing about which of them is
  * wrong. See `consensus.ts`. The cell lights up when a third book lands.
  */
-function edgeCell(r: MarketRow): string {
-  const e = bestEdge(r.books);
-  if (!e) return '';
-  const c = consensusLine(r.books);
-  const n = typeof c === 'string' ? r.books.length : c.n;
+function edgeCell(r: MarketRow, form?: FormStats): string {
+  const maps = r.map_end - r.map_start + 1;
+  const seed = `${r.canon_handle}|${r.stat}|${r.map_start}|${r.map_end}`;
+  const fl = fairLine(r.books, form, maps, seed);
+  const e = bestEdge(r.books, form, maps, seed);
+  if (!e || !fl) return '';
+  // Where the anchor came from decides what this cell is allowed to claim. A
+  // crowd is several books agreeing; a priced book is one book's own opinion,
+  // which is a weaker thing and must not be described as a market consensus.
+  const why = fl.method === 'crowd'
+    ? `the other ${fl.n - 1} books median ${num(e.fair)}`
+    : `${esc(bookName(fl.from ?? ''))}, the only book here quoting odds, puts the coin flip at ${num(e.fair)}`;
   return `<div class="edge ${e.side === 'over' ? 'o' : 'u'}"
-    title="${esc(bookName(e.book))} prices this at ${num(e.line)} while the other ${n - 1} books median ${num(e.fair)}. That makes its ${e.side} ${e.gap.toFixed(1)} cheaper than the market. Direction is read off the other books, not from our projection.">
+    title="${esc(bookName(e.book))} prices this at ${num(e.line)} while ${why}. That makes its ${e.side} ${e.gap.toFixed(1)} cheaper than the market. Direction comes from the books, not from our projection — and it has not yet been graded.">
     <span class="edge-k">${esc(bookShort(e.book))} ${e.side === 'over' ? 'O' : 'U'}</span>
     <span class="edge-v">${e.gap.toFixed(1)} off ${num(e.fair)}</span>
   </div>`;
@@ -1365,7 +1372,7 @@ export function boardPage(o: {
                 : `<span class="chip-num model">${Number(ours).toFixed(1)}</span>
                    <div class="meta">${formNote(formOf(r), play)}</div>`
             }</td>
-            <td class="c" data-label="Lean">${edgeCell(r)}${staleCell(r)}${playCell(play, statusOf(r).why, r, only)}</td>
+            <td class="c" data-label="Lean">${edgeCell(r, formOf(r))}${staleCell(r)}${playCell(play, statusOf(r).why, r, only)}</td>
             <td class="c${play ? ` strength s${Math.min(4, Math.max(1, Math.ceil((play.hitRate - 0.5) * 20)))}` : ''}" data-label="Record">${
               play === null
                 ? '<span class="meta">—</span>'
