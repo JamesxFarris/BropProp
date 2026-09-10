@@ -7,7 +7,8 @@ import { evaluate, edgeProgress, type LineOption, flatBreakEven } from './projec
 import { staleLine } from './stale.js';
 import type { Counters, ScoreRow } from './statsq.js';
 import type { ClvSummary } from './clv.js';
-import type { Entry } from './optimize.js';
+import type { Entry, Stack } from './optimize.js';
+import type { TeamOdds } from './matchodds.js';
 import { isComboHandle } from '../normalize.js';
 import { devig } from '../devig.js';
 import { bookName, bookShort, orderBooks, KNOWN_BOOKS, type BookCode } from '../books.js';
@@ -1911,6 +1912,10 @@ export function slipsPage(o: {
  */
 export function buildPage(o: {
   entries: Entry[];
+  /** Team stacks from `findStacks`, best first. Optional so older callers still render. */
+  stacks?: Stack[];
+  /** Pinnacle win probabilities by our team name, for saying why a stack is priced as it is. */
+  teamOdds?: Map<string, TeamOdds>;
   book: BookCode;
   lockedBook: string | null;
   picks: PickRow[];
@@ -1925,6 +1930,53 @@ export function buildPage(o: {
         ? `<span class="seg-locked">${bookName(o.lockedBook)}</span>`
         : KNOWN_BOOKS.map((b) => tab(b, bookName(b))).join('')}
     </nav>${o.lockedBook ? '<span class="lab">set by your slip</span>' : ''}</div>
+  </div>`;
+
+  /**
+   * Stacks: the one strategy here with measured numbers behind it, so it goes
+   * above everything else on the page.
+   *
+   * Each is one team, one direction, ranked by the multiplier it has to be PAID
+   * to break even — the number to hold up against the app. It rests on three
+   * measurements and no projection: both books shade against the over (55.3%
+   * under, p = 0.0053 over 133 series), losing teams' players go under (62.0%
+   * against 48.2%, p < 0.000001 over 4,180 series), and teammates move together
+   * (rho 0.324, CI on phi [0.198, 0.222] over 8,923 series).
+   */
+  const stacksCard = !o.stacks || o.stacks.length === 0 ? '' : `<div class="card">
+    <div class="card-head"><h2>Stacks</h2>
+      <span class="sub">one team, one direction — ranked by what each has to be paid to break even</span></div>
+    ${o.stacks.map((s) => {
+      const odds = o.teamOdds?.get(s.team);
+      const why = odds
+        ? `Pinnacle has ${esc(s.team)} at ${(odds.pWin * 100).toFixed(0)}% to beat ${esc(odds.opponent)}`
+        : `no moneyline yet, so priced from the 55.3% under rate measured against the books' own lines`;
+      return `<div class="stack">
+        <div class="evbar">
+          <span class="evnum flat">${s.requiredMultiplier.toFixed(2)}×</span>
+          <span class="evlab"><b>${s.legs.length}-pick, ${esc(s.team)} ${s.side}s</b> needs this to break even —
+            take it only if your app pays more. ${why}. Same-team legs make it
+            ${s.lift.toFixed(2)}× likelier to sweep than independent picks.</span>
+          <span class="grow"></span>
+          <form method="post" action="/build/stage" class="inline">
+            <input type="hidden" name="prop_ids" value="${s.legs.map((l) => l.propId).join(',')}">
+            <input type="hidden" name="sides" value="${s.legs.map((l) => l.play.side).join(',')}">
+            <button class="go" style="width:auto;padding:9px 18px">Build this slip</button>
+          </form>
+        </div>
+        <div class="scroll cards-sm"><table class="stack-sm entry-table"><tbody>${s.legs.map((l) => `<tr>
+          <td class="idcol"><div class="who">${leagueBadge(l.row.league)}<div class="whobody">
+            <div class="name">${esc(l.row.handle)}</div>
+            <div class="meta matchline">${esc(l.team ?? '—')}</div></div></div></td>
+          <td class="statcol"><div class="sub2">${esc(statLabel(l.row.stat))}</div>
+            <div class="meta">${esc(maps(l.row.map_start, l.row.map_end))}</div></td>
+          <td class="callcol"><div class="play ${l.play.side === 'over' ? 'o' : 'u'}">
+            <span class="dir">${l.play.side === 'over' ? 'Over' : 'Under'}</span>
+            <span class="at">${l.play.line.toFixed(1)}</span></div></td>
+          <td class="n probcol"><span class="fig sm">${(l.p * 100).toFixed(0)}%</span></td>
+        </tr>`).join('')}</tbody></table></div>
+      </div>`;
+    }).join('')}
   </div>`;
 
   const body = o.entries.length === 0
@@ -2017,7 +2069,9 @@ export function buildPage(o: {
               // projection has been measured at AUC 0.495 — no ability to tell
               // a winner from a loser — so a leg resting on it is a leg resting
               // on nothing, however confident the percentage looks.
-              l.source === 'consensus'
+              l.source === 'market'
+                ? `<span title="Sided by the team, not the player: the books' measured line shade, and Pinnacle's moneyline where there is one.">team + line shade</span>`
+                : l.source === 'consensus'
                 ? `<span title="Direction read off the other books: this app is ${l.gap?.toFixed(1)} off their median. No projection involved.">${l.gap?.toFixed(1)} off the crowd</span>`
                 : `<span title="No consensus available — fewer than three books price this market, so the side comes from our projection, which has been measured at AUC 0.495 and has shown no ability to pick winners.">projection only</span>`
             }</div></td>
@@ -2036,7 +2090,7 @@ export function buildPage(o: {
     health: o.health,
     filters,
     rail: slipRail(o.picks, `/build?book=${o.book}`),
-    body: `<div class="notice">Each entry takes the highest-value legs available, where value is
+    body: `${stacksCard}<div class="notice">Each entry takes the highest-value legs available, where value is
       win probability times what the leg pays. One leg per player, at most two per match — legs
       from one match move together, and both books reprice correlated entries.</div>
       <div class="notice warn-notice"><b>The break-even figure is a floor, and the real one is

@@ -353,6 +353,69 @@ aggregator section below.
   track rounds, but it is not the scoreboard.
 - Everything here is CS2. LoL has too few completed 1-3 ranges in the archive.
 
+### The moneyline pipeline: built, validated, not yet switched on
+
+Built 2026-09-10. Pinnacle's CS2 moneylines come in through OddsPapi
+(`src/adapters/oddspapi.ts`), get turned into an under probability per team
+(`src/web/matchodds.ts`), and feed a Stacks section at the top of the Build page.
+
+**Budget.** The free tier is 250 requests a month. A full CS2 pull is about four:
+one tournament list, then the active tournaments five at a time. Only ~14 of 350
+are live at once, and the list says which. Every call goes into `api_call`
+*before* it is made, and the monthly cap (default 220) is checked against that
+table. A deploy restarts the container, so a counter kept in memory would reset.
+Team names are cached in `oddspapi_participant` and fetched only when an unknown
+id appears. CS2 only by default, because the blowout effect was measured on CS2.
+
+**The trap that nearly shipped.** OddsPapi's outcome ids do not always mean the
+same side. In the first real pull, outcome `171` was the home price on 11
+fixtures and the **away** price on 2 of 13. Keying off the id would have put the
+moneyline on the wrong team about one fixture in seven, which means stacking
+unders on the favourite. The parser reads only the `bookmakerOutcomeId` label
+(`home` / `away`), and a test covers the flipped case.
+
+**Assumed, not verified:** `home` is `participant1Id`. Nothing in one payload can
+tell that apart from the reverse, because a swap would flip every market on the
+fixture consistently.
+
+**Team matching** is exact after normalising, never fuzzy (`src/adapters/teamname.ts`).
+75 of 82 recent CS2 teams matched with plain lowercase-and-strip. Stripping
+suffixes (Clan, CS, Espor) and one alias (NAVI → Natus Vincere) picks up the
+rest that are in OddsPapi at all. Betclic and BET-M are not in their feed.
+
+**The pricing.**
+
+    P(under) = P(team wins) · 0.482  +  P(team loses) · 0.620
+
+It is calibrated, not just plausible. At a coin-flip match it gives 0.551, and
+the under rate measured directly against the books' own closing lines is 55.3%.
+Those are two independent measurements agreeing to within a fifth of a point.
+
+It also shows how strong the line shade is. A team's players stay on the under
+side until the team is about an **87% favourite** (0.62 − 0.138p = 0.5). An 80%
+favourite's players still go under 50.96% of the time. I wrote a test asserting
+the opposite and it failed. The test was wrong, not the code.
+
+**Kills and headshots only.** The first render of the Stacks card put "sh1ro
+under deaths" into a stack on the team Pinnacle had losing. A beaten team dies
+*more*, so that leg pointed backwards on exactly the teams this favours. Every
+number behind the pricing was measured on kills and headshots. Deaths and
+assists stay out until each has its own measurement.
+
+**Validated against production** in rolled-back transactions: migrations 015,
+016 and 017 all apply; side availability is unchanged for both existing books;
+the board query returns one entry per book per row in 32ms; a real parsed
+Pinnacle fixture round-trips through the adapter's own INSERTs (1.628 / 2.18 →
+57.25% home). Each run was confirmed rolled back.
+
+**To switch it on** (not done — it's a production change):
+
+```bash
+railway variables set ODDSPAPI_KEY=<key> --service bropprop-logger --environment production
+# then deploy the branch; migrations 015-017 apply on boot
+npx tsx src/adapters/oddspapi.ts CS2     # one manual pull, costs ~4 requests
+```
+
 ## Consensus across books — the one signal that is not our projection
 
 Built 2026-09-10, **and not yet measured**. Read this before trusting anything

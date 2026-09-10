@@ -6,6 +6,7 @@ import { fetchBo3 } from './results/bo3.js';
 import { storeStats } from './results/store_stats.js';
 import { scoreCalls, storeScore, LEAGUES } from './results/validate_calls.js';
 import { resumeBackfill } from './results/backfill_resume.js';
+import { pullMatchOdds, BudgetExhausted } from './adapters/oddspapi.js';
 
 console.log(`BropProp logger up — schedule "${config.pollCron}", leagues ${config.leagues.join(',')}`);
 
@@ -113,7 +114,34 @@ async function scoreTick() {
   }
 }
 
+let pullingOdds = false;
+
+/**
+ * Pinnacle's moneylines for the day's matches, once.
+ *
+ * Metered at 250 requests a month, so this is the one job that must never run
+ * twice by accident — the ledger in `api_call` enforces the cap across
+ * restarts, and the flag here stops an overlap within one process.
+ */
+async function oddsTick() {
+  if (!config.oddspapiKey || pullingOdds) return;
+  pullingOdds = true;
+  try {
+    for (const league of config.oddsLeagues) {
+      const r = await pullMatchOdds(league);
+      console.log(`match odds ${league}: ${r.stored} fixtures for ${r.calls} requests`);
+    }
+  } catch (err) {
+    // Out of budget is expected late in a month and is not an error.
+    if (err instanceof BudgetExhausted) console.log(err.message);
+    else console.warn('match odds skipped:', (err as Error).message.slice(0, 160));
+  } finally {
+    pullingOdds = false;
+  }
+}
+
 cron.schedule(config.pollCron, tick);
+if (config.oddspapiKey) cron.schedule(config.oddsCron, oddsTick);
 cron.schedule(config.resultsCron, gradeTick);
 cron.schedule(config.accumulateCron, accumulateTick);
 cron.schedule(config.scoreCron, scoreTick);

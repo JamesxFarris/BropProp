@@ -34,6 +34,24 @@ export const config = {
   backfillChunkDays: Number(process.env.BACKFILL_CHUNK_DAYS ?? 30),
 
   /**
+   * Pinnacle's esports moneylines, via OddsPapi. Off unless a key is set.
+   *
+   * The free tier is 250 requests a MONTH. A CS2 pull is about four: one
+   * tournament list, then the active tournaments five at a time (only ~14 of
+   * 350 are live at once). Once a day is ~120 a month. The cap below stops it
+   * well short of the limit whatever the schedule says, because a suspended
+   * key costs more than a day of stale moneylines.
+   *
+   * CS2 only by default: the blowout effect this exists to exploit was
+   * measured on CS2, and LoL would roughly double the spend.
+   */
+  oddspapiKey: process.env.ODDSPAPI_KEY ?? null,
+  oddsCron: process.env.ODDS_CRON ?? '31 11 * * *',
+  oddspapiMonthlyCap: Number(process.env.ODDSPAPI_MONTHLY_CAP ?? 220),
+  oddsLeagues: (process.env.ODDS_LEAGUES ?? 'CS2')
+    .split(',').map((s) => s.trim().toUpperCase()).filter(Boolean),
+
+  /**
    * Base payout per entry size, per book — and empty until someone fills it in.
    *
    * These used to be hardcoded as `{2:3, 3:5, 4:10, 5:20, 6:37.5}` for

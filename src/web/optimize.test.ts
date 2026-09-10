@@ -319,3 +319,98 @@ test('the measured shape reproduces the number that made the case', () => {
   assert.ok(Math.abs(s.requiredMultiplier - 10.85) < 1.2,
     `expected ~10.85x, got ${s.requiredMultiplier}`);
 });
+
+// ------------------------------------------- legs priced by the team --------
+
+import { marketCandidates } from './optimize.js';
+import type { TeamOdds } from './matchodds.js';
+
+function mline(book: string, l: number, team: string | null, id: number): BookLine {
+  return {
+    book, line: l, prop_id: id,
+    over_price: null, under_price: null, over_ok: true, under_ok: true,
+    over_mult: null, under_mult: null,
+    moved: null, last_move: null, last_move_at: null, side: null, team,
+  };
+}
+
+function mrow(handle: string, team: string | null, id: number, match = 'Dogs vs Favs', combo = false): MarketRow {
+  return {
+    canon_handle: handle.toLowerCase(), handle, league: 'CS2', stat: 'kills',
+    map_start: 1, map_end: 2, is_combo: combo,
+    books: [mline('prizepicks', 30.5, team, id)],
+    spread: null, match_title: match, scheduled_at: null, confirmed_at: '2026-09-10T00:00:00Z',
+  };
+}
+
+const odds = (pWin: number, opponent: string): TeamOdds =>
+  ({ pWin, opponent, startsAt: '2026-09-11T00:00:00Z', observedAt: '2026-09-10T00:00:00Z' });
+
+test('with no moneyline every leg is an under at the measured book baseline', () => {
+  const c = marketCandidates([mrow('a', 'Dogs', 1), mrow('b', 'Favs', 2)], new Map(), 'prizepicks');
+  assert.equal(c.length, 2);
+  for (const x of c) {
+    assert.equal(x.play.side, 'under');
+    assert.ok(Math.abs(x.p - 0.553) < 1e-9, String(x.p));
+    assert.equal(x.source, 'market');
+  }
+});
+
+test('an underdog is a better under than its opponent', () => {
+  const m = new Map([['Dogs', odds(0.25, 'Favs')], ['Favs', odds(0.75, 'Dogs')]]);
+  const c = marketCandidates([mrow('a', 'Dogs', 1), mrow('b', 'Favs', 2)], m, 'prizepicks');
+  const dog = c.find((x) => x.team === 'Dogs')!;
+  const fav = c.find((x) => x.team === 'Favs')!;
+  assert.ok(Math.abs(dog.p - 0.5855) < 1e-4, `dog under ${dog.p}`);
+  assert.ok(dog.p > fav.p, 'the losing side must be the stronger under');
+});
+
+test('a heavy enough favourite flips to the over', () => {
+  // At 95% to win: 0.95*0.482 + 0.05*0.620 = 0.4889 under, so the over is 51.1%.
+  const m = new Map([['Favs', odds(0.95, 'Dogs')]]);
+  const [x] = marketCandidates([mrow('b', 'Favs', 2)], m, 'prizepicks');
+  assert.equal(x!.play.side, 'over');
+  assert.ok(Math.abs(x!.p - 0.5111) < 1e-3, String(x!.p));
+});
+
+test('combos and teamless legs are left out', () => {
+  // A combo can span both teams, and the mixture prices one team.
+  const c = marketCandidates([
+    mrow('a', null, 1),
+    mrow('b+c', 'Dogs', 2, 'Dogs vs Favs', true),
+  ], new Map(), 'prizepicks');
+  assert.deepEqual(c, []);
+});
+
+test('an under that is not offered is not a leg', () => {
+  const r = mrow('a', 'Dogs', 1);
+  r.books[0]!.under_ok = false;
+  assert.deepEqual(marketCandidates([r], new Map(), 'prizepicks'), []);
+});
+
+test('the stack search builds on the underdog', () => {
+  // Five on each side of one match, the dogs priced at 25%. Every dog under is
+  // likelier than every favourite under, so the best six-pick is the dogs'
+  // five plus one favourite — the shape the whole strategy is about.
+  const rows: MarketRow[] = [];
+  for (let i = 0; i < 5; i++) rows.push(mrow(`dog${i}`, 'Dogs', 100 + i));
+  for (let i = 0; i < 5; i++) rows.push(mrow(`fav${i}`, 'Favs', 200 + i));
+  const m = new Map([['Dogs', odds(0.25, 'Favs')], ['Favs', odds(0.75, 'Dogs')]]);
+  const best = findStacks(marketCandidates(rows, m, 'prizepicks'), 6, 'prizepicks')[0]!;
+  assert.equal(best.team, 'Dogs');
+  assert.equal(best.side, 'under');
+  assert.equal(best.legs.filter((l) => l.team === 'Dogs').length, 5);
+  // Five dog unders at 58.55% plus one favourite under, correlated: well under
+  // the 22x a real six-pick stack was quoted at.
+  assert.ok(best.requiredMultiplier < 12, String(best.requiredMultiplier));
+});
+
+test('deaths and assists are never priced by the team', () => {
+  // The bug the first Stacks screenshot showed: "under deaths" on the team
+  // expected to LOSE. A beaten team dies more, so that leg points backwards
+  // on exactly the teams the pricing favours. Assists were never measured.
+  const r = (stat: string, id: number): MarketRow => ({ ...mrow(`p${id}`, 'Dogs', id), stat });
+  const m = new Map([['Dogs', odds(0.2, 'Favs')]]);
+  const c = marketCandidates([r('deaths', 1), r('assists', 2), r('kills', 3), r('headshots', 4)], m, 'prizepicks');
+  assert.deepEqual(c.map((x) => x.row.stat).sort(), ['headshots', 'kills']);
+});

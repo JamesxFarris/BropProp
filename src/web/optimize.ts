@@ -7,6 +7,7 @@ import type { BookCode } from '../books.js';
 import { devig } from '../devig.js';
 import { pricedEdges, edgeProbability } from './consensus.js';
 import { probAllWin, requiredMultiplier, marginalLegWorthIt, type SlipLeg } from './slip.js';
+import { underProbForTeam, MEASURED_UNDER_BASELINE, type TeamOdds } from './matchodds.js';
 
 /**
  * Building the best entry of a given size.
@@ -54,7 +55,7 @@ export type Candidate = {
    * hold both kinds at once: a market three books price gets a consensus, and
    * one only PrizePicks lists cannot.
    */
-  source: 'consensus' | 'model';
+  source: 'consensus' | 'model' | 'market';
   /** How far off the crowd this book is, in stat units. Null on the model path. */
   gap: number | null;
   /** What this leg pays relative to a standard one (Underdog discounts some). */
@@ -581,3 +582,96 @@ export function findStacks(
     a.requiredMultiplier - b.requiredMultiplier
     || Number(b.aligned) - Number(a.aligned));
 }
+
+/**
+ * Legs sided and priced by the two things that have actually been measured.
+ *
+ * `candidatesFor` takes its side from the book consensus or the projection, and
+ * both have now been graded at a coin flip — 74-73 over 147 series, and AUC
+ * 0.495. What survived measurement is different in kind: it is not about the
+ * player at all.
+ *
+ *   1. Both books shade against the over. Against their own closing lines the
+ *      under won 55.3% of 2,137 legs, p = 0.0053 over 133 series.
+ *   2. Losing teams' players go under. 62.0% against 48.2% for winners, over
+ *      4,180 series. A moneyline says in advance who is likelier to lose.
+ *
+ * So every leg here is priced from its TEAM: Pinnacle's win probability, mixed
+ * through the measured loser/winner rates, or the measured baseline when no
+ * moneyline is available. Every player on a team gets the same number, which is
+ * the honest consequence of having no player-level signal that works — and it
+ * is exactly why the payoff comes from stacking a team rather than picking
+ * players.
+ *
+ * The side is the under unless the team is a heavy enough favourite that its
+ * players' under drops below 50% — about an 87% favourite — in which case it is
+ * the over, and a stack of that team's overs is the play instead.
+ */
+/**
+ * The stats the team-level pricing is valid for: kills, and headshots.
+ *
+ * Every number behind `marketCandidates` was measured on these. The line shade
+ * is 44.1% over on CS2 kills and 45.7% on headshots; the blowout split and the
+ * teammate correlation were measured on kills, and a headshot is a kill.
+ *
+ * DEATHS are the reason this list exists. The first render of the Stacks card
+ * put "sh1ro under deaths" in a stack built on the team Pinnacle had losing —
+ * but a team that gets beaten dies MORE, so on exactly the teams this favours,
+ * deaths run the other way. Assists were never measured for CS2 at all (the
+ * only figure is 20 LoL legs). A stat stays off this list until it has its own
+ * measurement, not until it seems plausible.
+ */
+const MARKET_STATS = new Set(['kills', 'headshots']);
+
+export function marketCandidates(
+  rows: MarketRow[],
+  teamOdds: Map<string, TeamOdds>,
+  book: BookCode,
+): Candidate[] {
+  const out: Candidate[] = [];
+  const now = Date.now();
+  for (const r of rows) {
+    if (r.scheduled_at && new Date(r.scheduled_at).getTime() < now) continue;
+    // A combo depends on several players, possibly on both teams. The team
+    // mixture below prices ONE team, so a combo does not fit it.
+    if (r.is_combo) continue;
+    if (!MARKET_STATS.has(r.stat)) continue;
+    const mine = r.books.find((b) => b.book === book);
+    if (!mine) continue;
+    const team = mine.team ?? r.books.find((b) => b.team)?.team ?? null;
+    if (!team) continue;
+
+    const odds = teamOdds.get(team);
+    const pUnder = odds ? underProbForTeam(odds.pWin) : MEASURED_UNDER_BASELINE;
+    const side: 'over' | 'under' = pUnder >= 0.5 ? 'under' : 'over';
+    if (side === 'under' ? !mine.under_ok : !mine.over_ok) continue;
+    const p = side === 'under' ? pUnder : 1 - pUnder;
+
+    const rawMult = side === 'over' ? mine.over_mult : mine.under_mult;
+    const mult = rawMult === null ? 1 : Number(rawMult);
+    const line = Number(mine.line);
+
+    out.push({
+      row: r,
+      play: {
+        side, book, line,
+        edge: 0, edgeSd: null,
+        hitRate: p, rawWins: null, rawOf: null,
+        anchored: line, rawMean: line,
+        series: 0, strength: p, score: Math.round(p * 100),
+        method: 'series', sample: 0,
+        breakEven: null, ev: null,
+      },
+      propId: mine.prop_id,
+      p, mult,
+      source: 'market',
+      gap: null,
+      value: p * mult,
+      matchKey: r.match_title ?? `?${r.canon_handle}`,
+      team,
+      players: [r.canon_handle],
+    });
+  }
+  return out.sort((a, b) => b.value - a.value);
+}
+

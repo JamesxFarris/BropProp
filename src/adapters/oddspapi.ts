@@ -1,0 +1,263 @@
+import { q, pool } from '../db.js';
+import { config } from '../config.js';
+
+/**
+ * Pinnacle's esports match odds, via OddsPapi — who wins, and how clearly.
+ *
+ * Why this exists: over 4,967 CS2 series a losing team's players went under
+ * their lines 62.0% of the time against 48.2% for the winners, and 66.0% in a
+ * blowout (p < 0.000001 over 4,180 independent series). That is measured after
+ * the fact. Acting on it needs the market's view of who will lose BEFORE
+ * kick-off, which is exactly a moneyline — and Pinnacle's is the sharpest there
+ * is. See RUNBOOK, "The blowout effect".
+ *
+ * ## The budget is the design constraint
+ *
+ * The free tier is 250 requests a MONTH. Everything here is shaped by that:
+ *
+ * - Odds come from `odds-by-tournaments`, five tournaments per request. Only
+ *   about 14 of 350 CS2 tournaments have fixtures at any moment, and the
+ *   tournament list says which, so a whole board is ~3 requests.
+ * - Team names cost a request of their own, so they are cached in
+ *   `oddspapi_participant` and refetched only when an unknown id appears.
+ * - Every call is written to `api_call` BEFORE it is made, so a crash mid-call
+ *   still counts, and the monthly cap is checked against that ledger rather than
+ *   against memory — a container restarts on every deploy and would otherwise
+ *   believe it had spent nothing.
+ *
+ * ## The trap that nearly shipped
+ *
+ * OddsPapi's outcome ids do NOT consistently mean the same side. In the first
+ * pull, outcome 171 was the home price on 11 fixtures and the AWAY price on 2 of
+ * 13. Keying off the id would have attached the moneyline to the wrong team
+ * about one time in seven — and the whole use of this data is to decide which
+ * team's players to stack unders on. The `bookmakerOutcomeId` label ("home",
+ * "away") is the only reliable source, and the parser reads nothing else.
+ *
+ * `home` is taken to be `participant1Id` and `away` `participant2Id`. That is
+ * OddsPapi's documented convention and it is ASSUMED rather than verified here:
+ * nothing in a single payload can distinguish it from the reverse, because a
+ * swap would flip every market on the fixture consistently.
+ */
+
+const BASE = 'https://api.oddspapi.io/v4';
+const BOOKMAKER = 'pinnacle';
+/** The endpoint refuses more than five tournament ids per request. */
+const PER_CALL = 5;
+
+/** OddsPapi's sport id, and the id of its match-winner market, per league. */
+export const SPORT: Record<string, { sportId: number; winnerMarket: string }> = {
+  CS2: { sportId: 17, winnerMarket: '171' },
+  LOL: { sportId: 18, winnerMarket: '181' },
+};
+
+export class BudgetExhausted extends Error {}
+
+export type ParsedFixture = {
+  fixtureId: string;
+  startsAt: string;
+  homeId: string;
+  awayId: string;
+  homePrice: number | null;
+  awayPrice: number | null;
+  /** Home win probability with Pinnacle's margin removed. Null without both sides. */
+  pHomeWin: number | null;
+  /** Every market on the fixture, verbatim, for parsing once each is understood. */
+  markets: Record<string, unknown>;
+};
+
+/**
+ * One fixture's prices. Pure: no network, no database.
+ *
+ * Returns null when the bookmaker has no markets on the fixture at all. A
+ * fixture with markets but no usable moneyline still comes back — with a null
+ * probability — because its handicaps and totals are worth keeping.
+ */
+export function parseFixture(
+  f: any,
+  winnerMarket: string,
+  bookmaker = BOOKMAKER,
+): ParsedFixture | null {
+  const markets = f?.bookmakerOdds?.[bookmaker]?.markets;
+  if (!markets || typeof markets !== 'object') return null;
+
+  let homePrice: number | null = null;
+  let awayPrice: number | null = null;
+  const ml = markets[winnerMarket];
+  for (const o of Object.values<any>(ml?.outcomes ?? {})) {
+    const p = o?.players?.['0'];
+    if (!p) continue;
+    const price = Number(p.price);
+    if (!Number.isFinite(price) || price <= 1) continue;
+    // The label, never the outcome id — see the header.
+    if (p.bookmakerOutcomeId === 'home') homePrice = price;
+    else if (p.bookmakerOutcomeId === 'away') awayPrice = price;
+  }
+
+  return {
+    fixtureId: String(f.fixtureId),
+    startsAt: String(f.startTime),
+    homeId: String(f.participant1Id),
+    awayId: String(f.participant2Id),
+    homePrice,
+    awayPrice,
+    pHomeWin: devigTwoWay(homePrice, awayPrice),
+    markets,
+  };
+}
+
+/**
+ * Remove the margin from a two-way decimal market, multiplicatively.
+ *
+ * The same method `devig.ts` uses for Underdog's American odds, and for the same
+ * reason: at the margins Pinnacle carries, multiplicative and Shin agree to well
+ * inside any difference we could measure.
+ */
+export function devigTwoWay(a: number | null, b: number | null): number | null {
+  if (a === null || b === null || a <= 1 || b <= 1) return null;
+  const ia = 1 / a;
+  const ib = 1 / b;
+  return ia / (ia + ib);
+}
+
+/** Calls made this calendar month, from the ledger. */
+export async function callsThisMonth(api = 'oddspapi'): Promise<number> {
+  const r = await q<{ n: string }>(
+    `SELECT count(*)::text AS n FROM api_call
+      WHERE api = $1 AND called_at >= date_trunc('month', now())`,
+    [api],
+  );
+  return Number(r[0]?.n ?? 0);
+}
+
+/**
+ * One metered request. Refuses when the month's cap is reached.
+ *
+ * The ledger row goes in first. A request that throws halfway has still been
+ * counted by OddsPapi, so it has to be counted here too.
+ */
+async function call(endpoint: string, params: Record<string, string | number>): Promise<any> {
+  if (!config.oddspapiKey) throw new Error('ODDSPAPI_KEY is not set');
+  const used = await callsThisMonth();
+  if (used >= config.oddspapiMonthlyCap) {
+    throw new BudgetExhausted(
+      `OddsPapi: ${used} calls this month, cap ${config.oddspapiMonthlyCap} — skipping`);
+  }
+
+  const row = await q<{ id: string }>(
+    `INSERT INTO api_call (api, endpoint) VALUES ('oddspapi', $1) RETURNING id::text`,
+    [endpoint],
+  );
+  const url = new URL(`${BASE}/${endpoint}`);
+  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
+  url.searchParams.set('apiKey', config.oddspapiKey);
+
+  const res = await fetch(url, {
+    headers: { Accept: 'application/json' },
+    signal: AbortSignal.timeout(30_000),
+  });
+  await q(`UPDATE api_call SET status = $1 WHERE id = $2`, [res.status, row[0]!.id]);
+  if (!res.ok) {
+    throw new Error(`OddsPapi ${endpoint} -> ${res.status}: ${(await res.text()).slice(0, 160)}`);
+  }
+  return res.json();
+}
+
+const asArray = (b: any): any[] => {
+  const d = b?.data ?? b;
+  return Array.isArray(d) ? d : Object.values(d ?? {});
+};
+
+/** Names for these participant ids, fetching the list only if one is unknown. */
+async function participantNames(sportId: number, ids: string[]): Promise<Map<string, string>> {
+  const known = new Map(
+    (await q<{ participant_id: string; name: string }>(
+      `SELECT participant_id, name FROM oddspapi_participant WHERE sport_id = $1`,
+      [sportId],
+    )).map((r) => [r.participant_id, r.name]),
+  );
+  if (ids.every((id) => known.has(id))) return known;
+
+  const list = asArray(await call('participants', { sportId }));
+  for (const p of list) {
+    const id = String(p.participantId ?? p.id);
+    const name = String(p.participantName ?? p.name ?? '');
+    if (!id || !name) continue;
+    known.set(id, name);
+    await q(
+      `INSERT INTO oddspapi_participant (sport_id, participant_id, name) VALUES ($1, $2, $3)
+       ON CONFLICT (sport_id, participant_id) DO UPDATE SET name = EXCLUDED.name, fetched_at = now()`,
+      [sportId, id, name],
+    );
+  }
+  return known;
+}
+
+/**
+ * Pull the upcoming fixtures for one league and store them.
+ *
+ * Returns how many fixtures were stored and how many requests it cost, so the
+ * scheduler can log the spend next to the result.
+ */
+export async function pullMatchOdds(league: string): Promise<{ stored: number; calls: number }> {
+  const sport = SPORT[league];
+  if (!sport) return { stored: 0, calls: 0 };
+  const before = await callsThisMonth();
+
+  const tours = asArray(await call('tournaments', { sportId: sport.sportId }));
+  const active = tours
+    .filter((t) => Number(t.upcomingFixtures ?? 0) + Number(t.futureFixtures ?? 0) > 0)
+    .map((t) => t.tournamentId);
+
+  const now = Date.now();
+  const fixtures: ParsedFixture[] = [];
+  for (let i = 0; i < active.length; i += PER_CALL) {
+    const body = await call('odds-by-tournaments', {
+      bookmaker: BOOKMAKER,
+      tournamentIds: active.slice(i, i + PER_CALL).join(','),
+      oddsFormat: 'decimal',
+    });
+    for (const f of asArray(body)) {
+      // The endpoint returns a tournament's past fixtures too. Only one of 16
+      // in the first pull had not yet started.
+      if (!(Date.parse(f.startTime) > now)) continue;
+      const parsed = parseFixture(f, sport.winnerMarket);
+      if (parsed) fixtures.push(parsed);
+    }
+  }
+
+  const names = await participantNames(
+    sport.sportId,
+    [...new Set(fixtures.flatMap((f) => [f.homeId, f.awayId]))],
+  );
+
+  let stored = 0;
+  for (const f of fixtures) {
+    const home = names.get(f.homeId);
+    const away = names.get(f.awayId);
+    // A fixture we cannot name cannot be matched to a board, so there is
+    // nothing it could be used for.
+    if (!home || !away) continue;
+    await q(
+      `INSERT INTO match_odds
+         (bookmaker, fixture_id, league, starts_at, home_name, away_name,
+          home_price, away_price, p_home_win, markets)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [BOOKMAKER, f.fixtureId, league, f.startsAt, home, away,
+       f.homePrice, f.awayPrice, f.pHomeWin, JSON.stringify(f.markets)],
+    );
+    stored++;
+  }
+
+  return { stored, calls: (await callsThisMonth()) - before };
+}
+
+if (process.argv[1]?.endsWith('oddspapi.ts')) {
+  const leagues = process.argv.slice(2).length ? process.argv.slice(2) : ['CS2'];
+  for (const lg of leagues) {
+    const r = await pullMatchOdds(lg.toUpperCase());
+    console.log(`${lg}: stored ${r.stored} fixtures for ${r.calls} requests; ` +
+      `${await callsThisMonth()} used this month of ${config.oddspapiMonthlyCap}`);
+  }
+  await pool.end();
+}

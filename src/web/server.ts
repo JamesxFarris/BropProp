@@ -16,7 +16,8 @@ import {
 import { boardPage, edgesPage, slipsPage, historyPage, buildPage, loginPage, statsPage } from './render.js';
 import { counters, historyByWeek, coverage, record, sources, scoreHistory } from './statsq.js';
 import { clv } from './clv.js';
-import { buildEntries } from './optimize.js';
+import { buildEntries, findStacks, marketCandidates, DEFAULT_SIZES } from './optimize.js';
+import { teamWinProbs } from './matchodds.js';
 import { projectMarkets } from './projection.js';
 import { KNOWN_BOOKS, type BookCode } from '../books.js';
 
@@ -381,7 +382,20 @@ const server = createServer(async (req, res) => {
       );
       const [picks, h] = await Promise.all([openPicks(), health(filters.league)]);
       const entries = buildEntries(rows, form, book);
-      return html(res, buildPage({ entries, book, lockedBook, picks, health: h }));
+
+      // Pinnacle's view of who wins, for every team on the board. Empty until
+      // the odds job has run — and until migration 017 exists at all, which is
+      // why a failure here is swallowed rather than taking the page down.
+      const teams = [...new Set(rows.flatMap((r) => r.books.map((b) => b.team))
+        .filter((t): t is string => Boolean(t)))];
+      const teamOdds = await teamWinProbs(teams).catch(() => new Map());
+      const pool = marketCandidates(rows, teamOdds, book);
+      // Aligned stacks only: an over and an under in one match are fighting
+      // each other, and the search already ranks them last for that reason.
+      const stacks = DEFAULT_SIZES.flatMap((n) =>
+        findStacks(pool, n, book).filter((s) => s.aligned).slice(0, 3));
+
+      return html(res, buildPage({ entries, stacks, teamOdds, book, lockedBook, picks, health: h }));
     }
 
     if (url.pathname === '/stats') {
