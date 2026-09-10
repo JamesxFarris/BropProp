@@ -1,5 +1,6 @@
 import type { BookLine } from './boardq.js';
 import type { BookCode } from '../books.js';
+import { resampleTotals, type FormStats } from './projection.js';
 
 /**
  * What the books, together, think a market is worth — and which one is off it.
@@ -198,4 +199,111 @@ export function betterSide(books: BookLine[], book: BookCode): 'both' | 'over' |
   if (me.line === highest) return 'under';
   // Priced inside the range: beaten on both sides by somebody.
   return 'both';
+}
+
+/**
+ * Turning "1.5 kills off the crowd" into "wins 58% of the time".
+ *
+ * A gap in stat units ranks markets but cannot be bet on: 1.5 kills on a 30.5
+ * line and 1.5 kills on a 5.5 assists line are wildly different propositions,
+ * and `MIN_EDGE` being an absolute 0.5 across every market is a known defect
+ * for exactly this reason. Turning the gap into a probability needs one more
+ * thing — how widely this player's output actually swings — and that is the
+ * only place history gets used.
+ *
+ * ## Location from the market, shape from history
+ *
+ * This is the whole discipline of the function, and it is what separates it
+ * from the projection that has already been measured at AUC 0.495.
+ *
+ * The projection tries to answer "how many kills will this player get", and
+ * four experiments say it cannot beat the player's own flat average, while the
+ * book already knows that average. It also over-projects: 61% of markets sit
+ * above the book's line, mean +0.65 units. So its estimate of WHERE the
+ * distribution sits is the part that is wrong.
+ *
+ * Its estimate of HOW WIDE the distribution is faces no such problem. Spread is
+ * a far easier statistic than location, nobody is competing it away, and
+ * nothing in the validation touched it.
+ *
+ * So the sample is taken from history, then slid bodily along until its median
+ * sits exactly on the consensus line. The market decides where the middle is;
+ * history only says how far from the middle this player tends to land. Our own
+ * mean is never consulted, and cannot leak its bias in.
+ */
+export type EdgeProb = {
+  /** Chance the flagged side wins, before any shrinking. */
+  p: number;
+  /** Real observed totals, or single maps resampled into range totals. */
+  method: 'totals' | 'resampled';
+  /** Independent observations behind the shape — NOT the number of draws. */
+  n: number;
+};
+
+/** The middle of a sample, used to anchor it to the market's line. */
+function sampleMedian(xs: number[]): number {
+  return median(xs);
+}
+
+/**
+ * How likely the flagged side is to win, given the crowd's line and this
+ * player's spread.
+ *
+ * Returns null when there is no usable history. That is a refusal, not a
+ * 50%: a market we cannot size is not a market we know to be a coin flip, and
+ * the two must not sort together.
+ *
+ * `n` is deliberately conservative on the resampled path. 4,000 draws off
+ * twelve maps is twelve observations' worth of evidence, and resampling also
+ * makes the distribution too NARROW — it treats maps within a series as
+ * independent when a player having a good series is good across all of it, so
+ * real totals swing wider than the draws do. A too-narrow distribution turns a
+ * given gap into too large a probability, which is the dangerous direction, so
+ * the caller is expected to shrink this toward 0.5 by `n`.
+ */
+export function edgeProbability(
+  edge: BookEdge,
+  form: FormStats | undefined,
+  maps: number,
+  seed: string,
+): EdgeProb | null {
+  if (!form) return null;
+
+  // Real totals over the exact range are the honest sample: they carry the
+  // series-level swing that resampling flattens. Scarce, though — a Bo3 that
+  // ended 2-0 contributes nothing to a maps 1-3 market.
+  const MIN_TOTALS = 6;
+  const useTotals = form.totals.length >= MIN_TOTALS;
+  const sample = useTotals
+    ? form.totals
+    : form.mapValues.length > 0
+      ? resampleTotals(form.mapValues, maps, seed)
+      : [];
+  if (sample.length === 0) return null;
+
+  // Slide the sample so its middle sits on the crowd's line. After this, a
+  // draw above `edge.fair` is exactly a 50/50 proposition — which is what the
+  // consensus line asserts — and everything the probability says about
+  // `edge.line` comes from the shape around it.
+  const shift = edge.fair - sampleMedian(sample);
+  const shifted = sample.map((v) => v + shift);
+
+  // Pushes leave the denominator rather than counting as half a win. A total
+  // landing exactly on the line returns the stake; it is not a win at a
+  // discount, and averaging it in would quietly inflate every whole-numbered
+  // line's probability.
+  let wins = 0;
+  let decided = 0;
+  for (const v of shifted) {
+    if (v === edge.line) continue;
+    decided++;
+    if (edge.side === 'over' ? v > edge.line : v < edge.line) wins++;
+  }
+  if (decided === 0) return null;
+
+  return {
+    p: wins / decided,
+    method: useTotals ? 'totals' : 'resampled',
+    n: useTotals ? form.totals.length : Math.floor(form.mapValues.length / Math.max(1, maps)),
+  };
 }

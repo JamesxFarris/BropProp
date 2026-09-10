@@ -5,6 +5,7 @@ import { recommend, type LineOption } from './projection.js';
 import { comboParts } from '../normalize.js';
 import type { BookCode } from '../books.js';
 import { devig } from '../devig.js';
+import { bookEdges, edgeProbability } from './consensus.js';
 
 /**
  * Building the best entry of a given size.
@@ -40,6 +41,21 @@ export type Candidate = {
   propId: number;
   /** Win probability, shrunk toward a coin flip by how thin the evidence is. */
   p: number;
+  /**
+   * Where the direction came from.
+   *
+   * `consensus` means the side was read off where this book sits relative to
+   * every other book pricing the market — no projection involved. `model`
+   * means it came from `recommend()`, which has been measured at AUC 0.495 and
+   * carries no demonstrated information about who wins.
+   *
+   * Recorded per leg rather than assumed for the entry, because a board will
+   * hold both kinds at once: a market three books price gets a consensus, and
+   * one only PrizePicks lists cannot.
+   */
+  source: 'consensus' | 'model';
+  /** How far off the crowd this book is, in stat units. Null on the model path. */
+  gap: number | null;
   /** What this leg pays relative to a standard one (Underdog discounts some). */
   mult: number;
   /** p x mult — the whole objective, per leg. */
@@ -145,16 +161,80 @@ export function candidatesFor(
     }];
 
     const maps = r.map_end - r.map_start + 1;
-    const f = form.get(`${r.canon_handle}|${r.stat}|${r.map_start}|${r.map_end}`);
-    const play = recommend(f, options, maps, `${r.canon_handle}|${r.stat}|${r.map_start}|${r.map_end}`);
-    if (!play) continue;
+    const seed = `${r.canon_handle}|${r.stat}|${r.map_start}|${r.map_end}`;
+    const f = form.get(seed);
+    const play = recommend(f, options, maps, seed);
 
-    const p = shrink(play.hitRate, evidenceCount(play, maps));
-    const rawMult = play.side === 'over' ? mine.over_mult : mine.under_mult;
+    /**
+     * Prefer the crowd's answer to our own.
+     *
+     * The projection decides direction only where no consensus exists. Where
+     * three or more books price the market, the side comes from which of them
+     * is out of step and the probability comes from that gap measured against
+     * this player's spread — a chain with our own mean nowhere in it.
+     *
+     * The two are NOT blended. Averaging a measured-useless estimate into a
+     * measured-useful one only adds noise, and it would make the resulting
+     * number impossible to attribute when the record is finally scored. One
+     * leg, one source, recorded.
+     *
+     * The consensus side can disagree with the model's, and when it does the
+     * consensus wins outright. That is the intended behaviour: AUC 0.495 means
+     * the model's opinion is worth nothing as a tiebreak either.
+     */
+    const edge = bookEdges(r.books).find((e) => e.book === book && e.offered);
+    const ep = edge ? edgeProbability(edge, f, maps, seed) : null;
+    const useConsensus = edge !== undefined && ep !== null;
+
+    /**
+     * A consensus leg does not need the model's permission to exist.
+     *
+     * `recommend()` returns null below MIN_SERIES or MIN_EDGE — it declines to
+     * have an opinion. Skipping the market on that basis would let a signal
+     * measured at AUC 0.495 veto one that does not depend on it at all, and
+     * quietly: the leg would just never appear. The two paths are independent
+     * and the gate has to be too.
+     */
+    if (!play && !useConsensus) continue;
+
+    const side = useConsensus ? edge.side : play!.side;
+    const p = useConsensus
+      ? shrink(ep.p, ep.n)
+      : shrink(play!.hitRate, evidenceCount(play!, maps));
+
+    const rawMult = side === 'over' ? mine.over_mult : mine.under_mult;
     const mult = rawMult === null ? 1 : Number(rawMult);
 
+    // The displayed play must describe the side actually being staked, or the
+    // slip panel and the take button disagree about what was picked. Where the
+    // model declined entirely there is no play to amend, so one is built from
+    // what the consensus actually knows — and the fields it cannot know are
+    // null or zero rather than invented.
+    const shown: Play = useConsensus
+      ? {
+          ...(play ?? {
+            edgeSd: null, rawWins: null, rawOf: null,
+            anchored: edge.fair, rawMean: f?.mean ?? edge.fair,
+            series: f?.series ?? 0, method: 'series' as const, sample: ep.n,
+            breakEven: null, ev: null,
+          }),
+          side, line: edge.line, book,
+          // The gap IS the edge on this path, in the same stat units the model
+          // reports its own in.
+          edge: edge.gap,
+          hitRate: ep.p,
+          strength: edge.gap,
+          score: Math.min(99, Math.round(ep.p * 100)),
+        }
+      : play!;
+
     out.push({
-      row: r, play, propId: mine.prop_id, p, mult,
+      row: r,
+      play: shown,
+      propId: mine.prop_id,
+      p, mult,
+      source: useConsensus ? 'consensus' : 'model',
+      gap: useConsensus ? edge.gap : null,
       value: p * mult,
       matchKey: r.match_title ?? `?${r.canon_handle}`,
       players: parts.length >= 2 ? parts : [r.canon_handle],

@@ -1365,7 +1365,7 @@ export function boardPage(o: {
                 : `<span class="chip-num model">${Number(ours).toFixed(1)}</span>
                    <div class="meta">${formNote(formOf(r), play)}</div>`
             }</td>
-            <td class="c" data-label="Lean">${staleCell(r)}${playCell(play, statusOf(r).why, r, only)}</td>
+            <td class="c" data-label="Lean">${edgeCell(r)}${staleCell(r)}${playCell(play, statusOf(r).why, r, only)}</td>
             <td class="c${play ? ` strength s${Math.min(4, Math.max(1, Math.ceil((play.hitRate - 0.5) * 20)))}` : ''}" data-label="Record">${
               play === null
                 ? '<span class="meta">—</span>'
@@ -1908,7 +1908,7 @@ export function buildPage(o: {
     <div class="group"><span class="lab">App</span><nav class="seg">
       ${o.lockedBook
         ? `<span class="seg-locked">${bookName(o.lockedBook)}</span>`
-        : tab('prizepicks', 'PrizePicks') + tab('underdog', 'Underdog')}
+        : KNOWN_BOOKS.map((b) => tab(b, bookName(b))).join('')}
     </nav>${o.lockedBook ? '<span class="lab">set by your slip</span>' : ''}</div>
   </div>`;
 
@@ -1946,6 +1946,18 @@ export function buildPage(o: {
         }${
           e.discounted ? `, with ${e.discounted} discounted leg${e.discounted === 1 ? '' : 's'}` : ''
         }</span>
+        ${(() => {
+          // The one number that says how much of this entry rests on something
+          // measured. Legs the crowd chose are backed by a signal that does not
+          // depend on our projection; the rest are not backed by anything that
+          // has survived a measurement.
+          const backed = e.legs.filter((l) => l.source === 'consensus').length;
+          return backed === e.legs.length
+            ? '<span class="sub ok">every leg picked by the books</span>'
+            : backed === 0
+              ? '<span class="sub warn">no leg has a book consensus behind it — projection only</span>'
+              : `<span class="sub">${backed} of ${e.legs.length} legs picked by the books</span>`;
+        })()}
       </div>
       <div class="evbar">
         <span class="evnum ${ev === null ? 'flat' : cls}">${
@@ -1980,7 +1992,16 @@ export function buildPage(o: {
               <span class="at">${l.play.line.toFixed(1)}</span>
             </div></td>
         <td class="n probcol"><span class="fig sm">${(l.p * 100).toFixed(0)}%</span>
-            <div class="meta">${l.play.method === 'series' ? `${l.play.series} series` : 'modelled'}</div></td>
+            <div class="meta">${
+              // Which signal chose this side, because they are not equally
+              // trustworthy and a slip should not hide the difference. The
+              // projection has been measured at AUC 0.495 — no ability to tell
+              // a winner from a loser — so a leg resting on it is a leg resting
+              // on nothing, however confident the percentage looks.
+              l.source === 'consensus'
+                ? `<span title="Direction read off the other books: this app is ${l.gap?.toFixed(1)} off their median. No projection involved.">${l.gap?.toFixed(1)} off the crowd</span>`
+                : `<span title="No consensus available — fewer than three books price this market, so the side comes from our projection, which has been measured at AUC 0.495 and has shown no ability to pick winners.">projection only</span>`
+            }</div></td>
         <td class="n multcol">${
           Math.abs(l.mult - 1) > 0.005
             ? `<span class="est">${l.mult.toFixed(2)}×</span>`

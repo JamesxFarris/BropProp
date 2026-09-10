@@ -226,6 +226,121 @@ Recorded so nobody spends money or a verification queue on a solved problem.
   hands over better stats than a demo parse would yield, for none of the
   compute, storage or effort.
 
+## Consensus across books — the one signal that is not our projection
+
+Built 2026-09-10, **and not yet measured**. Read this before trusting anything
+the board's edge chip says.
+
+### Why this exists
+
+Everything the board used to rank on traced back to `recommend()` in
+`src/web/projection.ts`, and that path has been graded: **AUC 0.495** over 323
+calls. A call it rates 75% wins no more often than one it rates 56%. Ranking
+legs by that is ranking them by noise, so slips built on it inherit the noise.
+
+Every DFS comparison tool worth copying — OddsJam, and the LCS Larry style of
+thing — solves this without a model. They cannot use sharp books either: no
+sharp book prices esports player props at all (Bovada's esports feed is
+moneyline, map spread and total maps, and Pinnacle's is the same). What they do
+instead is price against **each other**: build a consensus line from many DFS
+books, then find the book that is out of step with it. The direction comes from
+the crowd rather than from a forecast.
+
+### The arithmetic that makes three books the whole ballgame
+
+**Two books cannot produce a consensus.** The median of two numbers is their
+midpoint, and which of the two is the outlier is symmetric — if PrizePicks says
+28.5 and Underdog says 30.5, nothing in those two numbers says which is wrong.
+
+This is worth stating plainly because it **re-frames the 41-41 stale-line
+result** further down this file. That measurement is often read as "line
+disagreement was tested and does not pay". It is not. Unable to get a direction
+out of a two-book disagreement, `stale.ts` used *movement* as a proxy for
+direction — and movement was then measured to predict what the other book will
+print, not what the player will do. The consensus question was never tested,
+because at two books it was not testable.
+
+At three books it becomes testable: 28.5 / 30.5 / 30.5 says the crowd is on
+30.5 and PrizePicks is two full kills cheap on the over.
+
+### What was built
+
+- `src/books.ts` — one registry, replacing `'prizepicks' | 'underdog'` at a
+  dozen type sites and `b === 'prizepicks' ? 'PP' : 'UD'` at a dozen more.
+- `src/web/boardq.ts` — a market row now carries `books: BookLine[]` instead of
+  pivoted `pp_`/`ud_` columns. `spread` replaces the signed `delta`.
+- `src/web/consensus.ts` — the signal itself.
+- `db/015_books_generic.sql` — side availability moved off hardcoded book codes
+  onto a `prices_sides` flag per book.
+- `npm run validate:consensus` — the measurement, which currently prints
+  "nothing to measure".
+
+Two bugs surfaced during the rewrite and are fixed:
+
+- the old pivot took `max(line)` and `max(prop_id)` as **separate** aggregates,
+  so a book listing one market twice could show one prop's line above another
+  prop's take button. `DISTINCT ON` now keeps a whole row together.
+- `WrongBookError` named the prop's book as "whichever one isn't the slip's",
+  which stops being an answer at three books.
+
+### The rules it follows, and why
+
+**Median, not mean.** One book listing a stale or fat-fingered number is the
+exact thing being detected; a mean would launder that outlier into the baseline
+it is being measured against.
+
+**Every book weighted equally.** These are all soft DFS apps pricing the same
+recreational flow. There is no measurement here saying one is closer to true,
+and inventing weights would be inventing the answer.
+
+**Leave-one-out from four books up, all-books median at exactly three.**
+Measuring a book against a median it sits inside understates its own gap. But
+dropping one of three leaves a two-book midpoint — contaminated by the very
+outlier being measured — which reported the two books that *agree with each
+other* as each being 1.0 off the market. At three, self-inclusion is the lesser
+error, and it errs by shrinking the gap: an edge that reads too small costs a
+bet that was there, one that reads too large invents a bet that was not.
+
+**Location from the market, shape from history.** Turning a gap in stat units
+into a probability needs to know how widely the player swings. So the sample
+comes from history and is then slid bodily along until its median sits on the
+consensus line. The market decides where the middle is; history only says how
+far from the middle this player lands. **Our own mean is never consulted** —
+that is the number measured at AUC 0.495, and it over-projects by +0.65 units
+on 61% of markets. Its estimate of *spread* faces no such problem.
+
+**The optimiser prefers consensus and does not blend.** Where a consensus
+exists the side comes from it; where none does, the projection decides and the
+leg is labelled `projection only` on the Build page. Averaging a
+measured-useless estimate into a measured-useful one only adds noise and makes
+the result impossible to attribute when it is finally scored.
+
+### What is NOT known
+
+**Whether any of this wins.** It has never been measured, because it cannot be:
+a consensus needs three books and only two have ever been logged. `npm run
+validate:consensus` exists and currently reports "nothing to measure".
+
+The bar when data arrives is **not** "is the hit rate above 55%". It is "does
+this beat a coin flip across independent SERIES", tested with the exact sign
+test that script prints. Legs inside a series share length, overtime and pace —
+this project has been fooled by leg-level statistics three times now, most
+memorably a z = 5.11 per leg that was p = 0.077 per series.
+
+The measurement will also be slightly **optimistic**: reconstructing side
+availability from snapshots is not possible, so it assumes every flagged side
+was takeable when some were not.
+
+**Until it clears that bar, the board must not present this as a proven edge.**
+It is currently presented as what it is: a price that is out of step with the
+market, with the direction that follows mechanically from that.
+
+### The board, right now, shows nothing
+
+With two books the edge chip never renders, `bookEdges()` returns `[]`, and the
+optimiser falls back to the projection on every leg. That blankness is correct
+and is the honest state of the system. It lights up the day a third book lands.
+
 ## More books, and what a sharp line is actually worth
 
 Probed 2026-09-08. The short version: the sharp-sportsbook idea does not pay
@@ -337,7 +452,12 @@ there is nothing here to bet on.
 
 So the 6.5-to-1 agreement figure above is real and it is about **book
 behaviour**: a move predicts what the other book will print, not what the
-player will do. Those are different claims and only the first survived. The
+player will do. Those are different claims and only the first survived.
+
+**This does not close off consensus pricing** — see "Consensus across books"
+near the top of this file. What failed here was *movement* as a proxy for
+direction, which was the only direction available with two books. Where a book
+sits relative to a CROWD is a different question and was never testable at two. The
 board still shows the disagreement, because a standing 1.0-unit gap is worth
 knowing when choosing where to place a bet you were making anyway — it is
 labelled as an observation, and must not be dressed up as an edge.

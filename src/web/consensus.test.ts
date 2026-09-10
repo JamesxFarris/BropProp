@@ -1,7 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { consensusLine, bookEdges, bestEdge, betterSide, median, MIN_BOOKS } from './consensus.js';
+import {
+  consensusLine, bookEdges, bestEdge, betterSide, median, edgeProbability, MIN_BOOKS,
+} from './consensus.js';
 import type { BookLine } from './boardq.js';
+import type { FormStats } from './projection.js';
 
 /** A book line with only the fields these functions read. */
 function bl(book: string, line: number, over = true, under = true): BookLine {
@@ -147,4 +150,99 @@ test('betterSide on a book that does not price the market is not an opinion', ()
 
 test('MIN_BOOKS is three — the arithmetic minimum for a majority', () => {
   assert.equal(MIN_BOOKS, 3);
+});
+
+// ------------------------------------------------------- gap to probability --
+
+/** A player whose real range totals are known exactly. */
+function form(totals: number[], mapValues: number[] = []): FormStats {
+  const n = totals.length;
+  const mean = n ? totals.reduce((a, b) => a + b, 0) / n : 0;
+  return { series: n, mean, sd: null, totals, mapValues, perMap: null };
+}
+
+const edge = (line: number, fair: number, side: 'over' | 'under' = 'over') => ({
+  book: 'prizepicks', propId: 1, side, line, fair, gap: Math.abs(fair - line), offered: true,
+});
+
+test('with no history there is no probability, and that is not 50%', () => {
+  // A market we cannot size is not a market known to be a coin flip.
+  assert.equal(edgeProbability(edge(28.5, 30.5), undefined, 1, 's'), null);
+  assert.equal(edgeProbability(edge(28.5, 30.5), form([], []), 1, 's'), null);
+});
+
+test('a line ON the consensus is a coin flip by construction', () => {
+  // The sample is slid until its median sits on the fair line, so asking about
+  // the fair line itself must come back at about half. This is the property the
+  // whole method rests on.
+  const f = form([20, 24, 28, 32, 36, 40]);
+  const p = edgeProbability(edge(30, 30), f, 1, 's')!;
+  assert.ok(Math.abs(p.p - 0.5) < 1e-9, `expected ~0.5, got ${p.p}`);
+});
+
+test('a cheaper line wins more often than the consensus line', () => {
+  const f = form([20, 24, 28, 32, 36, 40]);
+  const atFair = edgeProbability(edge(30, 30), f, 1, 's')!.p;
+  const cheaper = edgeProbability(edge(26, 30), f, 1, 's')!.p;
+  assert.ok(cheaper > atFair, 'an over four units below the crowd must be likelier');
+});
+
+test('our own mean cannot leak in — only the spread is used', () => {
+  // Two players with identical spread but wildly different averages. Anchoring
+  // to the market means the answer depends on the shape alone, so both must
+  // give the same probability at the same gap. If the projection's location
+  // estimate were involved these would differ, which is exactly the bias
+  // (+0.65 units, 61% of markets projected over) being kept out.
+  const low = form([10, 14, 18, 22, 26, 30]);
+  const high = form([110, 114, 118, 122, 126, 130]);
+  const a = edgeProbability(edge(28, 30), low, 1, 's')!.p;
+  const b = edgeProbability(edge(28, 30), high, 1, 's')!.p;
+  assert.equal(a, b, 'same spread and same gap must give the same probability');
+});
+
+test('a wider spread turns the same gap into a smaller edge', () => {
+  // Two kills off the crowd is nearly certain for a metronome and close to
+  // noise for a player who swings 30 either way. An absolute MIN_EDGE of 0.5
+  // across every market cannot express this, which is the defect it fixes.
+  const tight = form([29, 29.5, 30, 30, 30.5, 31]);
+  const wide = form([0, 15, 30, 30, 45, 60]);
+  const t = edgeProbability(edge(28, 30), tight, 1, 's')!.p;
+  const w = edgeProbability(edge(28, 30), wide, 1, 's')!.p;
+  assert.ok(t > w, `tight ${t} should beat wide ${w}`);
+});
+
+test('the under side is scored in the right direction', () => {
+  const f = form([20, 24, 28, 32, 36, 40]);
+  // A book 4 above the crowd leaves room underneath.
+  const p = edgeProbability(edge(34, 30, 'under'), f, 1, 's')!;
+  assert.ok(p.p > 0.5, 'an under four units above the crowd must be likelier than not');
+});
+
+test('pushes leave the denominator rather than counting as half a win', () => {
+  // Six totals, two landing exactly on the line after the shift. Counting them
+  // as half-wins would inflate every whole-numbered line.
+  const f = form([28, 30, 30, 30, 32, 34]);
+  const p = edgeProbability(edge(30, 30), f, 1, 's')!;
+  // Median is 30, fair is 30, so no shift. Two of six are above, one below,
+  // three push. Decided legs: 3 -> 2 over, 1 under.
+  assert.ok(Math.abs(p.p - 2 / 3) < 1e-9, `expected 2/3, got ${p.p}`);
+});
+
+test('real totals are preferred, and thin totals fall back to resampling', () => {
+  const plenty = form([20, 24, 28, 32, 36, 40], [10, 12, 14]);
+  assert.equal(edgeProbability(edge(28, 30), plenty, 1, 's')!.method, 'totals');
+
+  // Three totals is below the bar, so the single-map history is used instead.
+  const thin = form([20, 24, 28], [10, 12, 14, 16, 18, 20, 22, 24]);
+  const r = edgeProbability(edge(14, 16), thin, 1, 's')!;
+  assert.equal(r.method, 'resampled');
+});
+
+test('resampled evidence is counted in maps, not in draws', () => {
+  // 4,000 draws off twelve maps is twelve observations' worth of evidence for
+  // a one-map range, and six for a two-map one. Reporting the draw count would
+  // defeat every shrink the caller applies.
+  const f = form([], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+  assert.equal(edgeProbability(edge(5, 6), f, 1, 's')!.n, 12);
+  assert.equal(edgeProbability(edge(11, 13), f, 2, 's')!.n, 6);
 });

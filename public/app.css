@@ -1688,3 +1688,34 @@ body.searching .tick { display: none; }
   font-size: 12px; font-weight: 500; color: var(--text-3);
   margin: 0 4px;
 }
+
+/* ---- consensus edge ---------------------------------------------------
+   Where a book sits against the crowd — the only cell on the board whose
+   direction does not come from our own projection.
+
+   Deliberately heavier than `.stale` directly above it, and the two sit in
+   the same cell so the contrast is the point. The stale chip reports book
+   behaviour and has been measured at 41-41; this one reports a price that is
+   out of step with the market, which is the thing worth acting on. Outlined
+   rather than merely tinted, because it IS a verdict.
+
+   It appears only where three or more books price a market. Below that there
+   is no consensus to be off — see src/web/consensus.ts — so on a two-book
+   board this rule never matches anything, and that blankness is correct. */
+.edge {
+  display: flex; width: fit-content; align-items: baseline; gap: 6px;
+  margin: 0 auto 4px; padding: 1px 6px;
+  border: 1px solid currentColor;
+  border-radius: var(--r-chip);
+  white-space: nowrap;
+  font-size: 11px; font-weight: 700;
+  line-height: 1.4;
+}
+.edge.o { color: var(--over); background: var(--over-bg); }
+.edge.u { color: var(--under); background: var(--under-bg); }
+.edge-k { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.edge-v { color: var(--text-2); font-weight: 500; }
+
+/* On the build page: how much of an entry rests on something measured. */
+.sub.ok { color: var(--over); }
+.sub.warn { color: var(--under); }

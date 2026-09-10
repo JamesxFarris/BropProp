@@ -27,7 +27,8 @@
     "bo3:rounds": "tsx src/results/bo3_rounds.ts",
     "bo3:resume": "tsx src/results/backfill_resume.ts",
     "validate:stale": "tsx src/results/validate_stale.ts",
-    "validate:calls": "tsx src/results/validate_calls.ts"
+    "validate:calls": "tsx src/results/validate_calls.ts",
+    "validate:consensus": "tsx src/results/validate_consensus.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.7",
