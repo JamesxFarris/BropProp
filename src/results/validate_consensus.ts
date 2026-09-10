@@ -267,7 +267,7 @@ export async function main(): Promise<void> {
         // the direction to be aware of when reading the result.
         over_ok: true, under_ok: true,
         over_mult: null, under_mult: null,
-        moved: null, last_move: null, last_move_at: null, side: null,
+        moved: null, last_move: null, last_move_at: null, side: null, team: null,
       });
     }
     if (lines.length < 2) continue;

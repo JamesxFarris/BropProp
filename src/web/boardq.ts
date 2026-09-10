@@ -33,6 +33,13 @@ export type BookLine = {
   last_move_at: string | null;
   /** Side of an open pick on this prop, if there is one. */
   side: string | null;
+  /**
+   * The player's team, as the book names it.
+   *
+   * Teammates correlate roughly four times as strongly as opponents, so this is
+   * what lets the slip maths tell a genuine stack from an assortment.
+   */
+  team: string | null;
 };
 
 export type MarketRow = {
@@ -120,7 +127,7 @@ export async function markets(opts: {
               c.book, c.prop_id, c.line, c.is_combo, c.handle,
               c.match_title, c.scheduled_at, c.last_seen_at,
               c.over_price, c.under_price, c.over_ok, c.under_ok,
-              c.over_multiplier, c.under_multiplier,
+              c.over_multiplier, c.under_multiplier, c.team_name,
               -- Selected because it is ordered on. Nothing downstream reads
               -- it; leaving it out of the list is the kind of thing that works
               -- until a Postgres upgrade decides it shouldn't.
@@ -167,7 +174,8 @@ export async function markets(opts: {
                 'moved',         b.moved::float8,
                 'last_move',     b.last_move::float8,
                 'last_move_at',  b.last_move_at,
-                'side',          b.side
+                'side',          b.side,
+                'team',          b.team_name
               ) ORDER BY b.book)                         AS books
        FROM bl b
        GROUP BY b.canon_handle, b.league, b.stat, b.map_start, b.map_end

@@ -62,6 +62,8 @@ export type Candidate = {
   /** p x mult — the whole objective, per leg. */
   value: number;
   matchKey: string;
+  /** The player's team, for the teammate-vs-opponent correlation split. */
+  team: string | null;
   /** Every player this leg's outcome depends on — a combo depends on all of its members. */
   players: string[];
 };
@@ -262,6 +264,7 @@ export function candidatesFor(
       gap: useConsensus ? edge.gap : null,
       value: p * mult,
       matchKey: r.match_title ?? `?${r.canon_handle}`,
+      team: mine.team,
       players: parts.length >= 2 ? parts : [r.canon_handle],
     });
   }
@@ -361,7 +364,7 @@ export function bestEntry(
    * so the page can show what the assumption was worth.
    */
   const slipLegs: SlipLeg[] = legs.map((l) => ({
-    p: l.p, matchKey: l.matchKey, side: l.play.side,
+    p: l.p, matchKey: l.matchKey, side: l.play.side, team: l.team,
   }));
   const winProb = probAllWin(slipLegs);
   const winProbIndependent = legs.reduce((acc, l) => acc * l.p, 1);
@@ -424,4 +427,152 @@ export function buildEntries(
   return sizes
     .map((n) => bestEntry(cands, n, book))
     .filter((e): e is Entry => e !== null);
+}
+
+/**
+ * Search for the strongest slip, instead of taking the N best legs.
+ *
+ * `bestEntry` is greedy: it sorts legs by their own value and fills. That is
+ * exact when legs are independent, and they are not. Once teammates correlate
+ * at rho 0.324, the best six-leg entry is usually NOT the six best legs — it is
+ * six legs that win TOGETHER, which means a stack on one team.
+ *
+ * The measured numbers say how much this matters. Six legs spread over six
+ * matches need 64x to break even at coin-flip legs; five on one team plus an
+ * opponent need 15.56x. PrizePicks was quoted at 22x for exactly that shape.
+ * Same six legs' worth of risk, a four-fold difference in what it has to pay.
+ *
+ * ## Why this is a search and not a formula
+ *
+ * The objective no longer factorises. `payout x P(all win)` with correlated
+ * legs cannot be maximised leg by leg, because a leg's contribution depends on
+ * who else is in the slip. So this enumerates candidate SHAPES — one team's
+ * players plus a partner — rather than candidate legs, which keeps the search
+ * small: there are only so many teams on a board, and a stack is defined by its
+ * team.
+ *
+ * ## What it does NOT do
+ *
+ * It does not decide the side. That comes from each candidate's own play, which
+ * traces back either to the book consensus or to the projection — and both have
+ * been graded at a coin flip. What this optimises is the SHAPE, which is the
+ * part with a measured edge behind it.
+ */
+export type Stack = {
+  book: BookCode;
+  /** The team the stack is built on. */
+  team: string;
+  matchKey: string;
+  legs: Candidate[];
+  /** Every leg pointed the same way — the shape the correlation rewards. */
+  aligned: boolean;
+  side: 'over' | 'under' | 'mixed';
+  winProb: number;
+  winProbIndependent: number;
+  /** The multiplier this has to be paid to break even. Compare with the app. */
+  requiredMultiplier: number;
+  /** How much the correlation is worth here, as a ratio of win probabilities. */
+  lift: number;
+};
+
+/**
+ * Every stack worth looking at, best first.
+ *
+ * "Best" is the LOWEST required multiplier, because that is the number the
+ * reader compares against what the app quotes them. A slip needing 10.85x is
+ * strictly easier to beat than one needing 23.09x, whatever either one's legs
+ * look like individually.
+ */
+export function findStacks(
+  candidates: Candidate[],
+  size: number,
+  book: BookCode,
+  opts: { minTeamLegs?: number } = {},
+): Stack[] {
+  const minTeam = opts.minTeamLegs ?? Math.max(2, size - 1);
+  if (size < 2) return [];
+
+  // Group by match, then by team within it.
+  const byMatch = new Map<string, Candidate[]>();
+  for (const c of candidates) {
+    if (c.team === null) continue;          // cannot stack what we cannot group
+    const arr = byMatch.get(c.matchKey) ?? [];
+    arr.push(c);
+    byMatch.set(c.matchKey, arr);
+  }
+
+  const out: Stack[] = [];
+  for (const [matchKey, inMatch] of byMatch) {
+    const byTeam = new Map<string, Candidate[]>();
+    for (const c of inMatch) {
+      const arr = byTeam.get(c.team!) ?? [];
+      arr.push(c);
+      byTeam.set(c.team!, arr);
+    }
+
+    for (const [team, teamLegs] of byTeam) {
+      // One leg per player, strongest first.
+      const seen = new Set<string>();
+      const pool = [...teamLegs]
+        .sort((a, b) => b.p - a.p)
+        .filter((c) => {
+          if (c.players.some((h) => seen.has(h))) return false;
+          for (const h of c.players) seen.add(h);
+          return true;
+        });
+
+      for (let take = Math.min(pool.length, size); take >= minTeam; take--) {
+        const core = pool.slice(0, take);
+        const need = size - take;
+
+        // Partners come from the other team in the same match first — that
+        // keeps the match factor working for us — and PrizePicks requires two
+        // different teams in a lineup anyway, so a pure stack is unbuildable.
+        const others = inMatch
+          .filter((c) => c.team !== team && !core.some((k) => k.propId === c.propId))
+          .sort((a, b) => b.p - a.p);
+        const partners = others.slice(0, need);
+        if (partners.length < need) continue;
+
+        const legs = [...core, ...partners];
+        if (legs.length !== size) continue;
+        if (new Set(legs.flatMap((l) => l.players)).size !== legs.flatMap((l) => l.players).length) continue;
+
+        /**
+         * Two different teams, always.
+         *
+         * PrizePicks refuses a lineup drawn from a single team, so a pure stack
+         * is not a slip — it is a screenshot of one. Without this the search
+         * happily returns the highest-correlation shape on the board and the
+         * best number on the page is one the app will not accept.
+         */
+        if (new Set(legs.map((l) => l.team)).size < 2) continue;
+
+        const slipLegs: SlipLeg[] = legs.map((l) => ({
+          p: l.p, matchKey: l.matchKey, side: l.play.side, team: l.team,
+        }));
+        const winProb = probAllWin(slipLegs);
+        const indep = legs.reduce((acc, l) => acc * l.p, 1);
+        if (!(winProb > 0)) continue;
+
+        const sides = new Set(legs.map((l) => l.play.side));
+        out.push({
+          book, team, matchKey, legs,
+          aligned: sides.size === 1,
+          side: sides.size === 1 ? [...sides][0]! : 'mixed',
+          winProb,
+          winProbIndependent: indep,
+          requiredMultiplier: 1 / winProb,
+          lift: indep > 0 ? winProb / indep : 1,
+        });
+      }
+    }
+  }
+
+  // Lowest bar first. Ties go to the aligned stack, since a mixed one is
+  // fighting itself: an over and an under in the same match hit 20.56% against
+  // 24.85% under independence.
+  return out.sort((a, b) =>
+    a.requiredMultiplier - b.requiredMultiplier
+    || Number(b.aligned) - Number(a.aligned));
 }

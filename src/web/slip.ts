@@ -120,7 +120,7 @@ export function normInv(p: number): number {
        / (((((b[0]!*r+b[1]!)*r+b[2]!)*r+b[3]!)*r+b[4]!)*r+1);
 }
 
-/** One leg, reduced to the only two things the slip maths needs. */
+/** One leg, reduced to what the slip maths needs. */
 export type SlipLeg = {
   /** Win probability on its own. */
   p: number;
@@ -128,6 +128,16 @@ export type SlipLeg = {
   matchKey: string;
   /** Which way it is pointed, so opposed legs in a match can cancel. */
   side: 'over' | 'under';
+  /**
+   * The player's team.
+   *
+   * This is the field that matters most. Teammates correlate at rho 0.324;
+   * opponents at 0.086 — nearly four times weaker. Null means unknown, and an
+   * unknown team is treated as its own team, so two legs of unknown provenance
+   * get the weaker opponent correlation rather than the stronger teammate one.
+   * Guessing high here would make every slip look better than it is.
+   */
+  team?: string | null;
 };
 
 /** Convolve two independent win-count distributions. */
@@ -149,14 +159,31 @@ function convolve(a: number[], b: number[]): number[] {
  * loading flipped, which is what reproduces the measured 0.828x for mixed
  * directions rather than assuming it.
  */
-export function winCountDistribution(legs: SlipLeg[], rho = RHO): number[] {
+export function winCountDistribution(legs: SlipLeg[], rho?: number): number[] {
   if (legs.length === 0) return [1];
+
+  /*
+   * Two nested factors, because the measurement says there are two.
+   *
+   *   z = sqrt(a)·M  +  sqrt(b)·T  +  sqrt(1 - a - b)·e
+   *
+   * M is the match: how long, how bloody, how many maps — it moves everyone
+   * playing, which is the opponent-level correlation of 0.086. T is the team:
+   * whether THIS side had the good game, which is the extra that lifts
+   * teammates to 0.324. A single-factor model cannot express the gap, and the
+   * gap is where the entire edge lives.
+   *
+   * Passing an explicit rho collapses this back to one factor at that value,
+   * which is what the tests use to check a specific correlation in isolation.
+   */
+  const a = rho !== undefined ? rho : RHO_OPPONENT;
+  const b = rho !== undefined ? 0 : RHO_TEAMMATE - RHO_OPPONENT;
 
   const byMatch = new Map<string, SlipLeg[]>();
   for (const l of legs) {
-    const a = byMatch.get(l.matchKey) ?? [];
-    a.push(l);
-    byMatch.set(l.matchKey, a);
+    const arr = byMatch.get(l.matchKey) ?? [];
+    arr.push(l);
+    byMatch.set(l.matchKey, arr);
   }
 
   // A 241-point grid over [-6, 6] integrates a standard normal to better than
@@ -175,31 +202,55 @@ export function winCountDistribution(legs: SlipLeg[], rho = RHO): number[] {
   }
   for (let i = 0; i < NODES; i++) weights[i]! /= wsum;
 
+  const sa = Math.sqrt(a), sb = Math.sqrt(b), se = Math.sqrt(Math.max(1e-9, 1 - a - b));
+
   let total: number[] = [1];
   for (const group of byMatch.values()) {
     // The direction the match as a whole is committed to: whichever side has
-    // more legs. A leg opposing it loads on the factor negatively.
+    // more legs. A leg opposing it loads on the factors negatively, which is
+    // what reproduces the measured 0.828x for mixed directions.
     const overs = group.filter((l) => l.side === 'over').length;
     const majority: 'over' | 'under' = overs >= group.length - overs ? 'over' : 'under';
 
-    const dist = new Array(group.length + 1).fill(0);
+    // Teams within this match. An unknown team gets its own bucket, so two
+    // unknowns are treated as opponents rather than as teammates.
+    const byTeam = new Map<string, SlipLeg[]>();
+    let unknown = 0;
+    for (const l of group) {
+      const key = l.team ?? `?unknown${unknown++}`;
+      const arr = byTeam.get(key) ?? [];
+      arr.push(l);
+      byTeam.set(key, arr);
+    }
+
+    let dist = new Array(group.length + 1).fill(0);
     for (let n = 0; n < NODES; n++) {
-      const f = nodes[n]!;
-      let cond: number[] = [1];
-      for (const leg of group) {
-        const r = leg.side === majority ? rho : -rho;
-        const sr = Math.sqrt(Math.abs(r)) * Math.sign(r);
-        const thr = normInv(1 - leg.p);
-        // P(win | f) with loading sr on the shared factor.
-        const pw = 1 - normCdf((thr - sr * f) / Math.sqrt(1 - Math.abs(r)));
-        const next = new Array(cond.length + 1).fill(0);
-        for (let k = 0; k < cond.length; k++) {
-          next[k]! += cond[k]! * (1 - pw);
-          next[k + 1]! += cond[k]! * pw;
+      const m = nodes[n]!;
+      // Teams are conditionally independent given the match factor, so each
+      // team's own distribution is built separately and convolved.
+      let matchDist: number[] = [1];
+      for (const team of byTeam.values()) {
+        const teamDist = new Array(team.length + 1).fill(0);
+        for (let tn = 0; tn < NODES; tn++) {
+          const t = nodes[tn]!;
+          let cond: number[] = [1];
+          for (const leg of team) {
+            const sign = leg.side === majority ? 1 : -1;
+            const shift = sign * (sa * m + sb * t);
+            const thr = normInv(1 - leg.p);
+            const pw = 1 - normCdf((thr - shift) / se);
+            const next = new Array(cond.length + 1).fill(0);
+            for (let k = 0; k < cond.length; k++) {
+              next[k]! += cond[k]! * (1 - pw);
+              next[k + 1]! += cond[k]! * pw;
+            }
+            cond = next;
+          }
+          for (let k = 0; k < cond.length; k++) teamDist[k]! += weights[tn]! * cond[k]!;
         }
-        cond = next;
+        matchDist = convolve(matchDist, teamDist);
       }
-      for (let k = 0; k < cond.length; k++) dist[k]! += weights[n]! * cond[k]!;
+      for (let k = 0; k < matchDist.length; k++) dist[k]! += weights[n]! * matchDist[k]!;
     }
     total = convolve(total, dist);
   }
@@ -207,7 +258,7 @@ export function winCountDistribution(legs: SlipLeg[], rho = RHO): number[] {
 }
 
 /** P(every leg wins) — the only number an all-must-win entry needs. */
-export function probAllWin(legs: SlipLeg[], rho = RHO): number {
+export function probAllWin(legs: SlipLeg[], rho?: number): number {
   const d = winCountDistribution(legs, rho);
   return d[d.length - 1] ?? 0;
 }
@@ -222,7 +273,7 @@ export function probAllWin(legs: SlipLeg[], rho = RHO): number {
  * fees" and the rest. A 6-pick is not always 37.5x; it can be 23x or 28x, and
  * only the app knows which.
  */
-export function requiredMultiplier(legs: SlipLeg[], rho = RHO): number | null {
+export function requiredMultiplier(legs: SlipLeg[], rho?: number): number | null {
   const p = probAllWin(legs, rho);
   return p > 0 ? 1 / p : null;
 }
@@ -234,7 +285,7 @@ export function requiredMultiplier(legs: SlipLeg[], rho = RHO): number | null {
  * all-must-win entry is just the special case where every entry but the last is
  * zero, so Power and Flex go through the same function and cannot drift apart.
  */
-export function slipEV(legs: SlipLeg[], payouts: Record<number, number>, rho = RHO): number {
+export function slipEV(legs: SlipLeg[], payouts: Record<number, number>, rho?: number): number {
   const d = winCountDistribution(legs, rho);
   let ev = 0;
   for (let k = 0; k < d.length; k++) ev += (payouts[k] ?? 0) * d[k]!;

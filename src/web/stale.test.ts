@@ -23,7 +23,7 @@ function bl(
     over_price: null, under_price: null,
     over_ok: sides.over ?? true, under_ok: sides.under ?? true,
     over_mult: null, under_mult: null,
-    moved: null, last_move: move, last_move_at: moveAt, side: null,
+    moved: null, last_move: move, last_move_at: moveAt, side: null, team: null,
   };
 }
 

@@ -30,7 +30,7 @@ function bl(book: string, line: number): BookLine {
     book, line, prop_id: 1,
     over_price: null, under_price: null, over_ok: true, under_ok: true,
     over_mult: null, under_mult: null,
-    moved: null, last_move: null, last_move_at: null, side: null,
+    moved: null, last_move: null, last_move_at: null, side: null, team: null,
   };
 }
 

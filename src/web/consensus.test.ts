@@ -13,7 +13,7 @@ function bl(book: string, line: number, over = true, under = true): BookLine {
     over_price: null, under_price: null,
     over_ok: over, under_ok: under,
     over_mult: null, under_mult: null,
-    moved: null, last_move: null, last_move_at: null, side: null,
+    moved: null, last_move: null, last_move_at: null, side: null, team: null,
   };
 }
 

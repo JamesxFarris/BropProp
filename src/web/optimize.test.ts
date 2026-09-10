@@ -28,6 +28,7 @@ const cand = (o: {
     mult: o.mult ?? 1,
     value: (o.p ?? 0.6) * (o.mult ?? 1),
     source: 'model',
+    team: null,
     gap: null,
     matchKey: o.match,
     players: [player],
@@ -138,7 +139,7 @@ function line(book: string, l: number): BookLine {
     book, line: l, prop_id: Math.round(l * 100),
     over_price: null, under_price: null, over_ok: true, under_ok: true,
     over_mult: null, under_mult: null,
-    moved: null, last_move: null, last_move_at: null, side: null,
+    moved: null, last_move: null, last_move_at: null, side: null, team: null,
   };
 }
 
@@ -215,4 +216,106 @@ test('a bigger gap outranks a smaller one', () => {
   const c = candidatesFor(rows, history, 'prizepicks');
   assert.equal(c.length, 2);
   assert.ok(c[0]!.gap! > c[1]!.gap!, 'ranked by value, and a wider gap wins more often');
+});
+
+// ------------------------------------------------- the stack search --------
+
+import { findStacks } from './optimize.js';
+
+function stackCand(o: {
+  player: string; team: string; match: string; p: number; side?: 'over' | 'under';
+}): Candidate {
+  return {
+    row: { handle: o.player } as never,
+    play: { side: o.side ?? 'under', line: 20, hitRate: o.p } as never,
+    propId: Math.abs([...o.player].reduce((a, c) => a * 31 + c.charCodeAt(0), 7)) % 100000,
+    p: o.p, mult: 1, value: o.p,
+    source: 'model', gap: null,
+    matchKey: o.match, team: o.team, players: [o.player],
+  } as Candidate;
+}
+
+/** Five on one team plus one opponent, all pointed the same way. */
+function oneMatchBoard(match: string, teamA: string, teamB: string, p = 0.553) {
+  const out: Candidate[] = [];
+  for (let i = 0; i < 5; i++) out.push(stackCand({ player: `${teamA}-${i}`, team: teamA, match, p }));
+  for (let i = 0; i < 5; i++) out.push(stackCand({ player: `${teamB}-${i}`, team: teamB, match, p }));
+  return out;
+}
+
+test('a stack needs a far lower multiplier than the same legs spread out', () => {
+  // The whole point of the search. Six legs of identical strength: concentrated
+  // on one team they win together, scattered they do not.
+  const stacked = findStacks(oneMatchBoard('A vs B', 'A', 'B'), 6, 'prizepicks')[0]!;
+  assert.ok(stacked, 'a six-leg stack should be findable on a ten-player match');
+
+  const spread: Candidate[] = [];
+  for (let i = 0; i < 6; i++) {
+    spread.push(stackCand({ player: `p${i}`, team: `T${i}`, match: `M${i}`, p: 0.553 }));
+  }
+  const spreadProb = spread.reduce((acc, l) => acc * l.p, 1);
+
+  assert.ok(stacked.winProb > spreadProb,
+    `stack ${stacked.winProb} should beat spread ${spreadProb}`);
+  assert.ok(stacked.requiredMultiplier < 1 / spreadProb);
+});
+
+test('the correlation lift is reported and is greater than one', () => {
+  const s = findStacks(oneMatchBoard('A vs B', 'A', 'B'), 6, 'prizepicks')[0]!;
+  assert.ok(s.lift > 1.2, `expected a real lift, got ${s.lift}`);
+  assert.ok(Math.abs(s.winProb / s.winProbIndependent - s.lift) < 1e-9);
+});
+
+test('an aligned stack is preferred to one fighting itself', () => {
+  // An over and an under in the same match hit 20.56% against 24.85% under
+  // independence. A mixed stack must never outrank an aligned one.
+  const board = oneMatchBoard('A vs B', 'A', 'B');
+  board[2] = stackCand({ player: 'A-2', team: 'A', match: 'A vs B', p: 0.553, side: 'over' });
+  const stacks = findStacks(board, 6, 'prizepicks');
+  const aligned = stacks.find((s) => s.aligned);
+  const mixed = stacks.find((s) => !s.aligned);
+  if (aligned && mixed) {
+    assert.ok(aligned.requiredMultiplier <= mixed.requiredMultiplier,
+      'an aligned stack must not need more than a mixed one');
+  }
+});
+
+test('stacks come back easiest-to-beat first', () => {
+  const stacks = findStacks(oneMatchBoard('A vs B', 'A', 'B'), 6, 'prizepicks');
+  for (let i = 1; i < stacks.length; i++) {
+    assert.ok(stacks[i - 1]!.requiredMultiplier <= stacks[i]!.requiredMultiplier);
+  }
+});
+
+test('one leg per player, even across a team', () => {
+  const board = oneMatchBoard('A vs B', 'A', 'B');
+  // A second market on a player already in the pool.
+  board.push(stackCand({ player: 'A-0', team: 'A', match: 'A vs B', p: 0.99 }));
+  for (const s of findStacks(board, 6, 'prizepicks')) {
+    const names = s.legs.flatMap((l) => l.players);
+    assert.equal(new Set(names).size, names.length, 'a player appears twice');
+  }
+});
+
+test('legs with no team cannot be stacked', () => {
+  // Grouping is the whole mechanism; without a team there is nothing to group.
+  const board = oneMatchBoard('A vs B', 'A', 'B').map((c) => ({ ...c, team: null }));
+  assert.deepEqual(findStacks(board, 6, 'prizepicks'), []);
+});
+
+test('a board with only one team in a match yields no buildable stack', () => {
+  // PrizePicks requires two different teams in a lineup, so a partner must
+  // exist or the shape cannot be entered.
+  const solo: Candidate[] = [];
+  for (let i = 0; i < 6; i++) solo.push(stackCand({ player: `A-${i}`, team: 'A', match: 'A vs B', p: 0.553 }));
+  assert.deepEqual(findStacks(solo, 6, 'prizepicks'), []);
+});
+
+test('the measured shape reproduces the number that made the case', () => {
+  // Five teammates plus one opponent, every leg at the measured 55.3% under
+  // rate, should need about 10.85x — the figure the 22x quote was judged
+  // against.
+  const s = findStacks(oneMatchBoard('A vs B', 'A', 'B', 0.553), 6, 'prizepicks')[0]!;
+  assert.ok(Math.abs(s.requiredMultiplier - 10.85) < 1.2,
+    `expected ~10.85x, got ${s.requiredMultiplier}`);
 });
