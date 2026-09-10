@@ -807,13 +807,21 @@ function staleCell(r: MarketRow): string {
 }
 
 /**
- * Where this market sits against the crowd — the one cell whose direction does
- * not come from our projection.
+ * Where this market sits against the market's own fair line.
  *
- * Blank below three books, and that blankness is the honest state rather than a
- * gap to be filled in. With PrizePicks and Underdog alone there is no consensus
- * to be off: the midpoint of two numbers says nothing about which of them is
- * wrong. See `consensus.ts`. The cell lights up when a third book lands.
+ * **Graded 2026-09-10, and it does not win.** `npm run validate:consensus`
+ * scored the side this cell names across every settled market both books
+ * priced: 74-73 over 147 independent series, an exact sign test of p = 1.00.
+ * Bigger gaps did WORSE, not better — 58.2% at 0.5-0.9 units against 45.7% at
+ * 1.0-1.9 — which is backwards from the theory and is the strongest single
+ * piece of evidence against it. The arm that should have been strongest,
+ * where Underdog states an actual lean rather than flat vig, was the worst at
+ * 30-37 series.
+ *
+ * So this is kept for the same reason `staleCell` is: knowing which app has
+ * the cheaper number is worth something when placing a bet you had already
+ * decided on. It is an observation about two prices, not a claim about a
+ * player, and the tooltip says the measurement.
  */
 function edgeCell(r: MarketRow, form?: FormStats): string {
   const maps = r.map_end - r.map_start + 1;
@@ -828,7 +836,7 @@ function edgeCell(r: MarketRow, form?: FormStats): string {
     ? `the other ${fl.n - 1} books median ${num(e.fair)}`
     : `${esc(bookName(fl.from ?? ''))}, the only book here quoting odds, puts the coin flip at ${num(e.fair)}`;
   return `<div class="edge ${e.side === 'over' ? 'o' : 'u'}"
-    title="${esc(bookName(e.book))} prices this at ${num(e.line)} while ${why}. That makes its ${e.side} ${e.gap.toFixed(1)} cheaper than the market. Direction comes from the books, not from our projection — and it has not yet been graded.">
+    title="${esc(bookName(e.book))} prices this at ${num(e.line)} while ${why}. That makes its ${e.side} ${e.gap.toFixed(1)} cheaper than the market. MEASURED AND IT DOES NOT WIN: 74-73 across 147 independent series, p = 1.00. Useful for choosing where to place a bet you were making anyway; not a reason to make one.">
     <span class="edge-k">${esc(bookShort(e.book))} ${e.side === 'over' ? 'O' : 'U'}</span>
     <span class="edge-v">${e.gap.toFixed(1)} off ${num(e.fair)}</span>
   </div>`;
@@ -1958,12 +1966,13 @@ export function buildPage(o: {
           // measured. Legs the crowd chose are backed by a signal that does not
           // depend on our projection; the rest are not backed by anything that
           // has survived a measurement.
+          // Both sources have now been graded and neither wins: the projection
+          // at AUC 0.495, the market anchor at 74-73 over 147 series. So this
+          // counts them rather than endorsing them — "picked by the books" was
+          // starting to read as a quality mark for a signal measured at a coin
+          // flip, which is exactly the dressing-up this project refuses to do.
           const backed = e.legs.filter((l) => l.source === 'consensus').length;
-          return backed === e.legs.length
-            ? '<span class="sub ok">every leg picked by the books</span>'
-            : backed === 0
-              ? '<span class="sub warn">no leg has a book consensus behind it — projection only</span>'
-              : `<span class="sub">${backed} of ${e.legs.length} legs picked by the books</span>`;
+          return `<span class="sub">${backed} of ${e.legs.length} legs sided by the books, ${e.legs.length - backed} by the projection — neither has beaten a coin flip</span>`;
         })()}
       </div>
       <div class="evbar">

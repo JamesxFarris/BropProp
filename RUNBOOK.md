@@ -584,6 +584,99 @@ Re-run it as outcomes accumulate — 49 matches is thin:
 npm run validate:stale
 ```
 
+
+### GRADED: the market-anchored edge does not win either
+
+Run 2026-09-10 against production with `npm run validate:consensus`. This is
+the fourth signal to be measured here and the fourth to fail.
+
+```
+markets 1715, priced by 2+ books 542, by 3+ books 0
+settled legs 205 (7 pushed, 86 unsettled)
+market side            106-99   51.7%
+
+by gap        0.5-0.9   57-41   58.2%   (98 legs)
+              1.0-1.9   48-57   45.7%   (105 legs)
+              2.0-2.9    1-1    50.0%   (2 legs)
+by league     CS2       95-89   51.6%   (184 legs)
+              LOL       11-10   52.4%   (21 legs)
+by what UD said   flat vig      73-57  56.2%   series 58-46, p = 0.281
+                  stated lean   33-42  44.0%   series 30-37, p = 0.464
+
+independent series 147
+series the market side led  74-73
+exact two-sided sign test   p = 1.000
+```
+
+**74-73 is as dead as a result gets.** But the two supporting numbers matter
+more than the headline, because they say the idea is wrong rather than merely
+unproven:
+
+1. **A bigger gap does WORSE.** 58.2% at 0.5-0.9 units against 45.7% at 1.0-1.9.
+   If being further from the market's fair line meant anything, this would run
+   the other way. It is the strongest single piece of evidence against.
+2. **The arm that should have been strongest was the worst.** Where Underdog
+   states an actual lean rather than flat -112/-112, it went 30-37 by series —
+   below even. Flat vig, where the "signal" reduces to "PrizePicks disagrees
+   with Underdog", was the only arm above water at 58-46, p = 0.281, and that is
+   the same disagreement the stale-line work already measured at 41-41.
+
+Do not read the 58.2% or the flat-vig 56.2% as an edge hiding in a subgroup.
+Both are leg-level, both are inside a null overall result, and the gap
+direction contradicts them.
+
+**Scoreboard so far — four measurements, four failures:**
+
+| Signal | Result |
+|---|---|
+| The projection's own calls | 52.0%, **AUC 0.495** — no ordering to calibrate |
+| Opponent strength | r = 0.018 — nothing |
+| Stale line (one book moved) | 41-41, **50.0%** |
+| Market-anchored edge | 74-73 series, **p = 1.00** |
+
+The board keeps the cell, labelled with its measurement, for the same reason it
+keeps the stale chip: knowing which app holds the cheaper number is worth
+something when placing a bet you had already decided to make. It is not a
+reason to make one.
+
+### OddsPapi, with a key: no esports player props
+
+Checked 2026-09-10 with a real free-tier key, five requests total, all cached
+under `raw/oddspapi-cache/` so a re-run costs nothing.
+
+Every market row carries a `playerProp` boolean, so this is exact rather than a
+keyword guess:
+
+| sportId | | markets | player props |
+|---|---|---|---|
+| 17 | ESport Counter-Strike | 28 | **0** |
+| 18 | ESport League of Legends | 28 | **0** |
+| 10 | Soccer (control) | 1122 | 80 |
+
+Player props exist in this feed only for American Football (1243), Cricket
+(672), Basketball (440), Ice Hockey (214), Baseball (122) and Soccer (80).
+**None for any esport.** The `playerId` parameter on the historical-odds
+endpoint is generic plumbing, not esports coverage — that is what made the
+reference docs look more promising than the blog.
+
+**The free tier is 250 requests a MONTH**, so this can never be a polling
+source. Treat it as a research budget for one-off pulls, and cache everything.
+
+What CS2 and LoL *do* have is exactly the two match-level markets this runbook
+has had on the untested list since 2026-09-09:
+
+- `marketId 173` — **Total Maps Over Under 2.5**. The market's probability that
+  a third map happens, which is the void probability on a maps 1-3 prop.
+- `marketId 1717-1745` — **Maps Handicap**, and `171` Winner. Market-implied
+  mismatch, which is the version of opponent strength that has never been
+  tried; the box-score version died at r = 0.018.
+- `marketId 1747-1755` — per-map winners, including **Third Map Winner**, which
+  bears directly on the map-3 over bias measured at +3.13.
+
+A void is not a small effect on slip maths: it returns the stake and changes
+what every other leg needs. That is worth the request budget in a way another
+attempt at predicting kills is not.
+
 ### Does the board's own "Take" win? No — and the honest n is tiny
 
 ```bash

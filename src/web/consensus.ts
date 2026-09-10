@@ -13,6 +13,29 @@ import { devig } from '../devig.js';
  * 56%. Ranking legs by that number is ranking them by noise. So the edge has to
  * come from somewhere else, and the only other thing on the board is the books.
  *
+ * ## GRADED 2026-09-10. IT DOES NOT WIN EITHER.
+ *
+ * `npm run validate:consensus` scored every settled market both books priced:
+ *
+ *   market side          106-99 legs, 51.7%
+ *   independent series    74-73, exact sign test p = 1.00
+ *   gap 0.5-0.9 units     58.2%   (98 legs)
+ *   gap 1.0-1.9 units     45.7%   (105 legs)
+ *   flat vig arm          58-46 series, p = 0.281
+ *   stated-lean arm       30-37 series, p = 0.464
+ *
+ * A bigger gap doing WORSE is backwards from the theory and is the strongest
+ * evidence against it — if being further off the market meant anything, the
+ * 1.0-1.9 bucket would beat the 0.5-0.9 one. And the arm that should have been
+ * strongest, where Underdog states a real lean instead of flat vig, was the
+ * worst of the two.
+ *
+ * The machinery below is correct and stays: it is what a third book would need,
+ * and knowing which app holds the cheaper number is worth something when
+ * placing a bet already decided on. But **nothing here is an edge**, and it
+ * must not be presented as one. That now makes four measured failures —
+ * the projection, opponent strength, the stale line, and this.
+ *
  * The method is the one every DFS comparison tool uses, and it is not the
  * stale-line signal in `stale.ts`. That one asks "who moved first" and was
  * measured at 41-41 — dead level — because a move predicts what the OTHER BOOK

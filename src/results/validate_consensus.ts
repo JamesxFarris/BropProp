@@ -50,6 +50,7 @@ type Market = {
   books: Map<string, Point[]>;
   handle: string;
   stat: string;
+  league: string;
   mapStart: number;
   mapEnd: number;
   scheduled: number | null;
@@ -97,9 +98,10 @@ export async function main(): Promise<void> {
   const snaps = await q<{
     canon_handle: string; stat: string; ms: number; me: number;
     book: string; line: number; obs: number; sched: number | null;
+    league: string;
     over_price: number | null; under_price: number | null;
   }>(`
-    SELECT p.canon_handle, pr.stat, pr.map_start AS ms, pr.map_end AS me,
+    SELECT p.canon_handle, pr.stat, pr.league, pr.map_start AS ms, pr.map_end AS me,
            b.code AS book, ps.line::float8 AS line,
            ps.over_price::float8 AS over_price, ps.under_price::float8 AS under_price,
            extract(epoch from ps.observed_at) * 1000 AS obs,
@@ -109,15 +111,15 @@ export async function main(): Promise<void> {
       JOIN player p ON p.id = pr.player_id
       JOIN book b ON b.id = pr.book_id
       LEFT JOIN match m ON m.id = pr.match_id
-     WHERE pr.is_combo = false AND pr.variant = 'standard' AND pr.league = 'CS2'
+     WHERE pr.is_combo = false AND pr.variant = 'standard'
      ORDER BY ps.observed_at`);
 
   const markets = new Map<string, Market>();
   for (const s of snaps) {
-    const key = `${s.canon_handle}|${s.stat}|${s.ms}-${s.me}`;
+    const key = `${s.league}|${s.canon_handle}|${s.stat}|${s.ms}-${s.me}`;
     let m = markets.get(key);
     if (!m) {
-      m = { books: new Map(), handle: s.canon_handle, stat: s.stat,
+      m = { books: new Map(), handle: s.canon_handle, stat: s.stat, league: s.league,
             mapStart: s.ms, mapEnd: s.me, scheduled: null };
       markets.set(key, m);
     }
@@ -143,19 +145,20 @@ export async function main(): Promise<void> {
   }
 
   const results = await q<{
-    h: string; mn: number; t: number;
+    h: string; league: string; mn: number; t: number;
     kills: number | null; headshots: number | null;
     assists: number | null; deaths: number | null;
-  }>(`SELECT canon_handle AS h, map_number AS mn, kills, headshots, assists, deaths,
+  }>(`SELECT canon_handle AS h, league, map_number AS mn, kills, headshots, assists, deaths,
              extract(epoch from played_at) * 1000 AS t
         FROM map_stat_dedup
-       WHERE league = 'CS2' AND played_at IS NOT NULL`);
+       WHERE played_at IS NOT NULL`);
 
   const byPlayer = new Map<string, typeof results>();
   for (const r of results) {
-    const a = byPlayer.get(r.h) ?? [];
+    const k = `${r.league}|${r.h}`;
+    const a = byPlayer.get(k) ?? [];
     a.push(r);
-    byPlayer.set(r.h, a);
+    byPlayer.set(k, a);
   }
 
   /** The player's total over the range, or null when it cannot be settled. */
@@ -163,7 +166,7 @@ export async function main(): Promise<void> {
     const sched = m.scheduled;
     if (sched === null) return null;
     const want = m.mapEnd - m.mapStart + 1;
-    const rows = (byPlayer.get(m.handle) ?? []).filter((r) => {
+    const rows = (byPlayer.get(`${m.league}|${m.handle}`) ?? []).filter((r) => {
       const t = Number(r.t);
       return t >= sched - SETTLE_EARLY && t <= sched + SETTLE_LATE
         && r.mn >= m.mapStart && r.mn <= m.mapEnd;
@@ -188,7 +191,7 @@ export async function main(): Promise<void> {
    */
   function priorTotals(m: Market, before: number): FormStats | undefined {
     const want = m.mapEnd - m.mapStart + 1;
-    const rows = (byPlayer.get(m.handle) ?? []).filter((r) => Number(r.t) < before);
+    const rows = (byPlayer.get(`${m.league}|${m.handle}`) ?? []).filter((r) => Number(r.t) < before);
     // Group into series by kick-off day, the same way settle() brackets them.
     const bySeries = new Map<number, number[]>();
     for (const r of rows) {
@@ -216,6 +219,19 @@ export async function main(): Promise<void> {
   let won = 0, lost = 0, pushed = 0, unsettled = 0;
   /** Which anchor each event used, so the two can be read apart. */
   const anchorCount = { crowd: 0, priced: 0 };
+  /**
+   * Flat vig versus a stated lean, kept apart.
+   *
+   * With -112/-112 the anchor is just "Underdog's line", so the signal reduces
+   * to "PrizePicks disagrees with Underdog" — which is the same disagreement
+   * the stale-line work already measured at 41-41. Where Underdog's two prices
+   * differ it is stating an actual opinion about the player, and that is a
+   * different and much stronger claim. Averaging the two hides whichever one
+   * works.
+   */
+  const byVig = new Map<string, { won: number; lost: number }>();
+  const bySeriesVig = new Map<string, Map<string, { won: number; lost: number }>>();
+  const byLeague = new Map<string, { won: number; lost: number }>();
   const byGap = new Map<string, { won: number; lost: number }>();
   /**
    * One entry per SERIES, holding whether the consensus side won.
@@ -265,6 +281,11 @@ export async function main(): Promise<void> {
     if (lines.length >= MIN_BOOKS) anchorCount.crowd++;
     else anchorCount.priced++;
 
+    const anchor = lines.find((l) => l.over_price !== null && l.under_price !== null);
+    const leaning = anchor !== undefined
+      && Number(anchor.over_price) !== Number(anchor.under_price);
+    const vigKey = leaning ? 'stated lean' : 'flat vig';
+
     const total = settle(m);
     if (total === null) { unsettled++; continue; }
 
@@ -278,6 +299,20 @@ export async function main(): Promise<void> {
     const g = byGap.get(bucket) ?? { won: 0, lost: 0 };
     if (win) g.won++; else g.lost++;
     byGap.set(bucket, g);
+
+    const v = byVig.get(vigKey) ?? { won: 0, lost: 0 };
+    if (win) v.won++; else v.lost++;
+    byVig.set(vigKey, v);
+
+    const lg = byLeague.get(m.league) ?? { won: 0, lost: 0 };
+    if (win) lg.won++; else lg.lost++;
+    byLeague.set(m.league, lg);
+
+    const svMap = bySeriesVig.get(vigKey) ?? new Map();
+    const sv = svMap.get(`${m.handle}|${m.scheduled}`) ?? { won: 0, lost: 0 };
+    if (win) sv.won++; else sv.lost++;
+    svMap.set(`${m.handle}|${m.scheduled}`, sv);
+    bySeriesVig.set(vigKey, svMap);
 
     const seriesKey = `${m.handle}|${m.scheduled}`;
     const s = bySeries.get(seriesKey) ?? { won: 0, lost: 0 };
@@ -303,6 +338,24 @@ export async function main(): Promise<void> {
     if (!g) continue;
     const n = g.won + g.lost;
     console.log(`  ${b.padEnd(9)} ${String(g.won).padStart(3)}-${String(g.lost).padEnd(3)} ${((g.won / n) * 100).toFixed(1)}%  (${n} legs)`);
+  }
+
+  console.log('\nby league:');
+  for (const [lg, g] of byLeague) {
+    const n = g.won + g.lost;
+    console.log(`  ${lg.padEnd(9)} ${String(g.won).padStart(3)}-${String(g.lost).padEnd(3)} ${((g.won / n) * 100).toFixed(1)}%  (${n} legs)`);
+  }
+
+  console.log('\nby what the anchoring book actually said:');
+  for (const [k, g] of byVig) {
+    const n = g.won + g.lost;
+    console.log(`  ${k.padEnd(12)} ${String(g.won).padStart(3)}-${String(g.lost).padEnd(3)} ${((g.won / n) * 100).toFixed(1)}%  (${n} legs)`);
+  }
+  // And the same split on the count that is actually evidence.
+  for (const [k, m2] of bySeriesVig) {
+    let w = 0, l = 0;
+    for (const v of m2.values()) { if (v.won > v.lost) w++; else if (v.lost > v.won) l++; }
+    console.log(`  ${k.padEnd(12)} series ${w}-${l}, sign test p = ${signTest(w, w + l).toFixed(3)}`);
   }
 
   /**
