@@ -60,7 +60,23 @@ ORDER BY s.prop_id, s.observed_at DESC;
 -- reader and is updated alongside this.
 DROP VIEW IF EXISTS cross_book_diff;
 
+-- One line per BOOK first, and only for markets still live.
+--
+-- The first draft grouped every prop ever logged. Run against production in a
+-- rolled-back transaction on 2026-09-10 it reported tripp's kills as a 10-point
+-- disagreement with low_book and high_book both "underdog": two Underdog props
+-- for the same player from different matches, days apart, compared as though
+-- they were two books quoting one market. Counting rows as "books" hid it.
 CREATE VIEW cross_book_diff AS
+WITH per_book AS (
+  SELECT DISTINCT ON (canon_handle, league, stat, map_start, map_end, book)
+         canon_handle, league, stat, map_start, map_end, book,
+         handle, line, match_title, scheduled_at, observed_at
+    FROM current_line
+   WHERE variant = 'standard'
+     AND (scheduled_at IS NULL OR scheduled_at > now() - interval '6 hours')
+   ORDER BY canon_handle, league, stat, map_start, map_end, book, observed_at DESC
+)
 SELECT canon_handle, league, stat, map_start, map_end,
        max(handle)                             AS handle,
        count(*)                                AS books,
@@ -72,7 +88,6 @@ SELECT canon_handle, league, stat, map_start, map_end,
        max(match_title)                        AS match_title,
        min(scheduled_at)                       AS scheduled_at,
        max(observed_at)                        AS observed_at
-FROM current_line
-WHERE variant = 'standard'
+FROM per_book
 GROUP BY canon_handle, league, stat, map_start, map_end
 HAVING count(*) > 1 AND max(line) <> min(line);

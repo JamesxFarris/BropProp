@@ -264,7 +264,12 @@ export function candidatesFor(
       gap: useConsensus ? edge.gap : null,
       value: p * mult,
       matchKey: r.match_title ?? `?${r.canon_handle}`,
-      team: mine.team,
+      // Underdog publishes no team at all — every one of its lines came back
+      // teamless when the board was run against production — so an Underdog
+      // leg could never join a stack. The same player on the same market at
+      // another book usually does carry one, and a player's team does not
+      // depend on who is quoting him.
+      team: mine.team ?? r.books.find((b) => b.team)?.team ?? null,
       players: parts.length >= 2 ? parts : [r.canon_handle],
     });
   }
