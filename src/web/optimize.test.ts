@@ -351,7 +351,7 @@ test('with no moneyline every leg is an under at the measured book baseline', ()
   assert.equal(c.length, 2);
   for (const x of c) {
     assert.equal(x.play.side, 'under');
-    assert.ok(Math.abs(x.p - 0.553) < 1e-9, String(x.p));
+    assert.ok(Math.abs(x.p - 0.516) < 1e-9, String(x.p));
     assert.equal(x.source, 'market');
   }
 });
@@ -361,16 +361,16 @@ test('an underdog is a better under than its opponent', () => {
   const c = marketCandidates([mrow('a', 'Dogs', 1), mrow('b', 'Favs', 2)], m, 'prizepicks');
   const dog = c.find((x) => x.team === 'Dogs')!;
   const fav = c.find((x) => x.team === 'Favs')!;
-  assert.ok(Math.abs(dog.p - 0.5855) < 1e-4, `dog under ${dog.p}`);
+  assert.ok(Math.abs(dog.p - 0.54325) < 1e-4, `dog under ${dog.p}`);
   assert.ok(dog.p > fav.p, 'the losing side must be the stronger under');
 });
 
 test('a heavy enough favourite flips to the over', () => {
-  // At 95% to win: 0.95*0.482 + 0.05*0.620 = 0.4889 under, so the over is 51.1%.
-  const m = new Map([['Favs', odds(0.95, 'Dogs')]]);
+  // At 80% to win: 0.8*0.457 + 0.2*0.572 = 0.480 under, so the over is 52.0%.
+  const m = new Map([['Favs', odds(0.8, 'Dogs')]]);
   const [x] = marketCandidates([mrow('b', 'Favs', 2)], m, 'prizepicks');
   assert.equal(x!.play.side, 'over');
-  assert.ok(Math.abs(x!.p - 0.5111) < 1e-3, String(x!.p));
+  assert.ok(Math.abs(x!.p - 0.520) < 1e-3, String(x!.p));
 });
 
 test('combos and teamless legs are left out', () => {
@@ -390,19 +390,29 @@ test('an under that is not offered is not a leg', () => {
 
 test('the stack search builds on the underdog', () => {
   // Five on each side of one match, the dogs priced at 25%. Every dog under is
-  // likelier than every favourite under, so the best six-pick is the dogs'
+  // likelier than anything on the favourite, so the best six-pick is the dogs'
   // five plus one favourite — the shape the whole strategy is about.
+  //
+  // At 75% to win the favourite's players are past the ~63% flip, so the sixth
+  // leg is a favourite OVER (51.4%), not an under (48.6%). The opponent
+  // correlation makes an opposite-side leg slightly worse than its own
+  // probability says, but not by enough to prefer a sub-50% leg.
   const rows: MarketRow[] = [];
   for (let i = 0; i < 5; i++) rows.push(mrow(`dog${i}`, 'Dogs', 100 + i));
   for (let i = 0; i < 5; i++) rows.push(mrow(`fav${i}`, 'Favs', 200 + i));
   const m = new Map([['Dogs', odds(0.25, 'Favs')], ['Favs', odds(0.75, 'Dogs')]]);
   const best = findStacks(marketCandidates(rows, m, 'prizepicks'), 6, 'prizepicks')[0]!;
   assert.equal(best.team, 'Dogs');
-  assert.equal(best.side, 'under');
-  assert.equal(best.legs.filter((l) => l.team === 'Dogs').length, 5);
-  // Five dog unders at 58.55% plus one favourite under, correlated: well under
-  // the 22x a real six-pick stack was quoted at.
-  assert.ok(best.requiredMultiplier < 12, String(best.requiredMultiplier));
+  const dogs = best.legs.filter((l) => l.team === 'Dogs');
+  const favs = best.legs.filter((l) => l.team === 'Favs');
+  assert.equal(dogs.length, 5);
+  assert.ok(dogs.every((l) => l.play.side === 'under'), 'the dog legs are unders');
+  assert.equal(favs.length, 1);
+  assert.equal(favs[0]!.play.side, 'over', 'the favourite leg is its over');
+  assert.equal(best.side, 'mixed');
+  // 16.04x on 2026-09-11's constants (41.1x if the legs were independent):
+  // under the 22x a real six-pick stack was quoted at.
+  assert.ok(best.requiredMultiplier < 17, String(best.requiredMultiplier));
 });
 
 test('deaths and assists are never priced by the team', () => {

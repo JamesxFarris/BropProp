@@ -4,44 +4,62 @@ import { teamIndex } from '../adapters/teamname.js';
 /**
  * Turn the market's view of who wins into a probability for each player's under.
  *
- * Measured 2026-09-10 over 4,967 CS2 series with walk-forward lines
- * (`raw/blowout.mjs`), splitting every player-series by whether his team went
- * on to win or lose:
+ * Re-measured 2026-09-11 against the BOOKS' OWN closing lines (`raw/blowfair.mjs`),
+ * over ~2,360 settled CS2 kills/headshots legs, splitting each by whether the
+ * player's team won the range:
  *
- *   losing team's players   under 62.0%   (9,376)
- *   winning team's players  under 48.2%   (15,296)
+ *   losing team's players   under 57.2%   (1,116)
+ *   winning team's players  under 45.7%   (1,247)
  *
- * 4,180 independent series, 2613-1567, p < 0.000001.
+ * Within series that had legs on both sides, the losers' under-rate beat the
+ * winners' 39-22, p = 0.040. That paired comparison is the part that holds up;
+ * neither side on its own is significant at the series level (42-32, 31-32).
  *
- * Those are rates CONDITIONAL on the result, which nobody knows in advance. A
- * moneyline gives the probability of each result, so the unconditional chance
- * of an under is the two rates mixed by that probability:
+ * **These replaced 0.620 / 0.482, which were inflated by a circular definition.**
+ * "Losing team" is inferred from kills, and the old measurement counted the
+ * player's OWN kills in his team's total — so a player going under helped make
+ * his own team the loser, and the split partly measured itself. Measured both
+ * ways on the same legs:
  *
- *   P(under) = P(team wins) · 0.482  +  P(team loses) · 0.620
+ *                         own kills counted   own kills left out
+ *   losing, under              62.6%               57.2%
+ *   winning, under             41.0%               45.7%
  *
- * **A check that this is calibrated, not just plausible:** at a coin-flip match
- * the mixture gives 0.551. Measured directly against the books' own closing
- * lines, across 2,137 settled legs, the under won 55.3%. Two independent
- * measurements, one built from our line convention and one from theirs, agree
- * to within a fifth of a point. That is the strongest reason to trust the
- * mixture away from 50/50.
+ * About half of the old gap was the player grading himself. Team strength is
+ * compared as kills PER PLAYER, so four teammates against five opponents is fair
+ * (a first attempt summed them, and called the player's team the loser 3 times
+ * in 4).
  *
- * What it is NOT: the 66% blowout figure. That band needs the margin, which is a
- * handicap question rather than a winner one, and it is left out until the
- * handicap outcomes have been parsed and checked the way the moneyline was.
+ * The rates are CONDITIONAL on the result, which nobody knows in advance. A
+ * moneyline gives the probability of each result, so the chance of an under is
+ * the two rates mixed by it:
+ *
+ *   P(under) = P(team wins) · 0.457  +  P(team loses) · 0.572
+ *
+ * Calibration check: at a coin-flip match the mixture gives 0.5145, and the
+ * blind under rate on the same real lines is 51.6%.
+ *
+ * What it is NOT: the blowout band. Even left-one-out, losers in a ≥20% kill
+ * blowout went under 79%, but that is the margin, which is a handicap question
+ * rather than a winner one. It stays out until the handicap outcomes are parsed
+ * and checked the way the moneyline was.
  */
-export const UNDER_IF_TEAM_WINS = 0.482;
-export const UNDER_IF_TEAM_LOSES = 0.620;
+export const UNDER_IF_TEAM_WINS = 0.457;
+export const UNDER_IF_TEAM_LOSES = 0.572;
 
 /**
  * The under rate when there is no moneyline to go on.
  *
- * Measured against the books' OWN closing lines, 2,137 settled legs, 44.7%
- * over — 133 independent series, p = 0.0053. Both books, both stats, standard,
- * demon and goblin all between 43.9% and 45.7%. This is the line shade, and it
- * is the one number here that needs no model and no market to stand on.
+ * **This was 0.553, and the shade behind it has faded.** On 2026-09-10 the books'
+ * own closing lines went under 55.3% of 2,137 legs, p = 0.0053 over 133 series.
+ * Re-measured 2026-09-11 over every settled leg so far, it is 51.6%, series 46-32,
+ * p = 0.14 — no longer significant. By day: 09-06 100% (20 legs), 09-07 59.3%,
+ * 09-08 51.6%, 09-09 55.4%, 09-10 41.5%. The early days carried it.
+ *
+ * So a leg with no moneyline is priced as close to a coin flip, which it is. The
+ * edge that is left lives in the team split above, not in the blind shade.
  */
-export const MEASURED_UNDER_BASELINE = 0.553;
+export const MEASURED_UNDER_BASELINE = 0.516;
 
 /** P(a player on this team goes under), given P(this team wins the match). */
 export function underProbForTeam(pTeamWins: number): number {

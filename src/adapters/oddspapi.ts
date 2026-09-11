@@ -4,9 +4,10 @@ import { config } from '../config.js';
 /**
  * Pinnacle's esports match odds, via OddsPapi — who wins, and how clearly.
  *
- * Why this exists: over 4,967 CS2 series a losing team's players went under
- * their lines 62.0% of the time against 48.2% for the winners, and 66.0% in a
- * blowout (p < 0.000001 over 4,180 independent series). That is measured after
+ * Why this exists: on the books' own closing lines a losing team's players go
+ * under 57.2% of the time against 45.7% for the winners (39-22 paired series,
+ * p = 0.040; see matchodds.ts for why the first figures, 62.0/48.2, were
+ * inflated). That is measured after
  * the fact. Acting on it needs the market's view of who will lose BEFORE
  * kick-off, which is exactly a moneyline — and Pinnacle's is the sharpest there
  * is. See RUNBOOK, "The blowout effect".

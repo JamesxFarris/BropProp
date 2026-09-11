@@ -11,15 +11,14 @@ test('the endpoints are the measured conditional rates', () => {
 });
 
 test('a coin-flip match reproduces the under rate measured against real book lines', () => {
-  // The calibration check that justifies the whole mixture. 0.551 from our own
-  // walk-forward convention, against 55.3% measured on 2,137 settled legs at
-  // the books' closing lines — two independent measurements agreeing.
-  near(underProbForTeam(0.5), 0.553, 0.003);
+  // The calibration check on the mixture: 0.5145 at 50/50, against a blind
+  // under rate of 51.6% on the books' closing lines (2026-09-11).
+  near(underProbForTeam(0.5), 0.516, 0.003);
 });
 
 test('players on a heavy underdog are likelier to go under', () => {
-  // A dog priced at 25% to win: 0.25*0.482 + 0.75*0.620.
-  near(underProbForTeam(0.25), 0.5855, 1e-4);
+  // A dog priced at 25% to win: 0.25*0.457 + 0.75*0.572.
+  near(underProbForTeam(0.25), 0.54325, 1e-4);
   assert.ok(underProbForTeam(0.25) > underProbForTeam(0.5));
   assert.ok(underProbForTeam(0.75) < underProbForTeam(0.5));
 });
@@ -32,14 +31,15 @@ test('the favourite side of a match is a worse under than the dog side', () => {
   assert.ok(dog > fav);
 });
 
-test('the line shade keeps even a clear favourite on the under side', () => {
-  // Written first as "an 80% favourite's under is below 50%", which was wrong:
-  // 0.8*0.482 + 0.2*0.620 = 0.5096. The books' shade against the over is
-  // strong enough that a team's players only flip to the over past
-  // 0.62 - 0.138p = 0.5, i.e. about an 87% favourite.
-  assert.ok(underProbForTeam(0.8) > 0.5, 'an 80% favourite is still an under');
+test('a clear favourite flips to the over', () => {
+  // With the old, circular constants (0.620 / 0.482) plus a strong blind shade,
+  // players stayed on the under until about an 87% favourite. On the fair
+  // real-line rates the flip is 0.572 - 0.115p = 0.5, about a 63% favourite —
+  // so a favourite's OVERS are a real stack, not a curiosity.
   const flip = (UNDER_IF_TEAM_LOSES - 0.5) / (UNDER_IF_TEAM_LOSES - UNDER_IF_TEAM_WINS);
-  near(flip, 0.8696, 1e-3);
+  near(flip, 0.6261, 1e-3);
+  assert.ok(underProbForTeam(0.55) > 0.5, 'a slight favourite is still an under');
+  assert.ok(underProbForTeam(0.8) < 0.5, 'an 80% favourite is an over');
   assert.ok(underProbForTeam(flip + 0.01) < 0.5, 'past the flip, the over is the side');
 });
 

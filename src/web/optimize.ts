@@ -591,10 +591,13 @@ export function findStacks(
  * 0.495. What survived measurement is different in kind: it is not about the
  * player at all.
  *
- *   1. Both books shade against the over. Against their own closing lines the
- *      under won 55.3% of 2,137 legs, p = 0.0053 over 133 series.
- *   2. Losing teams' players go under. 62.0% against 48.2% for winners, over
- *      4,180 series. A moneyline says in advance who is likelier to lose.
+ *   1. Losing teams' players go under more than winning teams' do — 57.2%
+ *      against 45.7% on the books' own closing lines, and 39-22 (p = 0.040)
+ *      within series that had legs on both sides. A moneyline says in advance
+ *      who is likelier to lose. (First measured as 62.0/48.2, inflated by
+ *      counting each player's own kills in deciding who lost; see matchodds.ts.)
+ *   2. The books' blind shade against the over. It was 55.3% under on 09-10
+ *      and has faded to 51.6% (p = 0.14), so it is priced as nearly nothing.
  *
  * So every leg here is priced from its TEAM: Pinnacle's win probability, mixed
  * through the measured loser/winner rates, or the measured baseline when no
@@ -604,7 +607,7 @@ export function findStacks(
  * players.
  *
  * The side is the under unless the team is a heavy enough favourite that its
- * players' under drops below 50% — about an 87% favourite — in which case it is
+ * players' under drops below 50% — about a 63% favourite — in which case it is
  * the over, and a stack of that team's overs is the play instead.
  */
 /**

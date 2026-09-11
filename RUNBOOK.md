@@ -353,6 +353,42 @@ aggregator section below.
   track rounds, but it is not the scoreboard.
 - Everything here is CS2. LoL has too few completed 1-3 ranges in the archive.
 
+#### Correction, 2026-09-11: about half of this table was the player grading himself
+
+"Losing team" was decided by team kill totals **including the leg's own
+player**. A player going under drags his own team's total down, so he helped
+make his team "the loser", and the split partly measured itself. Re-measured on
+the **books' own closing lines** (`raw/blowfair.mjs`), same legs, both ways:
+
+| | own kills counted | own kills left out | n |
+|---|---:|---:|---:|
+| Losing team, under | 62.6% | **57.2%** | 1,116 |
+| Winning team, under | 41.0% | **45.7%** | 1,247 |
+| Losing, blowout (≥20%) | 89.0% | 79.2% | 173 |
+| Losing, close (<10%) | 50.5% | 44.5% | 651 |
+
+Series level, left out: in series with legs on both sides, the losers'
+under-rate beat the winners' **39-22, p = 0.040**. Neither side alone is
+significant (losers mostly under 42-32, p = 0.30; winners 31-32). The
+relative split is real; the absolute levels are not established.
+
+Team strength is compared as kills **per player**. A first leave-one-out summed
+kills, pitting four teammates against five opponents, and called the player's
+team the loser three times in four. Averages fix that.
+
+`matchodds.ts` now uses **0.572 / 0.457** in place of 0.620 / 0.482.
+
+**The blind shade has faded too.** Over every settled leg to date the under is
+51.6%, series 46-32, **p = 0.14** — no longer significant. By day: 09-06 100%
+(20 legs), 09-07 59.3%, 09-08 51.6%, 09-09 55.4%, 09-10 41.5%.
+`MEASURED_UNDER_BASELINE` is now 0.516. The mixture at a coin flip gives
+0.5145, so the two still agree.
+
+What this does to slips: a dog priced at 25% now gives its players 54.3% under,
+not 58.6%. A favourite flips to the over at about **63%**, not 87%, so
+favourite-over stacks now appear on their own. The table above ("what a market
+price is worth") used the old rates and overstates every row.
+
 ### The moneyline pipeline: built, validated, not yet switched on
 
 Built 2026-09-10. Pinnacle's CS2 moneylines come in through OddsPapi
@@ -400,16 +436,12 @@ rest that are in OddsPapi at all. Betclic and BET-M are not in their feed.
 
 **The pricing.**
 
-    P(under) = P(team wins) · 0.482  +  P(team loses) · 0.620
+    P(under) = P(team wins) · 0.457  +  P(team loses) · 0.572
 
-It is calibrated, not just plausible. At a coin-flip match it gives 0.551, and
-the under rate measured directly against the books' own closing lines is 55.3%.
-Those are two independent measurements agreeing to within a fifth of a point.
-
-It also shows how strong the line shade is. A team's players stay on the under
-side until the team is about an **87% favourite** (0.62 − 0.138p = 0.5). An 80%
-favourite's players still go under 50.96% of the time. I wrote a test asserting
-the opposite and it failed. The test was wrong, not the code.
+(These were 0.482 / 0.620 until 2026-09-11; see the correction above.) At a
+coin-flip match it gives 0.5145, against a blind under rate of 51.6% on the
+books' own lines. A team's players flip to the over at about a **63%
+favourite** (0.572 − 0.115p = 0.5).
 
 **Kills and headshots only.** The first render of the Stacks card put "sh1ro
 under deaths" into a stack on the team Pinnacle had losing. A beaten team dies

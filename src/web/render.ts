@@ -1937,11 +1937,12 @@ export function buildPage(o: {
    * above everything else on the page.
    *
    * Each is one team, one direction, ranked by the multiplier it has to be PAID
-   * to break even — the number to hold up against the app. It rests on three
-   * measurements and no projection: both books shade against the over (55.3%
-   * under, p = 0.0053 over 133 series), losing teams' players go under (62.0%
-   * against 48.2%, p < 0.000001 over 4,180 series), and teammates move together
-   * (rho 0.324, CI on phi [0.198, 0.222] over 8,923 series).
+   * to break even — the number to hold up against the app. It rests on two
+   * measurements and no projection: losing teams' players go under more than
+   * winners' (57.2% against 45.7% on the books' own lines, 39-22 paired series,
+   * p = 0.040), and teammates move together (rho 0.324, CI on phi
+   * [0.198, 0.222] over 8,923 series). The blind shade against the over, once a
+   * third leg of this, has faded to 51.6% (p = 0.14).
    */
   const stacksCard = !o.stacks || o.stacks.length === 0 ? '' : `<div class="card">
     <div class="card-head"><h2>Stacks</h2>
@@ -1950,7 +1951,7 @@ export function buildPage(o: {
       const odds = o.teamOdds?.get(s.team);
       const why = odds
         ? `Pinnacle has ${esc(s.team)} at ${(odds.pWin * 100).toFixed(0)}% to beat ${esc(odds.opponent)}`
-        : `no moneyline yet, so priced from the 55.3% under rate measured against the books' own lines`;
+        : `no moneyline yet, so priced near a coin flip — the books' blind shade has faded to 51.6% under`;
       return `<div class="stack">
         <div class="evbar">
           <span class="evnum flat">${s.requiredMultiplier.toFixed(2)}×</span>
