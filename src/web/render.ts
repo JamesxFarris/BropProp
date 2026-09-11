@@ -273,6 +273,13 @@ const POLL_INTERVAL_S = 900;
  * overdue looks halfway to overdue. The age is written out next to it, because
  * a bar alone is a feeling and this page deals in numbers.
  */
+/**
+ * The BropProp mark, inline so it needs no request and inherits nothing: a
+ * broadcast tile with the call tag's notch cut from its corner, and a staggered
+ * up and down chevron — over and under. The same drawing is public/favicon.svg.
+ */
+const MARK = `<svg class="mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><path d="M0 0H32V22L22 32H0Z" fill="#FF5B14"/><path d="M6.5 15.5 12 10l5.5 5.5" fill="none" stroke="#0B1220" stroke-width="3.6" stroke-linecap="square"/><path d="M14.5 17.5 20 23l5.5-5.5" fill="none" stroke="#0B1220" stroke-width="3.6" stroke-linecap="square"/></svg>`;
+
 function freshness(lastOk: string | null): string {
   const age = lastOk ? Math.max(0, (Date.now() - new Date(lastOk).getTime()) / 1000) : null;
   const budget = POLL_INTERVAL_S * 2;
@@ -315,9 +322,9 @@ function shell(o: {
 <title>BropProp — ${esc(o.title)}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Hanken+Grotesk:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@500;600;700&display=swap">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-<meta name="theme-color" content="#10160f">
+<meta name="theme-color" content="#0B1220">
 <link rel="stylesheet" href="/app.css">
 </head>
 <body>
@@ -325,8 +332,7 @@ function shell(o: {
 <header class="top">
   <div class="top-in">
     <h1 class="brand">
-      <a href="/board">Brop<span>Prop</span></a>
-      <em>${esc(o.title)}</em>
+      <a href="/board" aria-label="BropProp, go to the board">${MARK}<span class="word">BropProp</span></a>
     </h1>
     <nav class="tabs">
       ${tab('/board', 'Board', o.active === 'board')}
@@ -872,32 +878,19 @@ function playCell(
     only === null || only === undefined
       ? `<span class="at card-hide">${esc(bookShort(play.book))} ${play.line.toFixed(1)}</span>`
       : '';
-  return `<div class="play ${cls}">
-      <span class="dir">${dir}</span>
-      ${at}
-    </div>
-    <div class="meta card-hide">${
-      // Wide screens only, and said plainly. "+3.8 in your favour" read as a
-      // number with no subject; this is the distance between our figure and
-      // the line, which the Ours chip beside it already shows on a phone.
-      //
-      // A negative gap under the words "in your favour" is a contradiction,
-      // and it happens on about 7% of calls. The side is chosen by
-      // probability; this number is the distance from our estimate to the
-      // line, and for a right-skewed stat those two can disagree — a few huge
-      // games drag the average above the line while most series land below it,
-      // so the under is right and the average says otherwise. Measured on the
-      // live board: 28 of 415 calls, 27 of them with mean and median on
-      // opposite sides. Where they disagree, say what actually drove the call
-      // instead of printing a gap with a minus sign in front of it.
-      play.edge > 0
-        ? `ours ${play.edge.toFixed(1)} ${play.side === 'over' ? 'above' : 'below'} the line`
-        : `<span title="Our average sits on the other side of the line, but most of this player's series land ${play.side} it — a few outsized games pull an average around in a way a count of series does not follow.">most series land ${play.side}</span>`
-    }${basis ? `, ${basis}` : ''}${
-      play.method === 'maps'
-        ? ` <span class="est" title="Estimated by resampling ${play.sample} single maps, because too few series played this exact map range">est</span>`
-        : ''
-    }</div>`;
+  // The detail that used to take a second line is the tag's tooltip now, so
+  // the row stays one horizontal line. Said plainly: the distance between our
+  // figure and the line. Where that distance is negative (about 7% of calls —
+  // a few outsized games drag a right-skewed average across the line while
+  // most series land on the called side) it says what actually drove the call
+  // instead of printing a gap with a minus sign in front of it.
+  const detail = [
+    play.edge > 0
+      ? `Ours ${play.edge.toFixed(1)} ${play.side === 'over' ? 'above' : 'below'} the line`
+      : `Most of this player's series land ${play.side} the line, though a few outsized games pull the average the other way`,
+    basis ? `Modelled from ${play.sample} single maps, because too few series played this exact map range` : '',
+  ].filter(Boolean).join('. ');
+  return `<div class="play ${cls}" title="${esc(detail)}"><span class="dir">${dir}</span>${at}</div>`;
 }
 
 // ------------------------------------------------------------------ board --
@@ -950,7 +943,9 @@ function ouButtons(
   // a form post and a redirect — that is what keeps it working with scripts
   // blocked — and a redirect otherwise lands at the top of a board hundreds of
   // rows long, so you lose your place on every single leg.
-  return `<div class="ou" id="m${propId}">${b('over', 'O', 'o')}${b('under', 'U', 'u')}</div>`;
+  // "O" on the dense wide board; the rest of the word appears on a phone card,
+  // where there is room and a bare letter was one more thing to decode.
+  return `<div class="ou" id="m${propId}">${b('over', 'O<span class="w">ver</span>', 'o')}${b('under', 'U<span class="w">nder</span>', 'u')}</div>`;
 }
 
 /**
@@ -1062,31 +1057,24 @@ function bookCell(
   buttons: (b: BookLine) => string,
   /**
    * The app holding the best line for the call. A phone card shows that app
-   * alone — "best of 3" beside its name — and drops the rest, so a card never
-   * shows a number worse than the one it is recommending. Wide screens keep
-   * every column for comparison.
+   * alone and drops the rest, so a card never shows a number worse than the
+   * one it is recommending. Wide screens keep every column for comparison.
    */
   focus: BookCode | null = null,
 ): string {
   const role = only === null ? 'take' : code === only ? 'take primary' : 'ref';
   const b = books.find((x) => x.book === code);
   const alt = focus !== null && code !== focus ? ' alt' : '';
-  const bestAttr = focus !== null && code === focus && books.length > 1
-    ? ` data-best="best of ${books.length}"` : '';
-  const attrs = `class="n bookcol ${role}${alt}${b ? '' : ' none'}" data-book="${esc(bookName(code))}" data-short="${esc(bookShort(code))}"${bestAttr}`;
+  const attrs = `class="n bookcol ${role}${alt}${b ? '' : ' none'}" data-book="${esc(bookName(code))}" data-short="${esc(bookShort(code))}"`;
   // A book that does not price this market gets an empty cell, not a missing
   // one: the columns have to line up down the page.
   if (!b) {
     return `<td ${attrs}><div class="bookcell"><span class="bk-fig muted" title="Not listed on ${esc(bookName(code))}">—</span></div></td>`;
   }
-  const best = bestSide(books, code);
-  const mark = best === 'both' ? '' : best === 'over' ? 'o' : 'u';
-  const markText = best === 'over'
-    ? 'the lowest line any app has on this market, so the best number for the over'
-    : 'the highest line any app has on this market, so the best number for the under';
-  const fig = mark
-    ? `<span class="bk-fig best ${mark}" title="${esc(bookName(code))} has ${markText}">${num(b.line)}<span class="bk-side" aria-hidden="true">${mark === 'o' ? 'O' : 'U'}</span><span class="vh">, ${markText}</span></span>`
-    : `<span class="bk-fig">${num(b.line)}</span>`;
+  // A plain number. The tinted O/U best-number chips came out with the rest of
+  // the highlighting: the board already lists only markets where your app has
+  // the best line, and the take button marks the side.
+  const fig = `<span class="bk-fig">${num(b.line)}</span>`;
   const px = sidePrices(b);
   const title = px
     ? `${bookName(code)}: ${[px.over && `over ${px.over}`, px.under && `under ${px.under}`].filter(Boolean).join(', ')}`
@@ -1103,15 +1091,6 @@ function bookCell(
   return `<td ${attrs}><div class="bookcell"><div class="bk-num">${fig}${price}</div>${
     role === 'ref' ? '' : buttons(b)
   }</div></td>`;
-}
-
-/** What the marks in the book columns mean, and which column takes picks. */
-function bookKey(columns: BookCode[], only: BookCode | null): string {
-  if (columns.length < 2) return '';
-  return `<p class="book-key hide-sm">${
-    only ? `Picks go on <strong>${esc(bookName(only))}</strong>; the others are there to compare. ` : ''
-  }<span class="bk-fig best o">O</span> is the lowest line on a market, the best over;
-    <span class="bk-fig best u">U</span> the highest, the best under.</p>`;
 }
 
 /**
@@ -1422,13 +1401,11 @@ export function boardPage(o: {
           restrict ? `, only where ${esc(bookName(only as BookCode))} has the best line for the call` : ''
         }</span>
       </div>
-      ${bookKey(columns, only)}
       <div class="scroll cards-sm"><table class="board-table stack-sm" data-filter>
         <thead><tr>
           <th scope="col">Player</th>
           <th scope="col">Prop</th>
-          <th scope="col" class="c">Line</th>
-          <th scope="col" class="c">Ours</th>
+                    <th scope="col" class="c">Ours</th>
           <th scope="col" class="c">Lean</th>
           <th scope="col" class="c">Record</th>
           ${showEv ? '<th scope="col" class="c evcol">EV</th>' : ''}
@@ -1486,15 +1463,6 @@ export function boardPage(o: {
               priced !== undefined
               && Number(priced.over_price) === Number(priced.under_price);
             const gapToMarket = marketDisagreement(play?.hitRate ?? null, marketProb);
-            // The two numbers the whole page exists to compare, set side by
-            // side as chips rather than as a figure and a distant column: the
-            // book's line, and what this player's own history says. A reader
-            // should not have to hold one in their head to reach the other.
-            // With no call to name a book, show the line from the app being
-            // filtered to, or the first one pricing it.
-            const theirLine = play
-              ? play.line
-              : (only ? r.books.find((b) => b.book === only)?.line : r.books[0]?.line) ?? null;
             const f = formOf(r);
             // When there is a call, show the number the call was made from —
             // the average anchored toward the line, not the raw one. Showing
@@ -1541,18 +1509,12 @@ export function boardPage(o: {
               <div class="statname">${esc(statLabel(r.stat))}</div>
               <div class="meta">${esc(maps(r.map_start, r.map_end))}</div>
             </td>
-            <td class="c card-hide" data-label="Line">${
-              theirLine === null
-                ? '<span class="meta">—</span>'
-                : `<span class="chip-num book">${Number(theirLine).toFixed(1)}</span>`
-            }</td>
-            <td class="c" data-label="Ours">${
+                        <td class="c" data-label="Ours">${
               ours === null
                 ? '<span class="meta">—</span>'
-                : `<span class="chip-num model">${Number(ours).toFixed(1)}</span>
-                   <div class="meta card-hide">${formNote(formOf(r), play)}</div>`
+                : `<span class="chip-num model" title="${esc(formNote(formOf(r), play))}">${Number(ours).toFixed(1)}</span>`
             }</td>
-            <td class="c" data-label="Lean">${playCell(play, statusOf(r).why, r, only)}${staleCell(r)}</td>
+            <td class="c" data-label="Lean">${playCell(play, statusOf(r).why, r, only)}</td>
             <td class="c${play ? ` strength s${Math.min(4, Math.max(1, Math.ceil((play.hitRate - 0.5) * 20)))}` : ''}" data-label="Record">${
               play === null
                 ? '<span class="meta">—</span>'
@@ -1587,20 +1549,11 @@ export function boardPage(o: {
                      play.rawOf === null ? '—' : `${play.rawWins}<span class="of">of</span>${play.rawOf}`
                    }</div>
                    ${
+                     // One line: "11 of 12 series". The market % that used to
+                     // take a third line is gone with the rest of the noise.
                      play.rawOf === null
-                       ? '<div class="meta raw">modelled</div>'
-                       : '<div class="meta raw">past series</div>'
-                   }
-                   ${
-                     marketProb === null || flatVig
-                       ? ''
-                       : `<div class="meta card-hide${
-                           gapToMarket !== null && Math.abs(gapToMarket) >= MARKET_GAP ? ' fairgap' : ''
-                         }"${
-                           gapToMarket !== null && Math.abs(gapToMarket) >= MARKET_GAP
-                             ? ` title="${Math.round(Math.abs(gapToMarket) * 100)} points from what we think — worth a second look"`
-                             : ''
-                         }>market ${Math.round(marketProb * 100)}%</div>`
+                       ? '<span class="meta raw">modelled</span>'
+                       : '<span class="meta raw">series</span>'
                    }`
             }</td>
             ${showEv ? `<td class="c evcol" data-label="EV">${evCell(play)}</td>` : ''}
@@ -1669,7 +1622,6 @@ export function edgesPage(o: {
         <h2>Where the apps disagree</h2>
         <span class="sub"><b data-count>${gaps.length}</b> of ${o.health.matched} shared markets</span>
       </div>
-      ${bookKey(columns, only)}
       <div class="scroll cards-sm"><table class="stack-sm gaps-table" data-filter>
         <thead><tr>
           <th scope="col">Player</th><th scope="col">Market</th>
@@ -2286,14 +2238,14 @@ export function loginPage(o: { next: string; error?: string }): string {
 <title>BropProp — Sign in</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Hanken+Grotesk:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@500;600;700&display=swap">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-<meta name="theme-color" content="#10160f">
+<meta name="theme-color" content="#0B1220">
 <link rel="stylesheet" href="/app.css">
 </head>
 <body class="login-body">
   <main class="login">
-    <h1 class="brand login-brand">Brop<span>Prop</span></h1>
+    <h1 class="brand login-brand">${MARK}<span class="word">BropProp</span></h1>
     <p class="login-sub">Esports prop research. Sign in to see the board.</p>
     <form class="login-card" method="post" action="/login">
       <input type="hidden" name="next" value="${esc(o.next)}">

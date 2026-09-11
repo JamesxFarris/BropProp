@@ -234,6 +234,34 @@ changed here: it decides money and deserves its own measurement.
 
 ## Log
 
+- **2026-09-11** — **Broadcast.** The owner chose it from three directions
+  (Broadcast, Desk, Clubhouse), asking for life, a sleek rigid feel rather than
+  rounded, love for the desktop header, and a mark of our own in place of the
+  two-tone wordmark and the thin coloured band, which read as overdone. So: a
+  dark score-bug bar in both themes with tabs as overlay labels and an orange
+  rule under the current page; a LIVE chip for freshness with a pulsing square;
+  square panels and 2px controls; the call in a notched ink tag with its
+  direction as a stripe down the leading edge; the book's line as a dark
+  scoreboard box beside our steel-outlined number. Chakra Petch for display,
+  Hanken Grotesk for text, Barlow Semi Condensed for every number (the display
+  face's digits read as off in the mockup). The mark is an orange tile with the
+  call tag's notch cut from its corner and a staggered up and down chevron, over
+  and under; it is also the favicon. Orange now means only "press this" and "you
+  are here" — strong records went from gold to ink. The standing constraints
+  hold: no violet, no AI iconography, no middle-dot meta strings. The caps are
+  confined to the bar, the tabs and the call tag.
+  Then, at the owner's word — "a more horizontally linear feel", no number "a
+  few pixels above the number directly to their right", and less highlighting
+  over everything — every row became one line on one axis: value cells are
+  single-line and vertically centred, a book's price sits beside its number
+  rather than under it, and each number takes a fixed right-aligned slot. What
+  took second lines (the gap to the line, the sample behind our number, the
+  market %) moved into tooltips; the stale chip left the row. Highlighting
+  came down to the call tag and the take button: the tinted O/U best-number
+  chips and their key, the direction stripe down each row, the coloured line
+  moves, the box around our number and the duplicate Line column are gone.
+  On a phone the verdict is one centred line — tag, "11 of 12 series",
+  "Ours 45.3" — above your app's line and buttons.
 - **2026-09-11** — Light is the default, at the owner's request; dark is one
   tap away. The phone card was cut to one call made at your own app's line:
   the cheaper-app chip, the stale chip, the "+3.8 in your favour" figure and

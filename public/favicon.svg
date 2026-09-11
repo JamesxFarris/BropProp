@@ -1,24 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="BropProp">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="BropProp">
   <!--
-    A sprout, on nothing.
+    The BropProp mark: a broadcast tile with its bottom-right corner cut — the
+    same notch the Over/Under call tag carries on the board — and inside it an
+    up chevron and a down chevron, staggered: over and under, which is the
+    whole of what the app decides.
 
-    No background plate: the old icon sat on a dark rounded square, which shows
-    as a black tile in a light tab strip and boxes the mark in everywhere else.
-    Transparent lets the browser's own tab colour carry it.
-
-    Every colour therefore has to survive both a white and a near-black tab, so
-    these are mid-tones rather than the light mints the board uses on its dark
-    surfaces — #7fdcae would disappear on white, and the first pass used
-    #2f7d52 for the stem, which held on white but went murky on a dark tab.
-    These two sit in the band that reads on both.
-
-    Three solid pieces, nothing thinner than 5 units, because this is seen at
-    16px far more often than at 64: an outlined leaf or a hairline stem turns
-    to grey mush at that size.
+    Two colours, both solid, nothing thinner than 3.6 units, because this is
+    seen at 16px far more than at 64. Orange on ink holds on a white tab strip
+    and on a near-black one.
   -->
-  <g transform="translate(0,-3)">
-    <path d="M32 58V34" fill="none" stroke="#3f9a67" stroke-width="6" stroke-linecap="round"/>
-    <path d="M32 36c8-2 16-9 19-21-11 1-18 9-19 21z" fill="#63c890"/>
-    <path d="M31 45c-6-2-12-7-14-15 9 1 14 7 14 15z" fill="#3f9a67"/>
-  </g>
+  <path d="M0 0H32V22L22 32H0Z" fill="#FF5B14"/>
+  <path d="M6.5 15.5 12 10l5.5 5.5" fill="none" stroke="#0B1220" stroke-width="3.6" stroke-linecap="square"/>
+  <path d="M14.5 17.5 20 23l5.5-5.5" fill="none" stroke="#0B1220" stroke-width="3.6" stroke-linecap="square"/>
 </svg>

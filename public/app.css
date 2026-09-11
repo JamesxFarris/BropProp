@@ -1,195 +1,139 @@
-/* BropProp
+/* BropProp — Broadcast
    ---------------------------------------------------------------------
-   Every hue on a row answers a question, and no hue answers two:
+   Chosen 2026-09-11 by the owner from three directions (Broadcast, Desk,
+   Clubhouse): the look of a match overlay. A dark score-bug bar across the
+   top in both themes, white panels on a cool grey ground, square corners,
+   and one signature shape — the notched tag the Over/Under call sits in.
 
-     gold   the book's number      (the line chip, the place button)
-     teal   our number             (the model chip)
-     green  over, and value        red  under, and no value
-     bone   the view you chose     (nav, filters, freshness — chrome only)
-     pastel amber / pastel blue    which game this is (league badge only)
+   Every hue still answers one question, and no hue answers two:
 
-   Bone is the chrome voice and never appears on a row; the data voices never
-   appear in the chrome. That separation is the point: gold once did double
-   duty as both "selected filter" and "worth your money", which is one hue
-   making two claims on the same screen.
+     orange  the thing you press, and "you are here" in the bar
+             (--signal is the bright decorative orange; --brand is the
+             text-safe one that passes AA on white)
+     green   over            red   under
+     steel   our number      (the model chip)
+     ink     their number (a scoreboard box), selected filters, everything
+             else
 
-   Chrome is deliberately NOT a hue. It was cyan, which read as this app's
-   signature colour and made the board look like every other odds screen. By
-   then there was no saturated hue left to swap in — gold, green, red and two
-   league pastels were all spoken for, and violet is ruled out below — so any
-   replacement would have made one hue answer two questions, which is the
-   mistake cyan existed to fix. A warm bone says "selected" without claiming
-   anything about a market.
+   Numbers are Barlow Semi Condensed with tabular figures: a scoreboard
+   numeral that stays readable at 13px, where the display face's digits were
+   too quirky to compare down a column. Chakra Petch is the display face and
+   stays on the wordmark, tabs, headings and the call; Hanken Grotesk carries
+   text.
 
-   Gold-versus-teal is the newest pair and the most important. The board exists
-   to compare two numbers — what the app is offering and what this player
-   actually does — and those two sat in different columns, one of them inside
-   a grey box, right-aligned away from the market it described. As a matched
-   pair of chips the comparison needs no reading at all.
-
-   League got its tint back after `fc8325c` had cut it. That commit was right
-   at the time, when gold was doing both "selected" and "valuable"; chrome has
-   taken the selection job since and given the slot back, and "which game is
-   this" really is the first question on a mixed board.
-
-   Everything is pastel on purpose. Thirty saturated calls on one board is
-   thirty things shouting; a tint keeps the meaning and lets the figures stay
-   the loudest thing in the row.
-
-   Light is the default (see the flip below the dark tokens); dark is one tap
-   away for a tool used at night, next to a stream. */
+   Rigid on purpose: panels are square, and controls and chips take a 2px
+   corner so a button still reads as pressable. No drop shadows. Light is the
+   default; dark is the toggle (stored as bp-theme). */
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 
-  /* Deep forest. Not grey, and not grey with a tint in it.
-     Four rounds to get here and the first three all landed on some flavour of
-     grey: near-black, then blue-grey (which was OddsJam), then warm grey
-     (which was bland). Each time the hue was a few points of correction on a
-     neutral, so every surface still read as "grey, slightly". The fix is to
-     stop treating the ground as a neutral: green IS the surface here, dark
-     and desaturated, holding its hue all the way up the ladder from page to
-     card to control. Nothing on this page is grey any more.
-     Green specifically because gold sits on it the way light sits in trees —
-     the warm accents that carry the actual information get a cool ground to
-     push off, instead of a neutral that mutes everything equally. */
-  --bg:        #0a140d;
-  --surface:   #111e16;
-  --surface-2: #1a2c20;
-  --raised:    #24382a;
-  --line:      #2e4534;
-  --line-2:    #416049;
+  --bg:        #ECEEF2;
+  --surface:   #FFFFFF;
+  --surface-2: #F3F4F7;
+  --raised:    #FFFFFF;
+  --line:      #D9DDE4;
+  --line-2:    #B4BCC8;
 
-  --text:      #f2f7ef;
-  --text-2:    #c2d0c0;
-  --text-3:    #8fa08f;
+  --text:      #0B1220;
+  --text-2:    #3A4353;
+  --text-3:    #5B6474;
 
-  /* Brand. A warm gold — the one thing on the page that means "good". */
-  --brand:     #f5c265;
-  --brand-dim: #f5c26522;
-  --brand-ink: #1a1d22;
+  --brand:     #C2410C;
+  --brand-dim: #C2410C14;
+  --brand-ink: #FFFFFF;
+  --signal:    #FF5B14;
 
-  /* Pastels, not saturated signals. At the old #34d399 / #fb7185 a board with
-     thirty calls on it was thirty competing shouts; softening both toward a
-     tint keeps the meaning (green is over, red is under) while letting the
-     figure they sit beside stay the loudest thing in the row. */
-  --over:      #7fdcae;
-  --over-bg:   #7fdcae1f;
-  --under:     #f6a0ad;
-  --under-bg:  #f6a0ad1f;
+  --over:      #08805A;
+  --over-bg:   #08805A12;
+  --under:     #C8283F;
+  --under-bg:  #C8283F12;
 
-  /* The two numbers the board compares. The book's line wears the brand gold;
-     ours wears a soft teal that appears nowhere else, so "their number" and
-     "our number" are never mistaken for one another at a glance. Deliberately
-     NOT the violet the reference designs use — DESIGN.md rules out
-     violet-to-indigo, and a teal reads as calmly against a warm ground. */
-  --model:     #86d7d0;
-  --model-bg:  #86d7d01f;
+  --model:     #1D5E8C;
+  --model-bg:  #1D5E8C12;
 
-  /* League identity, pastel. A chip, never a row background. */
-  --cs2:       #f3c98b;
-  --cs2-bg:    #f3c98b1c;
-  --lol:       #9fd3ef;
-  --lol-bg:    #9fd3ef1c;
+  --cs2:       #9A5B00;
+  --cs2-bg:    #9A5B0014;
+  --lol:       #155E86;
+  --lol-bg:    #155E8614;
 
-  /* Chrome: warm bone, and deliberately not a hue.
-     The job here is "you are here", and it used to be cyan — which read as
-     this app's signature colour and was the single thing that made the board
-     look like OddsJam. There is no saturated hue free to replace it: gold is
-     the book's number, green is over, red is under, and the two league
-     pastels take amber and blue. Violet is ruled out at the top of this file.
-     Every remaining option would have made one hue answer two questions,
-     which is the mistake cyan was introduced to fix in the first place.
-     So chrome stops competing. A light warm bone against a warm dark ground
-     is unmistakably "selected" without claiming to mean anything about a
-     market, and it leaves the row hues as the only colour that carries
-     information. Boldness spent in one place, as intended. */
-  --nav:       #e7dac4;
-  --nav-dim:   #e7dac41c;
-  --nav-ink:   #221e19;
+  /* Selected filters and segments: solid ink, not a hue. */
+  --nav:       #0B1220;
+  --nav-dim:   #0B12200F;
+  --nav-ink:   #FFFFFF;
 
-  --focus:     #e7dac4;
-  /* A one-pixel lift along the top edge of raised surfaces. Not a drop
-     shadow — the light is coming from above, which is all it says. */
-  --lift:      inset 0 1px 0 rgba(255, 255, 255, .045);
+  /* The score bug. Dark in both themes, like the overlay it comes from. */
+  --bar:       #0B1220;
+  --bar-2:     #151E30;
+  --bar-ink:   #FFFFFF;
+  --bar-muted: #9AA3B4;
+  --bar-line:  #1E2840;
+  --bar-alert: #FF6B7A;
 
-  --font: 'Barlow', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* The ground of the call tag and of the book's line box. */
+  --tag:       #0B1220;
+  --tag-ink:   #FFFFFF;
 
-  /* Radius by role, not one number on everything.
-     A single radius applied to cards, chips, buttons and inputs alike is a
-     documented tell — it makes every element the same kind of object, which
-     is exactly what "everything feels round" is describing. These say what a
-     thing IS: panels are near-square because they are regions of a page,
-     controls keep enough curve to read as pressable, and figures sit in tight
-     chips that should not look like buttons. */
-  --r-panel:   3px;   /* cards, tables, banners — structure */
-  --r-control: 6px;   /* buttons, inputs, segmented nav — pressable */
-  --r-chip:    3px;   /* number chips, league badges — labels */
-  --r-pill:    999px; /* the very few things that really are pills */
+  --focus:     #FF5B14;
+  --lift:      none;
 
-  /* Kept as aliases so nothing breaks mid-edit; both now resolve to the
-     panel and control roles rather than to a single house radius. */
+  --font:    'Hanken Grotesk', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --display: 'Chakra Petch', 'Hanken Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --mono:    'Barlow Semi Condensed', 'Hanken Grotesk', ui-sans-serif, system-ui, sans-serif;
+
+  /* Radius by role, and rigid: regions of a page are square; anything you
+     press keeps just enough corner to read as pressable. */
+  --r-panel:   0px;
+  --r-control: 2px;
+  --r-chip:    2px;
+  --r-pill:    2px;
   --r:  var(--r-panel);
   --r-s: var(--r-control);
 
-  /* The shell's width cap. Used to live as the literal 1560px, copied into
-     eight rules — a magic number that could drift if one copy got edited and
-     the rest didn't. One token now. It holds at 1560px through tablet and
-     the tighter end of desktop (where the board and the slip rail already
-     need every pixel), then eases open with the viewport past that so a
-     1920 or 2560 screen isn't reading a phone-width column with the rest of
-     the room sitting empty. */
+  /* The shell's width cap: 1560px through tablet and small desktop, easing
+     open past that so a wide monitor isn't a phone-width column. */
   --shell-max: clamp(1560px, 90vw, 2400px);
-  /* The slip rail. A fixed 330px was fine once the board had the rest of a
-     1560px shell to itself; once the two-column layout has to share that
-     same shell with a viewport barely wider than the cap, 330px plus its
-     gutter is the difference between the board fitting and not. Scaling it
-     with the viewport gives the tight end back those pixels and lets the
-     rail breathe on a wide monitor instead of sitting at a stingy fixed
-     width forever. */
+  /* The slip rail, scaled with the viewport so the tight end gets its pixels
+     back and a wide monitor lets it breathe. */
   --rail-w: clamp(272px, 19vw, 380px);
 }
 
-/* Light is the default since 2026-09-11, at the owner's request: every page
-   renders light unless dark was chosen with the toggle (stored as bp-theme).
-   Written as a selector flip rather than a swap of the two blocks, so the dark
-   tokens above stay the single definition of dark. */
-:root:not([data-theme="dark"]) {
-  color-scheme: light;
-  --bg:        #eff4ed;
-  --surface:   #ffffff;
-  --surface-2: #e3ece1;
-  --raised:    #ffffff;
-  --line:      #d2ded0;
-  --line-2:    #a7baa6;
-  --text:      #101a12;
-  --text-2:    #455046;
-  --text-3:    #6e7d70;
-  --brand:     #a76a00;
-  --brand-dim: #a76a0018;
-  --brand-ink: #ffffff;
-  --over:      #0f8a5f;
-  --over-bg:   #0f8a5f16;
-  --under:     #c2334d;
-  --under-bg:  #c2334d16;
-  /* Chrome inverts on a light ground: still the quiet voice, now deep pine
-     ink on paper rather than bone on forest. */
-  --nav:       #2c4433;
-  --nav-dim:   #2c443314;
-  --nav-ink:   #ffffff;
-  --focus:     #2c4433;
-  --lift:      inset 0 1px 0 rgba(255, 255, 255, .9);
-  /* The pastels are tuned for a dark ground and vanish on a white one — a
-     tint that reads as a soft glow at 12% over #12161f is nearly paper at 12%
-     over #ffffff. Same meanings, weighted for light: deeper and more
-     saturated, so the chip still carries its hue at text sizes. */
-  --model:     #0f7d78;
-  --model-bg:  #0f7d7814;
-  --cs2:       #935f0b;
-  --cs2-bg:    #935f0b14;
-  --lol:       #16607f;
-  --lol-bg:    #16607f14;
+/* Dark: the same overlay after dark. The bar barely moves; the page drops to
+   near-black and every signal brightens enough to hold on it. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg:        #0B0C0F;
+  --surface:   #14161B;
+  --surface-2: #1A1D23;
+  --raised:    #1F2229;
+  --line:      #262A32;
+  --line-2:    #3A404B;
+  --text:      #EEF0F4;
+  --text-2:    #B8BEC9;
+  --text-3:    #8C93A0;
+  --brand:     #FF7A3D;
+  --brand-dim: #FF7A3D1F;
+  --brand-ink: #140702;
+  --signal:    #FF6A2B;
+  --over:      #2BC48A;
+  --over-bg:   #2BC48A1C;
+  --under:     #FF5C6E;
+  --under-bg:  #FF5C6E1C;
+  --model:     #6FB3E8;
+  --model-bg:  #6FB3E81C;
+  --cs2:       #F3C98B;
+  --cs2-bg:    #F3C98B1C;
+  --lol:       #9FD3EF;
+  --lol-bg:    #9FD3EF1C;
+  --nav:       #EEF0F4;
+  --nav-dim:   #EEF0F414;
+  --nav-ink:   #0B0C0F;
+  --bar:       #101217;
+  --bar-2:     #181B22;
+  --bar-muted: #8C93A0;
+  --bar-line:  #23272F;
+  --tag:       #262B35;
+  --focus:     #FF7A3D;
 }
 
 * { box-sizing: border-box; }
@@ -237,121 +181,133 @@ a { color: inherit; }
   ::view-transition-new(root) { animation: none !important; }
 }
 
-/* ---- frame ---------------------------------------------------------- */
+/* ---- frame: the score bug ---------------------------------------------
+   A dark bar across the top in both themes, the way a match overlay sits
+   over a stream: the mark, the name, the pages as tabs, and how fresh the
+   lines are. The two-tone wordmark and the thin coloured band over it are
+   gone — they read as a template. The mark carries the identity now. */
 
 .top {
   position: sticky; top: 0; z-index: 20;
-  background: var(--surface);
-  border-bottom: 1px solid var(--line);
-  box-shadow: var(--lift);
+  background: var(--bar); color: var(--bar-ink);
+  border-bottom: 1px solid var(--bar-line);
 }
-/* A band across the very top, in the chrome hue. The header used to be a
-   grey strip with one gold pill in it; this gives the app an edge you can
-   see from across the room without adding a hue to any row. */
-.top::before {
-  content: ''; display: block; height: 3px;
-  background: var(--nav);
+/* Broadcast hatching at the far right of the bar. Texture, not information:
+   faint, and faded out before it reaches anything you read. */
+.top::after {
+  content: ''; position: absolute; top: 0; right: 0; bottom: 0;
+  width: min(460px, 42vw); pointer-events: none;
+  background: repeating-linear-gradient(115deg, transparent 0 11px, rgba(255, 255, 255, .04) 11px 12px);
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 75%);
+          mask-image: linear-gradient(to right, transparent, #000 75%);
 }
 .top-in {
-  max-width: var(--shell-max); margin: 0 auto; padding: 12px 22px;
-  display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+  position: relative; z-index: 1;
+  max-width: var(--shell-max); margin: 0 auto; padding: 0 22px;
+  display: flex; align-items: stretch; gap: 28px; min-height: 60px;
 }
 
-.brand {
-  display: flex; align-items: baseline; gap: 10px;
-  font-size: 21px; font-weight: 700; letter-spacing: -.025em;
-  margin: 0; white-space: nowrap;
-}
+.brand { margin: 0; display: flex; align-items: center; }
 .brand a {
-  text-decoration: none; color: var(--text);
-  border-radius: var(--r-s);
+  display: flex; align-items: center; gap: 11px;
+  color: inherit; text-decoration: none; white-space: nowrap;
 }
-/* Two-tone wordmark, and the one place a data hue is allowed out of the rows.
-   It used to take the chrome hue, which worked while chrome was cyan and
-   stopped working the moment chrome became a bone barely off the text colour —
-   the name went flat white. Gold instead: the brand is the single thing on
-   this page that means itself rather than something about a market, and it
-   sits in the masthead where no line or chip can be confused with it. */
-.brand a span { color: var(--brand); }
-.brand a:hover span { color: var(--text); }
-.brand em {
-  font-style: normal; font-weight: 600; font-size: 12px;
-  letter-spacing: 0; color: var(--text-2);
-  padding: 3px 8px; border-radius: 99px;
-  background: var(--surface-2); border: 1px solid var(--line);
+.brand .mark { display: block; width: 30px; height: 30px; flex: none; }
+.brand .word {
+  font-family: var(--display); font-weight: 700; font-size: 19px; line-height: 1;
+  letter-spacing: .08em; text-transform: uppercase;
 }
+/* The one flourish the mark gets: it lifts a pixel under the pointer. */
+.brand a .mark { transition: transform .15s ease; }
+.brand a:hover .mark { transform: translateY(-1px); }
 
-.tabs { display: flex; gap: 2px; }
+/* Tabs are overlay labels: caps, tracked, and the page you are on carries an
+   orange rule flush with the bottom of the bar. */
+.tabs { display: flex; align-items: stretch; gap: 2px; }
 .tabs a {
-  position: relative;
-  padding: 9px 15px 10px; border-radius: var(--r-s) var(--r-s) 0 0;
-  font-size: 15px; font-weight: 600; color: var(--text-2);
-  text-decoration: none; white-space: nowrap;
-  border-bottom: 2px solid transparent;
+  display: flex; align-items: center; padding: 0 14px;
+  font-family: var(--display); font-size: 13.5px; font-weight: 600;
+  letter-spacing: .09em; text-transform: uppercase;
+  color: var(--bar-muted); text-decoration: none; white-space: nowrap;
+  transition: color .15s ease, box-shadow .15s ease;
 }
-.tabs a:hover { background: var(--surface-2); color: var(--text); }
-.tabs a[aria-current="page"] {
-  color: var(--nav); background: var(--nav-dim); border-bottom-color: var(--nav);
-}
+.tabs a:hover { color: var(--bar-ink); box-shadow: inset 0 -3px 0 var(--bar-line); }
+.tabs a[aria-current="page"] { color: var(--bar-ink); box-shadow: inset 0 -3px 0 var(--signal); }
 
 .top .grow { flex: 1 1 auto; }
+.top-in > .fresh, .top-in > .icon-btn { align-self: center; }
 
 /* ---- freshness ------------------------------------------------------
-   A depleting gauge, not a status light. A dot is binary and spends most of
-   its life saying "fine" — the useful information is how far through the
-   window you are, so the fill is the share of two poll intervals already
-   spent and the age is written out beside it. The notch marks one interval:
-   past it a poll is late, past the end of the track it is overdue. */
+   The overlay's LIVE chip, still a depleting gauge underneath. A dot alone is
+   binary and spends most of its life saying "fine"; the useful fact is how far
+   through the window you are, so the fill is the share of two poll intervals
+   already spent, the notch marks one, and the age is written out. The square
+   mark pulses while polls are on time, turns orange once one is late, and red
+   past two intervals. */
 
 .fresh {
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 6px 12px; border-radius: 99px;
-  border: 1px solid var(--line); background: var(--surface-2);
-  box-shadow: var(--lift);
-  font-size: 13px; font-weight: 500; color: var(--text-2);
+  display: inline-flex; align-items: center; gap: 9px;
+  padding: 6px 10px;
+  border: 1px solid var(--bar-line); background: var(--bar-2);
+  font-size: 12.5px; font-weight: 600; color: var(--bar-muted);
 }
-.fresh-k { color: var(--text-3); }
+.fresh-k {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-family: var(--display); font-size: 11.5px; font-weight: 700;
+  letter-spacing: .12em; text-transform: uppercase; color: var(--bar-ink);
+}
+.fresh-k::before { content: ''; display: block; width: 7px; height: 7px; background: var(--over); }
+.fresh.ok .fresh-k::before { animation: live-pulse 2.4s ease-in-out infinite; }
+.fresh.due .fresh-k::before { background: var(--signal); }
+@keyframes live-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
 .fresh-v {
   font-family: var(--mono); font-variant-numeric: tabular-nums;
-  font-size: 13px; color: var(--text);
+  font-size: 14px; font-weight: 600; color: var(--bar-ink);
 }
 .fresh-gauge {
-  position: relative; display: block;
-  width: 54px; height: 6px; flex: none;
-  border-radius: 99px; overflow: hidden;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
+  position: relative; display: block; flex: none;
+  width: 48px; height: 4px; overflow: hidden; background: var(--bar-line);
 }
-.fresh-gauge > i {
-  display: block; height: 100%;
-  background: var(--nav);
-  transition: width .4s linear;
-}
+.fresh-gauge > i { display: block; height: 100%; background: var(--bar-muted); transition: width .4s linear; }
 /* One poll interval. Half the track is a fact, not a decoration. */
 .fresh-gauge::after {
   content: ''; position: absolute; left: 50%; top: 0; bottom: 0;
-  width: 1px; background: var(--bg); opacity: .85;
+  width: 2px; background: var(--bar-2);
 }
-.fresh.stale {
-  color: var(--under); border-color: var(--under); background: var(--under-bg);
-}
-.fresh.stale .fresh-k { color: var(--under); }
-.fresh.stale .fresh-v { color: var(--under); }
-.fresh.stale .fresh-gauge { border-color: var(--under); background: transparent; }
-.fresh.stale .fresh-gauge > i { background: var(--under); }
-.fresh.stale .fresh-gauge::after { background: var(--under-bg); }
+.fresh.stale { border-color: var(--bar-alert); }
+.fresh.stale .fresh-k,
+.fresh.stale .fresh-v { color: var(--bar-alert); }
+.fresh.stale .fresh-k::before { background: var(--bar-alert); animation: none; }
+.fresh.stale .fresh-gauge > i { background: var(--bar-alert); }
 .fresh-flag {
-  font-size: 12px; font-weight: 600; color: var(--under);
+  font-size: 11.5px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--bar-alert);
 }
 
 .icon-btn {
-  font-family: var(--font); font-size: 13px; font-weight: 600;
-  padding: 8px 13px; border-radius: var(--r);
-  background: var(--surface-2); color: var(--text-2);
-  border: 1px solid var(--line); cursor: pointer;
-  box-shadow: var(--lift);
+  font-family: var(--display); font-size: 12px; font-weight: 600;
+  letter-spacing: .09em; text-transform: uppercase;
+  padding: 8px 12px; border-radius: var(--r-control);
+  background: transparent; color: var(--bar-muted);
+  border: 1px solid var(--bar-line); cursor: pointer;
 }
-.icon-btn:hover { color: var(--text); border-color: var(--line-2); }
+.icon-btn:hover { color: var(--bar-ink); border-color: var(--bar-muted); }
+
+/* The bar on a phone: mark, name, freshness and theme on one line, the tabs
+   on a scrolling line of their own under it. */
+@media (max-width: 860px) {
+  .top-in { flex-wrap: wrap; gap: 0 12px; min-height: 0; padding-top: 10px; }
+  .brand .mark { width: 26px; height: 26px; }
+  .brand .word { font-size: 16px; }
+  .top-in > .fresh, .top-in > .icon-btn { margin: 0; }
+  .fresh-gauge { display: none; }
+  .tabs {
+    order: 5; flex: 1 1 100%; margin: 8px -14px 0; padding: 0 6px;
+    overflow-x: auto; scrollbar-width: none;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tabs a { padding: 12px 11px; font-size: 12.5px; }
+}
 
 /* ---- filter bar ----------------------------------------------------- */
 
@@ -458,7 +414,7 @@ tr.filtered-out { display: none !important; }
 .card {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-panel);
   overflow: hidden;
   box-shadow: var(--lift);
 }
@@ -473,7 +429,7 @@ tr.filtered-out { display: none !important; }
   border-bottom: 1px solid var(--line);
 }
 .card-head h2 {
-  margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -.01em;
+  margin: 0; font-family: var(--display); font-size: 18px; font-weight: 700; letter-spacing: .01em;
 }
 .card-head .sub { font-size: 14px; color: var(--text-3); margin-left: auto; }
 .card-head .sub b {
@@ -573,14 +529,17 @@ td.match .sub2 {
 .gap-chip.flat { color: var(--text-3); background: var(--surface-2); border-color: var(--line); }
 
 .move { font-family: var(--mono); font-size: 13px; font-weight: 500; }
-.move.up   { color: var(--over); }
-.move.down { color: var(--under); }
+/* A line move is not an over or an under, so it doesn't borrow their hues. */
+.move.up   { color: var(--text-2); }
+.move.down { color: var(--text-2); }
 
 /* ---- take buttons --------------------------------------------------- */
 
 .bookcell { display: flex; align-items: center; justify-content: flex-end; gap: 7px; }
 
 .ou { display: flex; gap: 4px; }
+/* The rest of "Over" / "Under" — shown on phone cards only. */
+.ou .w { display: none; }
 .ou button {
   font-family: var(--font); font-size: 15px; font-weight: 700;
   min-width: 32px; height: 34px; padding: 0 6px;
@@ -627,7 +586,10 @@ form.inline { display: inline; }
    alone: green and red are the two hues most often confused, and O and U are
    already what the take buttons say. */
 
-.bk-num { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+/* Number and price on one line, so every book's figure sits on the row's
+   axis; stacked, a priced book's number rode a few pixels above an unpriced
+   one's. */
+.bk-num { display: flex; flex-direction: row; align-items: baseline; justify-content: flex-end; gap: 7px; }
 /* Positioned so the screen-reader text inside it (`.vh`, absolutely placed)
    has a containing block within the table. Without it that text resolved
    against the page, escaped the table's own scroll box, and at 820px — where
@@ -638,8 +600,10 @@ form.inline { display: inline; }
   display: inline-flex; align-items: baseline; gap: 3px;
   font-family: var(--mono); font-variant-numeric: tabular-nums;
   font-size: 18px; font-weight: 500; line-height: 1.2;
-  padding: 2px 6px; border-radius: var(--r-s);
-  border: 1px solid transparent;
+  /* A fixed right-aligned slot, no chip padding, so digits line up down a
+     column whatever the number of digits. */
+  min-width: 3.4ch; justify-content: flex-end;
+  padding: 0; border: 0;
 }
 .bk-fig.muted { color: var(--text-3); }
 .bk-fig.best.o {
@@ -906,13 +870,22 @@ button.link:hover { color: var(--under); text-decoration: underline; }
   display: flex; align-items: baseline; gap: 8px; white-space: nowrap;
   justify-content: center;
 }
-.play .dir { font-size: 18px; font-weight: 700; letter-spacing: -.01em; }
+/* The call sits in the overlay's notched tag: ink ground, caps, and the
+   direction as a hard stripe down its leading edge. It is the one shape on the
+   board nothing else uses, so the eye finds the decision first. */
+.play .dir {
+  font-family: var(--display); font-size: 14px; font-weight: 700; line-height: 1;
+  letter-spacing: .08em; text-transform: uppercase;
+  color: var(--tag-ink); background: var(--tag);
+  padding: 7px 18px 7px 12px;
+  clip-path: polygon(0 0, 100% 0, calc(100% - 9px) 100%, 0 100%);
+}
 .play .at {
-  font-family: var(--mono); font-size: 15px; font-weight: 500;
+  font-family: var(--mono); font-size: 16px; font-weight: 600;
   color: var(--text-2);
 }
-.play.o .dir { color: var(--over); }
-.play.u .dir { color: var(--under); }
+.play.o .dir { box-shadow: inset 4px 0 0 var(--over); }
+.play.u .dir { box-shadow: inset 4px 0 0 var(--under); }
 
 /* ---- score --------------------------------------------------------- */
 
@@ -958,7 +931,7 @@ button.link:hover { color: var(--under); text-decoration: underline; }
 @media (min-width: 860px) {
   .board-table th:nth-child(2), .board-table td:nth-child(2) { width: 25%; }
   .board-table th:nth-child(3), .board-table td:nth-child(3) { width: 11%; }
-  .board-table th:nth-child(6), .board-table td:nth-child(6) { width: 15%; }
+  .board-table th:nth-child(5), .board-table td:nth-child(5) { width: 13%; }
 }
 
 /* Fair % vs. our own hit rate, twenty points or more apart. Not a fourth
@@ -1013,8 +986,12 @@ button.link:hover { color: var(--under); text-decoration: underline; }
   padding: 5px 10px; border-radius: var(--r-s);
   border: 1px solid transparent;
 }
-.chip-num.book  { color: var(--brand); background: var(--brand-dim); border-color: color-mix(in srgb, var(--brand) 20%, transparent); }
-.chip-num.model { color: var(--model); background: var(--model-bg);  border-color: color-mix(in srgb, var(--model) 20%, transparent); }
+/* Their number is a scoreboard box: white on ink, the way a score sits in an
+   overlay. Ours stays a steel outline beside it, so the pair never blurs. */
+.chip-num.book  { color: var(--tag-ink); background: var(--tag); border-color: var(--tag); }
+/* Ours is a plain steel figure — no box. Boxes on every number were most of
+   the "highlighting over everything". */
+.chip-num.model { color: var(--model); background: none; border-color: transparent; padding-left: 0; padding-right: 0; }
 
 /* Our probability. The largest plain figure in the row, because after the two
    chips it is the number that decides. */
@@ -1044,8 +1021,10 @@ button.link:hover { color: var(--under); text-decoration: underline; }
    rows makes the column ragged, because every row then sets its own baseline
    and the eye has nothing straight to run down. Colour carries the band;
    the geometry stays identical on every row. */
-.strength.s3 .prob { color: var(--brand); }
-.strength.s4 .prob { color: var(--brand); }
+/* Strong records are full-strength ink, not orange: orange now means only
+   "the thing you press" and "the page you are on". */
+.strength.s3 .prob { color: var(--text); }
+.strength.s4 .prob { color: var(--text); }
 
 /* Expected value. Only Underdog prices both sides, so this is blank more often
    than not — which is honest, and why it is a quiet column rather than a
@@ -1192,7 +1171,7 @@ button.link:hover { color: var(--under); text-decoration: underline; }
   .stack-sm tr {
     position: relative;
     border: 1px solid var(--line);
-    border-radius: 10px;
+    border-radius: var(--r-panel);
     padding: 12px 14px 11px;
     margin: 0 0 10px;
     background: var(--surface);
@@ -1232,7 +1211,7 @@ button.link:hover { color: var(--under); text-decoration: underline; }
   .score.mid { font-size: 22px; }
   .gapcol { display: none !important; }
   .play { margin-top: 0; }
-  .play .dir { font-size: 17px; }
+  .play .dir { font-size: 14px; }
 
   /* Every stacked cell names itself from its own data-label. Repeating the
      header text into the markup on every row would be the same string in a
@@ -1295,6 +1274,8 @@ button.link:hover { color: var(--under); text-decoration: underline; }
   .board-table td[data-label="Record"] .prob { font-size: 17px; }
   .board-table td[data-label="Record"] .meta.raw { font-family: var(--font); font-size: 13px; }
   .board-table td[data-label="Ours"] { margin-top: 6px; }
+  .board-table .ou .w { display: inline; }
+  .board-table .ou button { min-width: 78px; }
   /* Book lines on a phone are plain numbers. The best-number marks (a tinted
      chip with O or U in it) and the other apps' prices were a second layer of
      coloured signals on a card that already makes one call. */
@@ -1309,10 +1290,19 @@ button.link:hover { color: var(--under); text-decoration: underline; }
      every column. */
   .board-table .bookcol.ref,
   .board-table .bookcol.alt { display: none !important; }
-  .board-table .bookcol[data-best]::before {
-    content: attr(data-book) "\A" attr(data-best);
-    white-space: pre; line-height: 1.3;
+  /* The verdict is one line — the tag, the record, our number — centred on
+     one axis, so no figure sits a few pixels above its neighbour. */
+  .board-table td[data-label="Lean"],
+  .board-table td[data-label="Record"],
+  .board-table td[data-label="Ours"] {
+    display: inline-flex !important; align-items: center; align-self: center;
+    margin-top: 12px; padding-right: 0;
   }
+  .board-table td[data-label="Record"] { gap: 5px; padding-left: 12px; }
+  .board-table td[data-label="Ours"] { margin-left: auto; gap: 6px; }
+  .board-table td[data-label="Ours"]::before { min-width: 0; font-size: 13px; }
+  .board-table td[data-label="Record"] .prob,
+  .board-table td[data-label="Ours"] .chip-num { font-size: 18px; line-height: 1; padding-top: 0; padding-bottom: 0; }
 
   .formcol { display: none !important; }
   .faircol {
@@ -1442,11 +1432,11 @@ button.link:hover { color: var(--under); text-decoration: underline; }
 
   /* -- header: identity and freshness on one line, tabs on their own -- */
   .top-in { padding: 10px 14px; gap: 8px 10px; }
-  .brand { font-size: 19px; order: 1; }
-  .brand em { display: none; }
+  .brand { order: 1; }
   .top .grow { order: 2; }
   .fresh { order: 3; gap: 6px; padding: 5px 10px; }
-  .fresh-k { display: none; }
+  /* The word goes, the pulsing live square stays. */
+  .fresh-k { font-size: 0; gap: 0; }
   /* Once the gauge is pinned it has nothing left to say, so on a narrow
      header the word takes its place rather than sitting beside it. */
   .fresh.stale .fresh-gauge { display: none; }
@@ -1521,7 +1511,10 @@ button.link:hover { color: var(--under); text-decoration: underline; }
      however tall it is. min-width pads the box out to the same 44px without
      touching the type. */
   .name a { padding: 9px 0; margin: -9px 0; min-width: 44px; }
-  .name a, .brand a, a.meta { position: relative; display: inline-block; }
+  .name a, a.meta { position: relative; display: inline-block; }
+  /* The brand link stays a flex row (mark beside the word); inline-block here
+     stacked the mark on top of the name. It only needs to anchor its overlay. */
+  .brand a { position: relative; }
   .name a::after, .brand a::after, a.meta::after {
     content: ''; position: absolute; top: -13px; bottom: -13px;
     left: 50%; transform: translateX(-50%);
@@ -1567,8 +1560,12 @@ body.searching .tick { display: none; }
 /* `display:block` undoes the shell's flex, which exists to space the wordmark
    from the page-name pill. There is no pill here, so flex only inserted a
    10px gap into the middle of the name. */
-.login-brand { display: block; font-size: 34px; margin: 0 0 6px; }
-.login-brand span { color: var(--brand); }
+.login-brand {
+  display: flex; justify-content: center; align-items: center; gap: 12px;
+  color: var(--text); margin: 0 0 6px;
+}
+.login-brand .mark { width: 40px; height: 40px; }
+.login-brand .word { font-size: 26px; }
 .login-sub { color: var(--text-3); margin: 0 0 26px; font-size: 15px; }
 
 .login-card {
@@ -1618,25 +1615,22 @@ body.searching .tick { display: none; }
 .board-table tbody tr.quiet:hover td { opacity: 1; }
 .board-table tbody tr.quiet .chip-num { border-color: transparent; }
 
-/* A live row gets a hairline of its own direction down the leading edge — the
-   one place a signal hue touches the row frame rather than the type. It reads
-   as a margin mark on a page, which is what it is: this is the row you were
-   looking for. */
-.board-table tbody tr.live td:first-child { box-shadow: inset 3px 0 0 var(--line-2); }
-.board-table tbody tr.live:has(.play.o) td:first-child { box-shadow: inset 3px 0 0 var(--over); }
-.board-table tbody tr.live:has(.play.u) td:first-child { box-shadow: inset 3px 0 0 var(--under); }
-
-@media (max-width: 760px) {
-  /* Stacked, the row is a card and its first cell is only the top block, so
-     the leading-edge mark ran a third of the way down and stopped. Move it to
-     the card itself and let the cell go back to being a cell. */
-  .board-table tbody tr.live td:first-child,
-  .board-table tbody tr.live:has(.play.o) td:first-child,
-  .board-table tbody tr.live:has(.play.u) td:first-child { box-shadow: none; }
-  .board-table tbody tr.live { box-shadow: inset 3px 0 0 var(--line-2); }
-  .board-table tbody tr.live:has(.play.o) { box-shadow: inset 3px 0 0 var(--over); }
-  .board-table tbody tr.live:has(.play.u) { box-shadow: inset 3px 0 0 var(--under); }
+/* A row reads as one horizontal line. The leading-edge direction stripe that
+   used to sit here is gone — the notched call tag already carries the
+   direction, and the owner asked for less highlighting everywhere. What stays
+   is alignment: every value cell centred on the row's axis, single-line, so no
+   number sits a few pixels above the number beside it. Detail that used to
+   take a second line (the gap to the line, the sample behind our number, the
+   market %) lives in the cell's tooltip. */
+@media (min-width: 761px) {
+  .board-table tbody td { vertical-align: middle; }
 }
+.board-table td[data-label="Record"] .prob,
+.board-table td[data-label="Record"] .meta.raw { display: inline; }
+.board-table td[data-label="Record"] .meta.raw { margin-left: 5px; }
+/* "Kills Maps 1–2" on one line: the market is one fact, not two rows. */
+.board-table .statname { display: inline; }
+.board-table .statname + .meta { display: inline; margin-left: 6px; }
 
 /* ---- the filter disclosure ----------------------------------------------
    League and search stay out; app, show and the price toggles fold away.
@@ -1817,7 +1811,7 @@ body.searching .tick { display: none; }
 .meter-n { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--text-3); }
 .meter-n b { color: var(--text); font-weight: 700; }
 .meter {
-  height: 8px; border-radius: 99px; overflow: hidden;
+  height: 8px; border-radius: var(--r-pill); overflow: hidden;
   background: var(--surface-2); border: 1px solid var(--line);
 }
 .meter-fill { height: 100%; background: var(--over); }
