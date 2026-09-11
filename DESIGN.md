@@ -262,6 +262,21 @@ changed here: it decides money and deserves its own measurement.
   moves, the box around our number and the duplicate Line column are gone.
   On a phone the verdict is one centred line — tag, "11 of 12 series",
   "Ours 45.3" — above your app's line and buttons.
+  Then a pass against "looks vibecoded" (the owner ran the board past another
+  assistant and agreed with all of it): the model got a name — **Projected** —
+  and says what it was built from ("Last 12 matches average 48.4, pulled toward
+  the line"); the record got a defined sample ("11 of last 12 matches over");
+  engine language left the row ("moved +1.5" → "line up 1.5", "waiting on
+  history" → "No play" with the reason in a tooltip, the header's call/fair/
+  waiting breakdown → "4 plays from 14 props"); and boxes came down —
+  league badges are a coloured word, filters are underlined text tabs, the
+  phone board is a hairline list rather than stacked cards, and the play is
+  one solid button with the other side quiet. The phone card now reads
+  ESPN-style: who and prop; the line, Projected and the play with its edge;
+  the record with its reason; the button. The one suggestion NOT taken was a
+  win percentage ("68% O"): the model's probabilities measured as uncalibrated
+  (claimed ~60%, realised ~52%, AUC ≈ 0.5), and a confident percentage is the
+  fakest thing the board could print.
 - **2026-09-11** — Light is the default, at the owner's request; dark is one
   tap away. The phone card was cut to one call made at your own app's line:
   the cheaper-app chip, the stale chip, the "+3.8 in your favour" figure and

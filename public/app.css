@@ -322,25 +322,19 @@ a { color: inherit; }
   font-size: 13px; font-weight: 500; color: var(--text-3);
 }
 
-/* Segmented control. Big enough to hit, coloured by what it selects. */
-.seg { display: flex; gap: 5px; }
+/* Filters are text tabs with an underline, the same language as the bar —
+   not a row of outlined boxes. Tall enough to hit on a phone. */
+.seg { display: flex; gap: 2px; }
 .seg a {
   display: inline-flex; align-items: center; gap: 7px;
-  padding: 9px 17px; border-radius: var(--r);
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--text-2);
-  font-size: 15px; font-weight: 600; text-decoration: none;
-  white-space: nowrap;
+  padding: 10px 12px; min-height: 40px;
+  font-family: var(--display); font-size: 13.5px; font-weight: 600;
+  letter-spacing: .08em; text-transform: uppercase;
+  color: var(--text-3); text-decoration: none; white-space: nowrap;
+  box-shadow: inset 0 -2px 0 transparent;
 }
-.seg a { box-shadow: var(--lift); }
-.seg a:hover { border-color: var(--line-2); color: var(--text); }
-/* Selected is the chrome hue, not gold: "this filter is on" and "this line is
-   worth your money" were the same colour, and only one of them is about money. */
-.seg a[aria-current="page"] {
-  background: var(--nav); border-color: var(--nav); color: var(--nav-ink);
-  box-shadow: none;
-}
+.seg a:hover { color: var(--text); box-shadow: inset 0 -2px 0 var(--line-2); }
+.seg a[aria-current="page"] { color: var(--text); box-shadow: inset 0 -2px 0 var(--signal); }
 
 .search { display: flex; gap: 6px; align-items: center; position: relative; }
 .search input {
@@ -491,11 +485,12 @@ td.match .sub2 {
 .fig.sm { font-size: 17px; }
 .fig.muted { color: var(--text-3); }
 
-/* League identity. An acronym badge, not a styled-caps label. */
+/* League identity: a coloured word, not a badge. Boxes on every row were
+   part of what read as a generated dashboard. */
 .lg {
-  display: inline-block; padding: 3px 9px; border-radius: var(--r-s);
-  font-size: 13px; font-weight: 700; letter-spacing: .02em;
-  border: 1px solid transparent;
+  display: inline-block; margin-right: 7px;
+  font-family: var(--display); font-size: 12px; font-weight: 700; letter-spacing: .08em;
+  background: none !important; border: 0 !important; padding: 0;
 }
 /* League gets its hue back, in pastel.
    `fc8325c` had cut this to neutral to hold the colour language to three
@@ -1290,19 +1285,48 @@ button.link:hover { color: var(--under); text-decoration: underline; }
      every column. */
   .board-table .bookcol.ref,
   .board-table .bookcol.alt { display: none !important; }
-  /* The verdict is one line — the tag, the record, our number — centred on
-     one axis, so no figure sits a few pixels above its neighbour. */
-  .board-table td[data-label="Lean"],
-  .board-table td[data-label="Record"],
-  .board-table td[data-label="Ours"] {
-    display: inline-flex !important; align-items: center; align-self: center;
-    margin-top: 12px; padding-right: 0;
+  /* The phone board, ESPN-style: a list, not a stack of boxed cards. Each
+     prop reads top to bottom — who and what; their line, our projection and
+     the play as three figures on one axis; the record with the reason under
+     it; then one play button. */
+  .board-table.stack-sm tbody tr {
+    border: 0; border-bottom: 1px solid var(--line); border-radius: 0;
+    margin: 0; box-shadow: none; padding: 16px 16px 14px;
   }
-  .board-table td[data-label="Record"] { gap: 5px; padding-left: 12px; }
-  .board-table td[data-label="Ours"] { margin-left: auto; gap: 6px; }
-  .board-table td[data-label="Ours"]::before { min-width: 0; font-size: 13px; }
-  .board-table td[data-label="Record"] .prob,
-  .board-table td[data-label="Ours"] .chip-num { font-size: 18px; line-height: 1; padding-top: 0; padding-bottom: 0; }
+  /* Who on the left, the prop on the right, sharing the top line; a long prop
+     wraps within its half rather than being pushed down a row. */
+  .board-table tbody td:nth-child(1) { order: -3; flex: 1 1 50%; min-width: 0; }
+  .board-table tbody td:nth-child(2) {
+    order: -3; flex: 0 1 auto; max-width: 48%; min-width: 0;
+    margin-left: auto; text-align: right;
+  }
+  .board-table tbody .matchline { max-width: none; }
+  .board-table td[data-label="Ours"] {
+    order: -2; display: flex !important; align-items: flex-start; gap: 26px;
+    flex: 1 1 auto; margin-top: 16px; padding-right: 0;
+  }
+  .board-table td[data-label="Ours"]::before { display: none; }
+  .board-table td[data-label="Lean"] {
+    order: -2; display: flex !important; flex: 0 0 auto;
+    margin: 16px 0 0 auto; padding-right: 0;
+  }
+  .board-table td[data-label="Lean"] .play { flex-direction: column; align-items: flex-end; gap: 7px; }
+  .board-table td[data-label="Record"] {
+    order: -1; display: block !important; flex: 1 1 100%;
+    margin-top: 14px; padding-left: 0;
+  }
+  /* More specific than the wide-screen hide, which sits later in the file. */
+  .board-table tbody td .pv.only-sm { display: inline-flex; }
+  .board-table .pv b { font-size: 26px; }
+  .board-table .pv small { display: block; }
+  /* The book row becomes the action: the line and app are already above, so
+     it is just the play button and the quiet other side, full width. */
+  .board-table tr.live .bookcol::before,
+  .board-table tr.live .bookcol .bk-num { display: none; }
+  .board-table tr.live .bookcol .bookcell { flex: 1; }
+  .board-table tr.live .bookcol .ou { flex: 1; gap: 8px; }
+  .board-table tr.live .bookcol .ou form.inline { display: flex; flex: 1; }
+  .board-table tr.live .bookcol .ou button { flex: 1; width: 100%; }
 
   .formcol { display: none !important; }
   .faircol {
@@ -1631,6 +1655,44 @@ body.searching .tick { display: none; }
 /* "Kills Maps 1–2" on one line: the market is one fact, not two rows. */
 .board-table .statname { display: inline; }
 .board-table .statname + .meta { display: inline; margin-left: 6px; }
+.board-table .matchline { max-width: 26ch; }
+
+/* ---- the play, spelled out ---------------------------------------------
+   A named model (Projected) with what it was built from, a defined sample
+   ("11 of last 12 matches over"), and the edge in the stat's own units. No
+   percentage: the model's probabilities measured as uncalibrated, and a
+   confident "68%" is exactly the tell of a made-up dashboard. */
+/* `pv` / `pedge`, not `stat` / `edge`: both of those names already belong to
+   other components (the Stats page tiles, the old cheaper-app chip), and
+   borrowing them boxed these figures in. */
+.pv { display: inline-flex; flex-direction: column; align-items: flex-start; line-height: 1; }
+.pv b {
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+  font-size: 17px; font-weight: 600; color: var(--text);
+}
+.pv.proj b { color: var(--model); }
+.pv small { display: none; margin-top: 5px; font-size: 12px; font-weight: 500; color: var(--text-3); }
+.board-table .pv.only-sm { display: none; }
+.play { align-items: center; }
+.play .pedge {
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+  font-size: 16px; font-weight: 600; color: var(--text); white-space: nowrap;
+}
+.play .pedge small { margin-left: 4px; font-family: var(--font); font-size: 12px; font-weight: 500; color: var(--text-3); }
+.rec { font-size: 14px; color: var(--text-2); white-space: nowrap; }
+.rec b { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 17px; font-weight: 600; color: var(--text); }
+.why { margin-top: 4px; font-size: 12.5px; color: var(--text-3); }
+.nocall { color: var(--text-3); }
+
+/* The play is one solid button; the other side is a quiet one. Outlined pairs
+   on every row were the other half of the generated-dashboard look. */
+.board-table .ou button.best:not(.on):not(:disabled) {
+  background: var(--tag); border-color: var(--tag); color: var(--tag-ink);
+}
+.board-table .ou button:not(.best):not(.on):not(:disabled) {
+  background: transparent; border-color: transparent; color: var(--text-2);
+}
+.board-table .ou button:not(.best):not(.on):not(:disabled):hover { color: var(--text); border-color: var(--line-2); }
 
 /* ---- the filter disclosure ----------------------------------------------
    League and search stay out; app, show and the price toggles fold away.

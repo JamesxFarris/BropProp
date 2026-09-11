@@ -682,16 +682,18 @@ function lockNotice(locked: string | null, blocked: string | null, blockedOn: st
  */
 function formNote(f: FormStats | undefined, play: Play | null): string {
   if (!f) return '';
+  // What the projection was built from, in words a person uses. "Matches"
+  // rather than "series": a series is one match, and only one word is needed.
   if (play?.method === 'maps' || f.series === 0) {
-    return `per map, ${f.mapValues.length} maps`;
+    return `Built from ${f.mapValues.length} single maps`;
   }
   // Where the shown number has been pulled toward the line, say by how much
-  // and from what. Otherwise "17.2 from 8 series" reads as their average when
+  // and from what. Otherwise "17.2 from 8 matches" reads as their average when
   // their average is 19.6, and the reader has no way to tell.
   if (play && Math.abs(play.anchored - play.rawMean) >= 0.05) {
-    return `${f.series} series, avg ${play.rawMean.toFixed(1)}`;
+    return `Last ${f.series} matches average ${play.rawMean.toFixed(1)}, pulled toward the line`;
   }
-  return `${f.series} series`;
+  return `Average of the last ${f.series} matches`;
 }
 
 /**
@@ -857,7 +859,9 @@ function playCell(
   only?: string | null,
 ): string {
   if (!play) {
-    return `<span class="meta">${esc(why ? noCallText(why, r) : 'no call')}</span>`;
+    // "No play", with the engine's reason ("waiting on history", "priced
+    // fair") in the tooltip rather than on the row.
+    return `<span class="meta nocall" title="${esc(why ? noCallText(why, r) : 'No play on this prop')}">No play</span>`;
   }
   const dir = play.side === 'over' ? 'Over' : 'Under';
   const cls = play.side === 'over' ? 'o' : 'u';
@@ -886,11 +890,16 @@ function playCell(
   // instead of printing a gap with a minus sign in front of it.
   const detail = [
     play.edge > 0
-      ? `Ours ${play.edge.toFixed(1)} ${play.side === 'over' ? 'above' : 'below'} the line`
+      ? `Projected ${play.edge.toFixed(1)} ${play.side === 'over' ? 'above' : 'below'} the line`
       : `Most of this player's series land ${play.side} the line, though a few outsized games pull the average the other way`,
     basis ? `Modelled from ${play.sample} single maps, because too few series played this exact map range` : '',
   ].filter(Boolean).join('. ');
-  return `<div class="play ${cls}" title="${esc(detail)}"><span class="dir">${dir}</span>${at}</div>`;
+  // The edge is the projection's distance from the line, in the stat's own
+  // units. Shown only when it points the play's way (see `detail`).
+  const edge = play.edge > 0
+    ? `<span class="pedge">+${play.edge.toFixed(1)}<small>edge</small></span>`
+    : '';
+  return `<div class="play ${cls}" title="${esc(detail)}"><span class="dir">${dir}</span>${edge}${at}</div>`;
 }
 
 // ------------------------------------------------------------------ board --
@@ -908,6 +917,8 @@ function ouButtons(
   offer: 'both' | 'over' | 'under' = 'both',
   better: 'both' | 'over' | 'under' = 'both',
   available: { over: boolean; under: boolean } = { over: true, under: true },
+  /** The line, spelled into the phone buttons: "Over 41.5". */
+  line: number | null = null,
 ): string {
   if (propId === null) {
     return `<div class="ou"><button disabled>O</button><button disabled>U</button></div>`;
@@ -945,7 +956,8 @@ function ouButtons(
   // rows long, so you lose your place on every single leg.
   // "O" on the dense wide board; the rest of the word appears on a phone card,
   // where there is room and a bare letter was one more thing to decode.
-  return `<div class="ou" id="m${propId}">${b('over', 'O<span class="w">ver</span>', 'o')}${b('under', 'U<span class="w">nder</span>', 'u')}</div>`;
+  const ln = line === null || !Number.isFinite(line) ? '' : ` ${line.toFixed(1)}`;
+  return `<div class="ou" id="m${propId}">${b('over', `O<span class="w">ver${ln}</span>`, 'o')}${b('under', `U<span class="w">nder${ln}</span>`, 'u')}</div>`;
 }
 
 /**
@@ -1395,19 +1407,17 @@ export function boardPage(o: {
       : `<div class="card">
       <div class="card-head">
         <h2>Board</h2>
-        <span class="sub"><b data-count>${ranked.length}</b>${
-          o.filters.show !== 'all' ? ` of ${o.rows.length}` : ''
-        } markets — ${summary}${
-          restrict ? `, only where ${esc(bookName(only as BookCode))} has the best line for the call` : ''
-        }</span>
+        <span class="sub" title="${esc(`${summary}${
+          restrict ? `. Only props where ${bookName(only as BookCode)} has the best line for the play.` : ''
+        }`)}"><b>${counts.call}</b> plays from <b data-count>${ranked.length}</b> props</span>
       </div>
       <div class="scroll cards-sm"><table class="board-table stack-sm" data-filter>
         <thead><tr>
           <th scope="col">Player</th>
           <th scope="col">Prop</th>
-                    <th scope="col" class="c">Ours</th>
-          <th scope="col" class="c">Lean</th>
-          <th scope="col" class="c">Record</th>
+          <th scope="col" class="c">Projected</th>
+          <th scope="col" class="c">Play</th>
+          <th scope="col" class="c">Recent</th>
           ${showEv ? '<th scope="col" class="c evcol">EV</th>' : ''}
           ${columns.map((b) => bookHead(b, only, o.lockedBook !== null)).join('')}
           <th scope="col" class="c gapcol">${gapLabel}</th>
@@ -1477,6 +1487,11 @@ export function boardPage(o: {
                 : f.series === 0
                   ? f.perMap
                   : f.mean;
+            // The line the play is made against, for the phone card's
+            // "41.5 PrizePicks" figure: the play's app, else the selected app.
+            const lineBook = (callBook ? r.books.find((b) => b.book === callBook) : undefined)
+              ?? (only ? r.books.find((b) => b.book === only) : undefined)
+              ?? r.books[0];
             // Rows the model has no opinion on are dimmed rather than removed.
             // They still belong here — a line move turns a fair one into a call,
             // and hiding them would hide why the board is quiet — but giving them
@@ -1485,7 +1500,7 @@ export function boardPage(o: {
             return `<tr class="${play ? 'live' : 'quiet'}" data-search="${rowKey(r.handle, r.match_title, statLabel(r.stat), r.league)}">
             <td>
               <div class="who${sameAsPrev ? ' cont' : ''}">
-                ${sameAsPrev ? '<span class="tick"></span>' : leagueBadge(r.league)}
+                ${sameAsPrev ? '<span class="tick"></span>' : ''}
                 <div class="whobody">
                   <div class="name">${
                     histId ? `<a href="/prop/${histId}">${esc(r.handle)}</a>` : esc(r.handle)
@@ -1493,12 +1508,16 @@ export function boardPage(o: {
                   ${
                     sameAsPrev
                       ? ''
-                      : `<div class="meta matchline" title="${esc(r.match_title ?? '')}">${esc(
-                          r.match_title ?? '—',
-                        )}</div>
+                      : `<div class="meta matchline" title="${esc(r.match_title ?? '')}">${
+                          // The league is a word at the start of the match, not a
+                          // badge of its own: one fewer box on every row.
+                          leagueBadge(r.league)
+                        }${esc(r.match_title ?? '—')}</div>
                   <div class="meta whenline">${whenCell(r.scheduled_at)}${
                           moved !== null && moved !== 0
-                            ? `, moved <span class="move ${moved > 0 ? 'up' : 'down'}">${signed(moved)}</span>`
+                            // Said the way a person would: "line up 1.5", not
+                            // the engine's "moved +1.5".
+                            ? `, line ${moved > 0 ? 'up' : 'down'} <span class="move">${Math.abs(moved).toFixed(1)}</span>`
                             : ''
                         }</div>`
                   }
@@ -1510,51 +1529,38 @@ export function boardPage(o: {
               <div class="meta">${esc(maps(r.map_start, r.map_end))}</div>
             </td>
                         <td class="c" data-label="Ours">${
+              // The model has a name — Projected — and says what it was built
+              // from (the tooltip here, a line under the record on a phone).
               ours === null
                 ? '<span class="meta">—</span>'
-                : `<span class="chip-num model" title="${esc(formNote(formOf(r), play))}">${Number(ours).toFixed(1)}</span>`
+                : `${
+                    lineBook
+                      ? `<span class="pv only-sm"><b>${num(lineBook.line)}</b><small>${esc(bookName(lineBook.book))}</small></span>`
+                      : ''
+                  }<span class="pv proj" title="${esc(formNote(f, play))}"><b>${Number(ours).toFixed(1)}</b><small>Projected</small></span>`
             }</td>
             <td class="c" data-label="Lean">${playCell(play, statusOf(r).why, r, only)}</td>
-            <td class="c${play ? ` strength s${Math.min(4, Math.max(1, Math.ceil((play.hitRate - 0.5) * 20)))}` : ''}" data-label="Record">${
+            <td class="c" data-label="Record">${
+              // A record, not a percentage, and a defined sample: "11 of last
+              // 12 matches over". This column once read "72%", which every
+              // reader takes as the chance the leg wins; measured against
+              // settled outcomes the calls claimed 58.9% and realised 52.2%,
+              // with no ordering (AUC 0.521). A count of what happened makes no
+              // such promise, and the tooltip says what it is and isn't. On a
+              // phone the projection's reason sits under it.
               play === null
                 ? '<span class="meta">—</span>'
-                  // Two lines, not three. The market line used to print on
-                  // every row, and on 95% of them it said "no market view" or
-                  // "no market price" — the same non-information three hundred
-                  // times. Only ~2 markets on a full board carry a real
-                  // devigged number, so only those get a third line.
-                  // A record, not a percentage.
-                  //
-                  // This column used to read "72%", which every reader takes
-                  // as the chance this leg wins. It is not that. It is a
-                  // shrunk count of past series, and measured against settled
-                  // outcomes the board's calls claim 58.9% and realise 52.2%
-                  // — with AUC 0.521, meaning a call shown at 72% wins no
-                  // more often than one shown at 56%. A number that reads as
-                  // odds, is inflated by seven points, and carries no
-                  // ordering is the most misleading thing the board could
-                  // print, so it does not print it any more.
-                  //
-                  // What is left is what actually happened: 23 of 30. A fact
-                  // about the past makes no promise about this bet, and the
-                  // reader can size it themselves — "5 of 6" and "23 of 30"
-                  // are visibly different claims in a way 83% and 77% are not.
-                : `<div class="prob" title="${
+                : `<div class="rec" title="${esc(
                      play.rawOf === null
-                       ? 'Modelled by resampling single maps — there are too few series over this exact map range to count directly.'
-                       : `${play.rawWins} of this player's last ${play.rawOf} series would have won this side. ` +
-                         `That is what happened before, not the chance it happens again: across settled markets ` +
-                         `these calls have realised about 52%, near a coin flip, however strong the record looks.`
-                   }">${
-                     play.rawOf === null ? '—' : `${play.rawWins}<span class="of">of</span>${play.rawOf}`
-                   }</div>
-                   ${
-                     // One line: "11 of 12 series". The market % that used to
-                     // take a third line is gone with the rest of the noise.
+                       ? 'Estimated by resampling single maps — too few matches over this exact map range to count directly.'
+                       : `${play.rawWins} of this player's last ${play.rawOf} matches would have gone ${play.side} ` +
+                         `this line (${maps(r.map_start, r.map_end)}). That is what happened before, not the chance it happens ` +
+                         `again: across settled props, plays like this have hit about 52%, near a coin flip.`,
+                   )}">${
                      play.rawOf === null
-                       ? '<span class="meta raw">modelled</span>'
-                       : '<span class="meta raw">series</span>'
-                   }`
+                       ? 'Estimated from single maps'
+                       : `<b>${play.rawWins}</b> of last <b>${play.rawOf}</b> matches ${play.side}`
+                   }</div><div class="why only-sm">${esc(formNote(f, play))}</div>`
             }</td>
             ${showEv ? `<td class="c evcol" data-label="EV">${evCell(play)}</td>` : ''}
             ${columns
@@ -1562,7 +1568,8 @@ export function boardPage(o: {
                 ouButtons(b.prop_id, back, b.side,
                   offeredSides(r.books, code, restrict),
                   callBook === code && play ? play.side : 'both',
-                  { over: b.over_ok, under: b.under_ok }),
+                  { over: b.over_ok, under: b.under_ok },
+                  Number(b.line)),
                 only ?? callBook))
               .join('')}
             <td class="c gapcol">${gap}</td>
