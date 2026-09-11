@@ -583,7 +583,7 @@ better measurement, and it has never been tried.
 |---|---|
 | **Bovada** | Open, no auth, real prices, and **77 live esports events** covering **61 of 61** of our upcoming CS2 matches (re-measured 2026-09-09). An earlier note here said "four esports events, total, not worth an adapter" — that was sampled at a dead hour and is wrong; it is why this avenue sat unused. Match markets only: moneyline, map spread, total maps. **No player props.** |
 | **Pinnacle** | Matchup list open: **131 CS2 matchups**, right down to tier-C qualifiers. Prices return `401 No authorization token provided`. |
-| **Sleeper** | **DEAD — carries no esports at all.** Settled 2026-09-10 from its own unauthenticated `app_info`: the sports it knows are cfb, epl, golf, laliga, ligue1, mlb, nfl, soccer, wnba. No esport is mentioned anywhere in the payload, and `sport_info(sport:)` returns null for cs2, csgo, lol, val and dota while returning real data for nfl. No login needed to establish this, and none is worth getting. |
+| **Sleeper** | **LIVE — the third CS2 book.** Ruled out on 2026-09-10 in error: `sport_info()` was asked for cs2/csgo/lol/val/dota, and Sleeper's code for Counter-Strike is **`cs`**. `GET api.sleeper.app/lines/available` answers with no auth; on 2026-09-11 it carried 222 CS2 props (117 kills, 105 headshots, maps 1-2), every one with a team and both prices, 191 of them joining a PrizePicks/Underdog market. **No LoL.** Adapter: `src/adapters/sleeper.ts`. |
 | **ParlayPlay** | Cloudflare bot wall on every path. No unwalled host found (`partner-api`, `api-prod`, `backend` all fail DNS). |
 | **Betr, Chalkboard** | No web API at all. `www.betr.app` is a **Webflow marketing site**; chalkboard.io's only call is Tinybird analytics. Mobile apps only. |
 | **HotStreak, BetOnline** | Cloudflare wall. |
@@ -600,7 +600,30 @@ Pinnacle's own web client ships a fixed guest key. Using it to get past that
 presenting a lifted credential to defeat an auth check is another.
 
 
-### The third book does not exist, and that is the finding
+### The third book does not exist — WRONG, corrected 2026-09-11
+
+**This section's headline was false for CS2.** Sleeper was ruled out because
+`sport_info()` came back null for the codes that were tried — cs2, csgo, lol,
+val, dota. Sleeper calls Counter-Strike `cs`. A research agent found it the next
+day, it was verified independently, and it is now polled
+(`src/adapters/sleeper.ts`). Everything else below held up on a re-check, and LoL
+genuinely still has only two books.
+
+The lesson generalises beyond this one book: **a negative probe built on a
+guessed identifier proves nothing.** Check the vendor's own vocabulary before
+writing "settled".
+
+Two things about Sleeper worth knowing before leaning on it:
+
+- **Its prices track Underdog's closely.** Where both post the same line their
+  devigged probabilities are within about a point; where the lines differ,
+  Sleeper leans toward Underdog's number 29 times in 33. A three-book CS2
+  consensus is closer to two opinions than three.
+- **It names every player's team and prices both sides**, which Underdog does
+  not. That is worth more to the stack builder than the extra line.
+
+Full research: `docs/BOOKS.md`.
+
 
 Settled 2026-09-10 after probing every remaining candidate. **There is no third
 DFS book carrying esports player props that is reachable from a server.**
