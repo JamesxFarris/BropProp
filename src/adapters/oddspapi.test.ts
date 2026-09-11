@@ -76,3 +76,25 @@ test('a fixture with markets but no moneyline is kept for its other markets', ()
   assert.equal(f.pHomeWin, null);
   assert.ok('173' in f.markets);
 });
+
+// ------------------------------------------------------------- pacing ------
+
+import { waitNeeded, COOLDOWN_MS } from './oddspapi.js';
+
+test('a call right behind another waits out the rest of the cooldown', () => {
+  // The first live pull: the second bulk call went out 178ms after the first
+  // and was refused with a 429.
+  assert.equal(waitNeeded(1000, 1178), COOLDOWN_MS - 178);
+});
+
+test('no wait once the cooldown has passed', () => {
+  assert.equal(waitNeeded(1000, 1000 + COOLDOWN_MS + 1), 0);
+});
+
+test('the first call of a process never waits', () => {
+  assert.equal(waitNeeded(0, Date.now()), 0);
+});
+
+test('the cooldown is above the documented 5000ms, not at it', () => {
+  assert.ok(COOLDOWN_MS > 5000);
+});

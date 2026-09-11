@@ -53,6 +53,25 @@ export const SPORT: Record<string, { sportId: number; winnerMarket: string }> = 
 
 export class BudgetExhausted extends Error {}
 
+/**
+ * Minimum gap between two calls to OddsPapi.
+ *
+ * The first live pull failed on this. The docs give a 5000ms cooldown for
+ * historical odds; odds-by-tournaments turned out to enforce one too — the
+ * second bulk call went out 178ms after the first and came back 429, having
+ * already been counted against the month. Half a second of margin on top of
+ * the documented figure costs nothing on a job that runs once a day.
+ */
+export const COOLDOWN_MS = 5_500;
+let lastCallAt = 0;
+
+/** How long to wait before the next call may go out. Pure, for testing. */
+export function waitNeeded(lastAt: number, now: number, cooldown = COOLDOWN_MS): number {
+  return lastAt === 0 ? 0 : Math.max(0, lastAt + cooldown - now);
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 export type ParsedFixture = {
   fixtureId: string;
   startsAt: string;
@@ -136,8 +155,14 @@ export async function callsThisMonth(api = 'oddspapi'): Promise<number> {
  * The ledger row goes in first. A request that throws halfway has still been
  * counted by OddsPapi, so it has to be counted here too.
  */
-async function call(endpoint: string, params: Record<string, string | number>): Promise<any> {
+async function call(
+  endpoint: string,
+  params: Record<string, string | number>,
+  retried = false,
+): Promise<any> {
   if (!config.oddspapiKey) throw new Error('ODDSPAPI_KEY is not set');
+  const wait = waitNeeded(lastCallAt, Date.now());
+  if (wait > 0) await sleep(wait);
   const used = await callsThisMonth();
   if (used >= config.oddspapiMonthlyCap) {
     throw new BudgetExhausted(
@@ -156,7 +181,15 @@ async function call(endpoint: string, params: Record<string, string | number>): 
     headers: { Accept: 'application/json' },
     signal: AbortSignal.timeout(30_000),
   });
+  lastCallAt = Date.now();
   await q(`UPDATE api_call SET status = $1 WHERE id = $2`, [res.status, row[0]!.id]);
+  // Rate-limited: wait out a double cooldown and try once more. The retry goes
+  // through call() again, so it takes its own ledger row — a refused request
+  // may still have been counted by OddsPapi, and the budget must assume so.
+  if (res.status === 429 && !retried) {
+    await sleep(COOLDOWN_MS * 2);
+    return call(endpoint, params, true);
+  }
   if (!res.ok) {
     throw new Error(`OddsPapi ${endpoint} -> ${res.status}: ${(await res.text()).slice(0, 160)}`);
   }
