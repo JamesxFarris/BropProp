@@ -28,8 +28,10 @@ import type { FormStats } from '../web/projection.js';
  *
  * ## This one CAN be measured now
  *
- * The crowd path needs three books and there will not be a third — settled
- * 2026-09-10, see RUNBOOK. What runs instead is the priced-book anchor:
+ * The crowd path needs three books. On 2026-09-10 this said there would never
+ * be a third; Sleeper turned out to be one (sport code `cs`), so the crowd arm
+ * can be graded once enough three-book markets settle. What ran here is the
+ * priced-book anchor:
  * Underdog publishes two-sided odds and PrizePicks does not, so Underdog's
  * line is a stated coin flip that PrizePicks' different line can be measured
  * against. Both books have been logged since the beginning, so **this is

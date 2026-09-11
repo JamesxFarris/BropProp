@@ -234,6 +234,16 @@ changed here: it decides money and deserves its own measurement.
 
 ## Log
 
+- **2026-09-11** — Light is the default, at the owner's request; dark is one
+  tap away. The phone card was cut to one call made at your own app's line:
+  the cheaper-app chip, the stale chip, the "+3.8 in your favour" figure and
+  the market % now appear on wide screens only, and the other apps' lines are
+  one grey line with no marks. With an app selected both of its sides stay
+  takeable. A PrizePicks card that said "Under" beside a greyed-out U, with
+  Underdog's 8.5 the only takeable under, read as an Underdog bet on a
+  PrizePicks prop, which is exactly the noise this pass exists to remove. Wide
+  screens now show every book side by side, Sleeper included. A new palette
+  and type are being chosen separately.
 - **2026-09-08** — Line movement is now louder than the model's own lean, and
   that ordering is the point. Four experiments have failed to beat a player's
   flat average, so the projection is the weaker evidence on the row. "UD moved

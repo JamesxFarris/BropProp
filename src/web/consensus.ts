@@ -30,8 +30,9 @@ import { devig } from '../devig.js';
  * strongest, where Underdog states a real lean instead of flat vig, was the
  * worst of the two.
  *
- * The machinery below is correct and stays: it is what a third book would need,
- * and knowing which app holds the cheaper number is worth something when
+ * The machinery below is correct and stays: Sleeper is now a third CS2 book, so
+ * the crowd path runs — though that three-book arm has never been graded — and
+ * knowing which app holds the cheaper number is worth something when
  * placing a bet already decided on. But **nothing here is an edge**, and it
  * must not be presented as one. That now makes four measured failures —
  * the projection, opponent strength, the stale line, and this.

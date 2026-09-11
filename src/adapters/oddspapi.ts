@@ -18,7 +18,8 @@ import { config } from '../config.js';
  *
  * - Odds come from `odds-by-tournaments`, five tournaments per request. Only
  *   about 14 of 350 CS2 tournaments have fixtures at any moment, and the
- *   tournament list says which, so a whole board is ~3 requests.
+ *   tournament list says which, so a whole board is ~4 requests (list, then
+ *   the live tournaments five at a time, then any unknown team names).
  * - Team names cost a request of their own, so they are cached in
  *   `oddspapi_participant` and refetched only when an unknown id appears.
  * - Every call is written to `api_call` BEFORE it is made, so a crash mid-call

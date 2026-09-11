@@ -301,10 +301,11 @@ const server = createServer(async (req, res) => {
        * most one side of one app is ever the right take — a market where the
        * apps differ has exactly one best price, and the engine already knows
        * which. The second pair was never actionable; it was the thing making
-       * the row hard to read. The other app's number survives as the gap,
-       * because knowing your number is worse elsewhere is the whole point.
+       * the row hard to read. The other apps' numbers stay on the row as
+       * read-only columns, because knowing your number is worse elsewhere is
+       * the whole point — it is their buttons that go, not their lines.
        *
-       * `book=both` is still reachable for comparing the two directly.
+       * `book=all` (or the older `book=both`) makes every app takeable at once.
        */
       book:
         bookParam === 'both' || bookParam === 'all' ? null

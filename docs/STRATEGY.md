@@ -10,6 +10,34 @@ book's published rules), **ASSUMED** (an input we picked and have not verified),
 or **DERIVED** (arithmetic on the other two). Nothing is asserted that is not
 one of those three.
 
+> **Read this first — superseded in part, 2026-09-11.** This was written before
+> the correlation was re-measured and before any match odds were in. Since:
+>
+> - **The correlation was re-measured the way §3.7 asked:** teammate vs
+>   opponent, walk-forward lines, significance over independent series
+>   (`npm run validate:correlation`, 8,923 series). Teammates phi 0.210, 95% CI
+>   [0.198, 0.222], copula **rho ≈ 0.324**; opponents rho ≈ 0.086. The blended
+>   ρ = 0.2133 used in §3-§4 is superseded, and §3.6 (b)-(d) are answered. On the
+>   books' own lines, k-teammates-all-under rates match the model within ~1%.
+> - **§3.7's phone check was done for the 6-leg shape:** a PrizePicks 6-pick,
+>   5 on one team plus 1 opponent, was quoted at **22x** — far above the 10.05x
+>   in §3.6.
+> - **The opponent leg follows the core in the tail** (`npm run validate:tail`):
+>   after 5 same-team overs his over hits 87% (the pair model says ~58%); after
+>   5 unders his under hits 72%. `findStacks` builds both sides per team, and
+>   all-over 5+1 stacks now rank at the top.
+> - **The side is team-level:** losers' players go under 57.2% vs winners' 45.7%
+>   on the books' own lines (paired p = 0.040), priced from Pinnacle's moneyline,
+>   which is live. A blind shade (55.3% under) appeared on 2026-09-10 and has
+>   faded to 51.6% (p = 0.14).
+> - Production is reachable via `railway ssh`; the "blocked on DB access" notes
+>   below are stale.
+>
+> So §0's "no positive-EV strategy" predates all of it: whether a stack is +EV
+> now turns on the multiplier the app quotes against the break-even the Build
+> page prints. The prediction failures in §6 (AUC 0.495, 41-41, 74-73) still
+> stand. Current numbers live in `RUNBOOK.md`.
+
 ---
 
 ## 0. The verdict, up front
@@ -366,7 +394,8 @@ series are massively dependent. The point estimate may well be fine, but no
 significance has been established, and this project's entire discipline says leg
 counts describe and do not prove.
 
-**(d) Teammates and opponents were never separated.** The script selects `team`
+**(d) Teammates and opponents were never separated.** *(Since done: teammates
+rho ≈ 0.324, opponents ≈ 0.086 — see the note at the top.)* The script selects `team`
 and never uses it. The mechanism matters enormously: total kills scale with
 round count, which lifts *everyone* (positive for teammates and opponents
 alike), but kills are near-conserved within a map — RUNBOOK fact 2 — so one
@@ -392,7 +421,10 @@ Two things, in this order:
 2. **The re-measurement (settles the confound).** `raw/corr2.ts` is written and
    ready; it could not be run because `.env` points at `localhost:5433` and
    there is no local Postgres, and the `railway-mcp-server` MCP connection
-   failed this session. Run it against production. It re-does the pair analysis
+   failed this session. Run it against production. *(Done 2026-09-10 as
+   `npm run validate:correlation`, run in production over `railway ssh`, with
+   walk-forward lines and a series-level bootstrap: the teammate effect
+   survives, phi 0.210, CI [0.198, 0.222].)* It re-does the pair analysis
    three ways: split **teammate vs opponent**, with an **out-of-sample trailing
    20-series median** line instead of a career median (which absorbs the era
    drift), and with a **per-series sign test** instead of a pair count. If the
@@ -602,6 +634,11 @@ requires any predictive skill, which is precisely why they are the only
 remaining leads worth spending time on. **Both are falsifiable, and if either
 fails, this question is closed.**
 
+*Update 2026-09-11: neither has failed. Condition 2: teammate rho ≈ 0.324 on
+walk-forward lines over 8,923 series, and the legal 5+1 shape spans two
+teams. Condition 1: the 6-leg 5+1 shape was quoted at 22x in the app; the
+4-leg one-match figure is still unread.*
+
 ---
 
 ## 7. What to do while that is unresolved
@@ -636,6 +673,11 @@ Concretely:
 ---
 
 ## 8. Is the implemented strategy right?
+
+*Partly out of date (2026-09-11): the optimiser now uses the correlated
+`probAllWin` from `slip.ts` instead of the plain product, a marginal-leg test
+exists, 4 is out of the default sizes, and `findStacks` searches whole shapes.
+Check the code before acting on this section.*
 
 `src/web/optimize.ts` maximises `p × mult` per leg, takes the top `N` subject to
 constraints, and computes `winProb` as a plain product of per-leg probabilities.
@@ -744,8 +786,8 @@ without a predictive edge.
 
 | Question | What would answer it | Cost |
 |---|---|---|
-| **Does the PrizePicks same-game haircut leave the correlation gain intact?** | Build a 4-leg one-match Power play in the app and read the multiplier. Compare to 8.52x (NOT 5.36x — see the correction above). | 10 minutes. **Decisive.** |
-| Is the measured ρ real or an era artifact? | Run `raw/corr2.ts` against production — trailing-20 out-of-sample lines, teammate/opponent split, per-series sign test. | One query. Blocked on DB access. |
+| **Does the PrizePicks same-game haircut leave the correlation gain intact?** | Build a 4-leg one-match Power play in the app and read the multiplier. Compare to 8.52x (NOT 5.36x — see the correction above). | 10 minutes. **Decisive.** The 6-leg 5+1 read **22x** (2026-09-11); the 4-leg is still unread. |
+| Is the measured ρ real or an era artifact? | Run `raw/corr2.ts` against production — trailing-20 out-of-sample lines, teammate/opponent split, per-series sign test. | Done — `validate:correlation`, 8,923 series: real, teammate rho ≈ 0.324. |
 | Are the Underdog payouts current? | Read 2-, 3-, 4- and 5-pick Standard multipliers off the app. Sources disagree on the 4-pick (10x vs 12x) and the brief's 3-pick figure (6x) looks stale against 6.5x. | 5 minutes. |
 | What is σ for each offered range? | `stddev(total)` per player per map-range on `map_stat_dedup`. Sharpens §5 from a guess to a measurement. | One query. |
 | Is there any predictive edge at all? | ~1,600 independent series. We have 147. | A season or more. |
@@ -753,7 +795,9 @@ without a predictive edge.
 Two notes on access, since both blocked work this session: `.env` points
 `DATABASE_URL` at `localhost:5433` and there is no local Postgres; and the
 `railway-mcp-server` MCP connection failed with `CONNECTION_CLOSED`, so
-production could not be reached that way either.
+production could not be reached that way either. *(Superseded: `railway ssh`
+into `bropprop-logger` works and is how production is queried — see RUNBOOK,
+"The logger".)*
 
 ---
 
@@ -762,6 +806,7 @@ production could not be reached that way either.
 Throwaway scripts, none of them part of the application:
 
 - `raw/corr2.ts` — the re-measurement of §3.7, written but not run (no DB).
+  Superseded by `npm run validate:correlation`, which was run.
 - Break-even, correlation-fit and Power-vs-Flex calculations were done in
   scratchpad scripts using a one-factor Gaussian copula with Simpson quadrature
   (4,001 nodes over z ∈ [-9, 9]) and bisection root-finding. Every number in

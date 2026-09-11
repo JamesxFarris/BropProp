@@ -1,11 +1,17 @@
 # BropProp
 
-Esports prop research for PrizePicks and Underdog (CS2, LoL, Apex).
+Esports prop research for PrizePicks, Underdog and Sleeper (CS2, LoL, Apex;
+Sleeper is CS2 only), with Pinnacle's CS2 moneylines via OddsPapi.
 
 **Phase 1 — the line logger — is built and running.** It records every esports
 prop on both books, every 15 minutes, with full line-movement history. Nothing
 is modelled yet, by design: the point of Phase 1 is to accumulate the ground
 truth that Phases 2-5 need and that nobody will sell you.
+
+*Out of date as a status line (2026-09-11): the logger covers three books,
+grading runs for both games, and the Build page ranks team **Stacks** priced
+from Pinnacle's moneyline and the measured teammate correlation. What has and
+has not survived measurement is in `RUNBOOK.md`.*
 
 ## Quick start
 
@@ -24,6 +30,9 @@ npm run web          # dashboard on http://localhost:3000
 ```
 
 `npm test` runs the normalisation tests. `npm run db:reset` wipes and rebuilds.
+Without a local Postgres — the current dev machine has no Docker — the
+`grade.test.ts` suite fails with ECONNREFUSED; that is environmental. Production
+is queried over `railway ssh` instead (see RUNBOOK, "The logger").
 
 ## The dashboard
 
@@ -40,7 +49,8 @@ Answers two questions and deliberately nothing else:
 
 A results/hit-rate panel is *not* here yet. It would be an empty placeholder
 until Phase 2 grading exists, and an empty panel that implies a working model
-is worse than no panel.
+is worse than no panel. *(Since added as the Stats page: `validate:calls` runs
+daily into `model_score`, and the page leads with AUC — 0.495, no skill.)*
 
 The header shows how long ago the last successful poll was, and the page warns
 when that exceeds two intervals. **Seen** means *last confirmed on the board*,
@@ -69,6 +79,7 @@ two and hid a 4.0 gap between the books.
 taken back out. Underdog publishes real two-sided American odds; PrizePicks
 cannot, because it prices with a flat multiplier and expresses price by moving
 the line instead — so this is the only genuine market probability on the board.
+*(Sleeper, added 2026-09-11, also prices both sides, so it is now one of two.)*
 It sits beside our own hit rate and is marked where the two disagree by more
 than twenty points.
 
@@ -191,8 +202,13 @@ same stat, same map range, different number).
 - **Phase 3 — dumb baselines.** Score naive strategies (always under, fade the
   move, take the Underdog side on disagreement) before modelling anything.
   Anything beating 54% here is real signal.
+  *Largely done: `validate:calls` prints always-over and always-under, fading
+  the move (stale line) went 41-41, and the Underdog-anchored side 74-73.*
 - **Phase 4 — features and model.** Rolling per-map averages, opponent
   strength, series format. Logistic regression / gradient boosting, not a net.
+  *Opponent strength was measured and failed (r = 0.018), and the projection
+  scores AUC 0.495 — see RUNBOOK, "Modelling ideas that were measured and
+  failed". What survived is team-level; see RUNBOOK.*
 
   **Round counts are already collected** (`map_stat.rounds`, free from the
   bo3 payload, backfilled across 13,564 games) and are available as a feature.

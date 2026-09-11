@@ -624,9 +624,10 @@ export function findStacks(
 /**
  * The stats the team-level pricing is valid for: kills, and headshots.
  *
- * Every number behind `marketCandidates` was measured on these. The line shade
- * is 44.1% over on CS2 kills and 45.7% on headshots; the blowout split and the
- * teammate correlation were measured on kills, and a headshot is a kill.
+ * Every number behind `marketCandidates` was measured on these: the
+ * loser/winner split, the teammate correlation and the opponent tail were all
+ * measured on kills, and a headshot is a kill. (The first line-shade figures —
+ * 44.1% over on kills, 45.7% on headshots — have since faded; see matchodds.ts.)
  *
  * DEATHS are the reason this list exists. The first render of the Stacks card
  * put "sh1ro under deaths" in a stack built on the team Pinnacle had losing —

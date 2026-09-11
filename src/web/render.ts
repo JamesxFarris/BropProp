@@ -11,7 +11,7 @@ import type { Entry, Stack } from './optimize.js';
 import type { TeamOdds } from './matchodds.js';
 import { isComboHandle } from '../normalize.js';
 import { devig } from '../devig.js';
-import { bookName, bookShort, orderBooks, KNOWN_BOOKS, type BookCode } from '../books.js';
+import { bookMeta, bookName, bookShort, orderBooks, KNOWN_BOOKS, type BookCode } from '../books.js';
 import { bestEdge, fairLine, betterSide } from './consensus.js';
 
 export const esc = (s: unknown) =>
@@ -483,9 +483,9 @@ ${o.rail ? '<input type="checkbox" id="slipsheet" class="sheet-toggle" aria-labe
   })();
 
   document.getElementById('theme').addEventListener('click', function () {
+    // Light unless dark was chosen, so an unset theme toggles to dark.
     var el = document.documentElement, cur = el.getAttribute('data-theme');
-    var dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    var next = cur === 'dark' ? 'light' : cur === 'light' ? 'dark' : (dark ? 'light' : 'dark');
+    var next = cur === 'dark' ? 'light' : 'dark';
     el.setAttribute('data-theme', next);
     try { localStorage.setItem('bp-theme', next); } catch (e) {}
   });
@@ -641,8 +641,9 @@ function slipRail(picks: PickRow[], back: string): string {
 
 /**
  * PrizePicks and Underdog are separate books — a single entry cannot draw legs
- * from both. Once a slip has its first leg the board narrows to that app, and
- * this says so, because otherwise the missing column just looks like a bug.
+ * from both. Once a slip has its first leg the take buttons narrow to that app,
+ * and this says so, because otherwise columns of numbers with no buttons on
+ * them just look like a bug.
  */
 function lockNotice(locked: string | null, blocked: string | null, blockedOn: string | null): string {
   if (blocked) {
@@ -653,11 +654,7 @@ function lockNotice(locked: string | null, blocked: string | null, blockedOn: st
   }
   if (locked) {
     return `<div class="notice">
-      Showing ${esc(bookName(locked))} only, because your slip started there, and only the
-      markets where it prices better than the other apps. A lower line is
-      the better over and a higher line the better under, so just one side of each market is
-      offered. Turn off <strong>Best price only</strong> to see everything, or clear the slip
-      to switch apps.</div>`;
+      Your slip is on ${esc(bookName(locked))}, so picks go there. Clear the slip to switch apps.</div>`;
   }
   return '';
 }
@@ -800,7 +797,10 @@ function staleCell(r: MarketRow): string {
   const s = staleLine(r.books);
   if (!s) return '';
   const staleAt = r.books.find((b) => b.book === s.book);
-  return `<div class="stale ${s.side === 'over' ? 'o' : 'u'}"
+  // Wide screens only. On a phone card it was a second coloured arrow beside
+  // the call, pointing its own way, and the book lines below already show
+  // which app lags.
+  return `<div class="stale card-hide ${s.side === 'over' ? 'o' : 'u'}"
     title="${esc(bookShort(s.mover))} moved ${signed(s.move)} and ${esc(bookShort(s.book))} has not followed. Useful for choosing where to place a bet — but not a reason to make one: taking the stale side settled 50.0% (41-41) over 49 matches.">
     <span class="stale-k">${esc(bookShort(s.mover))} ${signed(s.move)}</span>
     <span class="stale-v">${esc(bookShort(s.book))} ${num(staleAt?.line)}</span>
@@ -860,18 +860,27 @@ function playCell(
   // across one row. What is left is the one thing neither column says: how far
   // the number is from the line, in the units the market is quoted in.
   const basis = play.method === 'maps' ? 'modelled' : '';
-  // Name the app and its number only when more than one app is on screen.
-  // With a single app the same figure already sits in the line column two
-  // cells away, and printing it twice was most of why a row was hard to read.
+  // Name the app and its number only when more than one app can be taken from.
+  // With a single app selected the same figure already sits in the line column
+  // two cells away — the other apps' columns are there to compare, and the
+  // call is never made on them — and printing it twice was most of why a row
+  // was hard to read.
+  // With an app selected the call is made at that app's own line only (see
+  // `optionsFor`), so it never names another app: a PrizePicks card that said
+  // "Under UD 8.5" was a PrizePicks prop advertising an Underdog bet.
   const at =
     only === null || only === undefined
-      ? `<span class="at">${esc(bookShort(play.book))} ${play.line.toFixed(1)}</span>`
+      ? `<span class="at card-hide">${esc(bookShort(play.book))} ${play.line.toFixed(1)}</span>`
       : '';
   return `<div class="play ${cls}">
       <span class="dir">${dir}</span>
       ${at}
     </div>
-    <div class="meta">${
+    <div class="meta card-hide">${
+      // Wide screens only, and said plainly. "+3.8 in your favour" read as a
+      // number with no subject; this is the distance between our figure and
+      // the line, which the Ours chip beside it already shows on a phone.
+      //
       // A negative gap under the words "in your favour" is a contradiction,
       // and it happens on about 7% of calls. The side is chosen by
       // probability; this number is the distance from our estimate to the
@@ -882,7 +891,7 @@ function playCell(
       // opposite sides. Where they disagree, say what actually drove the call
       // instead of printing a gap with a minus sign in front of it.
       play.edge > 0
-        ? `${signed(play.edge)} in your favour`
+        ? `ours ${play.edge.toFixed(1)} ${play.side === 'over' ? 'above' : 'below'} the line`
         : `<span title="Our average sits on the other side of the line, but most of this player's series land ${play.side} it — a few outsized games pull an average around in a way a count of series does not follow.">most series land ${play.side}</span>`
     }${basis ? `, ${basis}` : ''}${
       play.method === 'maps'
@@ -976,6 +985,136 @@ export function offeredSides(
 }
 
 /**
+ * A stored American price, in the notation the book's own users read.
+ *
+ * Every price is kept as American odds so the maths has one convention; this is
+ * display only. Decimal is the payout per unit staked, stake included — what
+ * Sleeper prints as "1.86x" — so -116 is 1 + 100/116 and +150 is 1 + 150/100.
+ * American gets a real minus sign, like every other signed figure on the board.
+ * Rounded, because a multiplier converted to American and back is rarely a
+ * whole number and "-116.28" is precision nobody on either app ever sees.
+ */
+export function formatPrice(american: number, style: 'american' | 'decimal'): string | null {
+  if (!Number.isFinite(american) || american === 0) return null;
+  if (style === 'decimal') {
+    const dec = american < 0 ? 1 + 100 / Math.abs(american) : 1 + american / 100;
+    return `${dec.toFixed(2)}x`;
+  }
+  const a = Math.round(Math.abs(american));
+  return american > 0 ? `+${a}` : `−${a}`;
+}
+
+/**
+ * Each side's price on one book, formatted, or null where it publishes none.
+ *
+ * Null for the whole book is the PrizePicks case, and it must render as
+ * nothing at all. PrizePicks charges through the entry multiplier, not the
+ * side, so there is no per-side price to show — and a dash or "n/a" in the
+ * price slot would sit beside Underdog's -112 looking like a price that
+ * happens to be missing. A side the book doesn't offer carries no price
+ * either, even if one was stored: it cannot be taken at any price.
+ */
+export function sidePrices(
+  b: Pick<BookLine, 'book' | 'over_price' | 'under_price' | 'over_ok' | 'under_ok'>,
+): { over: string | null; under: string | null } | null {
+  const style = bookMeta(b.book).priceStyle;
+  const over = b.over_ok && b.over_price !== null ? formatPrice(Number(b.over_price), style) : null;
+  const under = b.under_ok && b.under_price !== null ? formatPrice(Number(b.under_price), style) : null;
+  return over === null && under === null ? null : { over, under };
+}
+
+/**
+ * A book's column header. With an app selected the header says which column
+ * is the one you are taking from, and why — "your slip" when an open entry
+ * decided it, since that is a thing you can only change by clearing the slip.
+ */
+function bookHead(code: BookCode, only: BookCode | null, locked: boolean): string {
+  const name = esc(bookName(code));
+  if (only === null) return `<th scope="col" class="n bookh">${name}</th>`;
+  return code === only
+    ? `<th scope="col" class="n bookh primary">${name}<span class="colnote">${locked ? 'your slip' : 'your app'}</span></th>`
+    : `<th scope="col" class="n bookh ref">${name}<span class="colnote">to compare</span></th>`;
+}
+
+/**
+ * One book's number on one market: the line, its price, whether it is the best
+ * number on the row for either side, and — on the book being built on — the
+ * take buttons.
+ *
+ * Every book gets a column whichever app is selected, because the comparison
+ * is the product. Selecting an app narrows what can be TAKEN, not what can be
+ * seen: another app's line with live buttons offered a pick that cannot join
+ * this entry, so those columns are read-only. With no app selected (All) every
+ * column is takeable, as before.
+ *
+ * The best-number mark is `betterSide`, the same rule that restricts which
+ * side is offered: the lowest line on the row is the best over and the highest
+ * the best under, for any number of books. Where every book agrees, or only
+ * one lists the market, it says nothing — there is no better number to point
+ * at. It compares lines only; two books on the same line are both marked even
+ * if one pays more, because price and line are different axes and folding one
+ * into the other is a model, not an observation.
+ */
+function bookCell(
+  books: BookLine[],
+  code: BookCode,
+  only: BookCode | null,
+  buttons: (b: BookLine) => string,
+  /**
+   * The app holding the best line for the call. A phone card shows that app
+   * alone — "best of 3" beside its name — and drops the rest, so a card never
+   * shows a number worse than the one it is recommending. Wide screens keep
+   * every column for comparison.
+   */
+  focus: BookCode | null = null,
+): string {
+  const role = only === null ? 'take' : code === only ? 'take primary' : 'ref';
+  const b = books.find((x) => x.book === code);
+  const alt = focus !== null && code !== focus ? ' alt' : '';
+  const bestAttr = focus !== null && code === focus && books.length > 1
+    ? ` data-best="best of ${books.length}"` : '';
+  const attrs = `class="n bookcol ${role}${alt}${b ? '' : ' none'}" data-book="${esc(bookName(code))}" data-short="${esc(bookShort(code))}"${bestAttr}`;
+  // A book that does not price this market gets an empty cell, not a missing
+  // one: the columns have to line up down the page.
+  if (!b) {
+    return `<td ${attrs}><div class="bookcell"><span class="bk-fig muted" title="Not listed on ${esc(bookName(code))}">—</span></div></td>`;
+  }
+  const best = bestSide(books, code);
+  const mark = best === 'both' ? '' : best === 'over' ? 'o' : 'u';
+  const markText = best === 'over'
+    ? 'the lowest line any app has on this market, so the best number for the over'
+    : 'the highest line any app has on this market, so the best number for the under';
+  const fig = mark
+    ? `<span class="bk-fig best ${mark}" title="${esc(bookName(code))} has ${markText}">${num(b.line)}<span class="bk-side" aria-hidden="true">${mark === 'o' ? 'O' : 'U'}</span><span class="vh">, ${markText}</span></span>`
+    : `<span class="bk-fig">${num(b.line)}</span>`;
+  const px = sidePrices(b);
+  const title = px
+    ? `${bookName(code)}: ${[px.over && `over ${px.over}`, px.under && `under ${px.under}`].filter(Boolean).join(', ')}`
+    : '';
+  // A flat price on both sides — 397 of Underdog's 434 priced markets sit at
+  // -112/-112 — is one fact, so it is printed once rather than twice.
+  const price = !px
+    ? ''
+    : px.over !== null && px.over === px.under
+      ? `<span class="bk-px" title="${esc(title)}">${px.over}</span>`
+      : `<span class="bk-px" title="${esc(title)}">${
+          px.over !== null ? `<span><span class="k">O</span>${px.over}</span>` : ''
+        }${px.under !== null ? `<span><span class="k">U</span>${px.under}</span>` : ''}</span>`;
+  return `<td ${attrs}><div class="bookcell"><div class="bk-num">${fig}${price}</div>${
+    role === 'ref' ? '' : buttons(b)
+  }</div></td>`;
+}
+
+/** What the marks in the book columns mean, and which column takes picks. */
+function bookKey(columns: BookCode[], only: BookCode | null): string {
+  if (columns.length < 2) return '';
+  return `<p class="book-key hide-sm">${
+    only ? `Picks go on <strong>${esc(bookName(only))}</strong>; the others are there to compare. ` : ''
+  }<span class="bk-fig best o">O</span> is the lowest line on a market, the best over;
+    <span class="bk-fig best u">U</span> the highest, the best under.</p>`;
+}
+
+/**
  * Our hit rate minus the probability Underdog's price implies.
  *
  * Positive means we are more optimistic than the market. Null means one of the
@@ -1039,9 +1178,17 @@ export function boardPage(o: {
    */
   const ppBreakEven = flatBreakEven(o.picks.length + 1);
 
+  // Best-line mode: an app is selected and "Best price only" is on. Declared
+  // before `optionsFor`, which reads it.
+  const restrict = Boolean(only) && o.filters.best;
+
   const optionsFor = (r: MarketRow): LineOption[] =>
     r.books
-      .filter((b) => only === null || b.book === only)
+      // With "Best price only" on, every app's line is weighed, so the call
+      // lands on the best number for its side wherever that is — and the row
+      // filter below keeps the market only if the selected app holds it. With
+      // it off, the call is made at the selected app's own line.
+      .filter((b) => only === null || restrict || b.book === only)
       .map((b) => {
         // A devigged read from elsewhere counts as a read on this book's
         // number only when it IS the same number. A probability is the chance
@@ -1094,6 +1241,22 @@ export function boardPage(o: {
   };
   const playOf = (r: MarketRow) => statusOf(r).play;
 
+  /**
+   * In best-line mode a market stays only if the selected app holds the best
+   * line for the call — its own, or a tie. A PrizePicks under at 7.5 beside
+   * Underdog's 8.5 is a worse number than the board knows about, and showing
+   * it as a PrizePicks pick is how a card came to contradict itself. Markets
+   * with no call keep the SQL's own best-price test.
+   */
+  const bestHere = (r: MarketRow): boolean => {
+    const p = playOf(r);
+    if (!restrict || !p || p.book === only) return true;
+    const mine = r.books.find((b) => b.book === only);
+    return mine !== undefined && Number(mine.line) === p.line
+      && (p.side === 'over' ? mine.over_ok : mine.under_ok);
+  };
+  const pool = restrict ? o.rows.filter(bestHere) : o.rows;
+
   // Strongest calls first. The point of the board is to find the few markets
   // worth acting on, so making them the first thing on screen is the feature.
   //
@@ -1140,12 +1303,12 @@ export function boardPage(o: {
     // board sorted by a projection we have four experiments saying is at its
     // ceiling.
     o.filters.show === 'moved'
-      ? o.rows.filter((r) => staleLine(r.books) !== null)
+      ? pool.filter((r) => staleLine(r.books) !== null)
       : o.filters.show === 'calls'
-      ? o.rows.filter((r) => playOf(r) !== null)
+      ? pool.filter((r) => playOf(r) !== null)
       : o.filters.show === 'live'
-        ? o.rows.filter((r) => tier(r) <= 1)
-        : o.rows;
+        ? pool.filter((r) => tier(r) <= 1)
+        : pool;
 
   const ranked = [...visible].sort((a, b) => {
     const sa = started(a);
@@ -1165,7 +1328,7 @@ export function boardPage(o: {
   // a state of the data rather than as a broken page — and so a stat feed
   // filling in is visible as it happens instead of a week later.
   const counts = { call: 0, fair: 0, unavailable: 0, waiting: 0, unsupported: 0 };
-  for (const r of o.rows) {
+  for (const r of pool) {
     const s = statusOf(r);
     if (s.play) counts.call++;
     else if (s.why.kind === 'fair') counts.fair++;
@@ -1184,20 +1347,25 @@ export function boardPage(o: {
     // tell the rebuild removed, and a reason breakdown is a sentence anyway.
     .join(', ');
 
-  // One app selected (by filter or by an open slip) means one column. Showing
-  // the other app's line with live take buttons offered a pick that cannot
-  // join this entry.
   /**
-   * One column per book actually on the board, in registry order.
+   * One column per book actually on the board, in registry order — whichever
+   * app is selected.
    *
    * Was two fixed columns. Deriving the set from the rows means a new adapter
    * shows up the day it starts returning data, with no layout edit — and a
    * book that goes dark stops occupying a column of dashes.
+   *
+   * Selecting an app used to narrow this to that app's column alone, so the
+   * default board was a list of PrizePicks lines and Sleeper was invisible
+   * unless you went looking under All. What selecting narrows now is the
+   * buttons, not the numbers — see `bookCell`.
+   *
+   * Registry order rather than selected-first, so a book's number sits in the
+   * same place on every tab and switching apps doesn't reshuffle a layout the
+   * reader has learnt. The selected column is marked by tone instead.
    */
   const columns: BookCode[] = orderBooks(
-    [...new Set(o.rows.flatMap((r) => r.books.map((b) => b.book)))].filter(
-      (b) => only === null || b === only,
-    ),
+    [...new Set(o.rows.flatMap((r) => r.books.map((b) => b.book)))],
     (b) => b,
   );
   /**
@@ -1225,8 +1393,6 @@ export function boardPage(o: {
    */
   const showEv = false;
   const gapLabel = 'Gap';
-  // Restrict sides only when an app is selected and best-price filtering is on.
-  const restrict = Boolean(only) && o.filters.best;
 
   const body =
     ranked.length === 0
@@ -1253,9 +1419,10 @@ export function boardPage(o: {
         <span class="sub"><b data-count>${ranked.length}</b>${
           o.filters.show !== 'all' ? ` of ${o.rows.length}` : ''
         } markets — ${summary}${
-          restrict ? ', showing only the side each app prices better' : ''
+          restrict ? `, only where ${esc(bookName(only as BookCode))} has the best line for the call` : ''
         }</span>
       </div>
+      ${bookKey(columns, only)}
       <div class="scroll cards-sm"><table class="board-table stack-sm" data-filter>
         <thead><tr>
           <th scope="col">Player</th>
@@ -1265,14 +1432,18 @@ export function boardPage(o: {
           <th scope="col" class="c">Lean</th>
           <th scope="col" class="c">Record</th>
           ${showEv ? '<th scope="col" class="c evcol">EV</th>' : ''}
-          ${columns
-            .map((b) => `<th scope="col" class="n">${only ? 'Take' : esc(bookName(b))}</th>`)
-            .join('')}
+          ${columns.map((b) => bookHead(b, only, o.lockedBook !== null)).join('')}
           <th scope="col" class="c gapcol">${gapLabel}</th>
         </tr></thead>
         <tbody>${ranked
           .map((r, i) => {
             const play = playOf(r);
+            // The app the call is taken on. After the best-line filter, a call
+            // on another app means the selected one ties its line, so it is
+            // taken where you are.
+            const callBook: BookCode | null = play
+              ? (only && play.book !== only ? only as BookCode : play.book)
+              : null;
             // Three markets on one player are three different bets, but
             // repeating the name, match and kick-off in full for each made them
             // read as duplicates. A continuation row keeps the identity quiet
@@ -1370,7 +1541,7 @@ export function boardPage(o: {
               <div class="statname">${esc(statLabel(r.stat))}</div>
               <div class="meta">${esc(maps(r.map_start, r.map_end))}</div>
             </td>
-            <td class="c" data-label="Line">${
+            <td class="c card-hide" data-label="Line">${
               theirLine === null
                 ? '<span class="meta">—</span>'
                 : `<span class="chip-num book">${Number(theirLine).toFixed(1)}</span>`
@@ -1379,9 +1550,9 @@ export function boardPage(o: {
               ours === null
                 ? '<span class="meta">—</span>'
                 : `<span class="chip-num model">${Number(ours).toFixed(1)}</span>
-                   <div class="meta">${formNote(formOf(r), play)}</div>`
+                   <div class="meta card-hide">${formNote(formOf(r), play)}</div>`
             }</td>
-            <td class="c" data-label="Lean">${edgeCell(r, formOf(r))}${staleCell(r)}${playCell(play, statusOf(r).why, r, only)}</td>
+            <td class="c" data-label="Lean">${playCell(play, statusOf(r).why, r, only)}${staleCell(r)}</td>
             <td class="c${play ? ` strength s${Math.min(4, Math.max(1, Math.ceil((play.hitRate - 0.5) * 20)))}` : ''}" data-label="Record">${
               play === null
                 ? '<span class="meta">—</span>'
@@ -1423,7 +1594,7 @@ export function boardPage(o: {
                    ${
                      marketProb === null || flatVig
                        ? ''
-                       : `<div class="meta${
+                       : `<div class="meta card-hide${
                            gapToMarket !== null && Math.abs(gapToMarket) >= MARKET_GAP ? ' fairgap' : ''
                          }"${
                            gapToMarket !== null && Math.abs(gapToMarket) >= MARKET_GAP
@@ -1434,23 +1605,12 @@ export function boardPage(o: {
             }</td>
             ${showEv ? `<td class="c evcol" data-label="EV">${evCell(play)}</td>` : ''}
             ${columns
-              .map((code) => {
-                const b = r.books.find((x) => x.book === code);
-                // A book that does not price this market gets an empty cell,
-                // not a missing one: the columns have to line up down the page.
-                if (!b) {
-                  return `<td class="n bookcol" data-book="${esc(bookName(code))}"><div class="bookcell">${
-                    only ? '' : '<span class="fig muted">—</span>'
-                  }</div></td>`;
-                }
-                return `<td class="n bookcol" data-book="${esc(bookName(code))}"><div class="bookcell">
-                ${only ? '' : `<span class="fig">${num(b.line)}</span>`}
-                ${ouButtons(b.prop_id, back, b.side,
+              .map((code) => bookCell(r.books, code, only, (b) =>
+                ouButtons(b.prop_id, back, b.side,
                   offeredSides(r.books, code, restrict),
-                  play?.book === code ? play.side : 'both',
-                  { over: b.over_ok, under: b.under_ok })}
-              </div></td>`;
-              })
+                  callBook === code && play ? play.side : 'both',
+                  { over: b.over_ok, under: b.under_ok }),
+                only ?? callBook))
               .join('')}
             <td class="c gapcol">${gap}</td>
           </tr>`;
@@ -1509,10 +1669,11 @@ export function edgesPage(o: {
         <h2>Where the apps disagree</h2>
         <span class="sub"><b data-count>${gaps.length}</b> of ${o.health.matched} shared markets</span>
       </div>
+      ${bookKey(columns, only)}
       <div class="scroll cards-sm"><table class="stack-sm gaps-table" data-filter>
         <thead><tr>
           <th scope="col">Player</th><th scope="col">Market</th>
-          ${columns.map((b) => `<th scope="col" class="n">${esc(bookName(b))}</th>`).join('')}
+          ${columns.map((b) => bookHead(b, only, o.lockedBook !== null)).join('')}
           <th scope="col" class="c">Gap</th>
           <th scope="col">Better side</th><th scope="col" class="hide-sm">Match</th>
         </tr></thead>
@@ -1549,20 +1710,15 @@ export function edgesPage(o: {
             <td class="statcol"><div class="statname">${esc(statLabel(r.stat))}</div>
                 <div class="meta">${esc(maps(r.map_start, r.map_end))}</div></td>
             ${columns
-              .map((code) => {
-                const b = r.books.find((x) => x.book === code);
-                if (!b) {
-                  return `<td class="n bookcol" data-book="${esc(bookName(code))}"><div class="bookcell"><span class="fig muted">—</span></div></td>`;
-                }
-                return `<td class="n bookcol" data-book="${esc(bookName(code))}"><div class="bookcell"><span class="fig">${num(b.line)}</span>
-              ${
-                o.lockedBook !== null && o.lockedBook !== code
-                  ? ''
-                  : ouButtons(b.prop_id, back, b.side,
-                      offeredSides(r.books, code, restrict),
-                      bestSide(r.books, code))
-              }</div></td>`;
-              })
+              // Same cell as the board. This page used to hide buttons only on
+              // a slip lock, so choosing an app by tab still left every other
+              // app takeable here while the board had narrowed — the two pages
+              // disagreeing about what "selected" means.
+              .map((code) => bookCell(r.books, code, only, (b) =>
+                ouButtons(b.prop_id, back, b.side,
+                  offeredSides(r.books, code, restrict),
+                  bestSide(r.books, code),
+                  { over: b.over_ok, under: b.under_ok })))
               .join('')}
             <td class="c gapcell"><span class="gap-chip up">${d.toFixed(1)}</span></td>
             <td class="sidecol"><span class="pickside wide ${cls}">${cheaper}</span></td>
@@ -1936,28 +2092,32 @@ export function buildPage(o: {
    * Stacks: the one strategy here with measured numbers behind it, so it goes
    * above everything else on the page.
    *
-   * Each is one team, one direction, ranked by the multiplier it has to be PAID
-   * to break even — the number to hold up against the app. It rests on two
-   * measurements and no projection: losing teams' players go under more than
-   * winners' (57.2% against 45.7% on the books' own lines, 39-22 paired series,
-   * p = 0.040), and teammates move together (rho 0.324, CI on phi
-   * [0.198, 0.222] over 8,923 series). The blind shade against the over, once a
-   * third leg of this, has faded to 51.6% (p = 0.14).
+   * Each is one team's core plus one opponent, every leg on the same side,
+   * ranked by the multiplier it has to be PAID to break even — the number to
+   * hold up against the app. It rests on three measurements and no
+   * projection: teammates move together (rho 0.324, CI on phi [0.198, 0.222]
+   * over 8,923 series); in the tail the opponent follows the core — 87% after
+   * five overs, 72% after five unders (`validate:tail`); and losing teams'
+   * players go under more than winners' (57.2% against 45.7% on the books' own
+   * lines, p = 0.040), which is what the moneyline feeds.
+   *
+   * The caption is one sentence, on purpose. It used to carry the break-even
+   * rule, a coin-flip disclaimer and a lift factor in one paragraph, and the
+   * only thing a reader needs from it is the number to compare with the app.
    */
   const stacksCard = !o.stacks || o.stacks.length === 0 ? '' : `<div class="card">
     <div class="card-head"><h2>Stacks</h2>
-      <span class="sub">one team, one direction — ranked by what each has to be paid to break even</span></div>
+      <span class="sub">take one when your app pays more than the number shown</span></div>
     ${o.stacks.map((s) => {
       const odds = o.teamOdds?.get(s.team);
-      const why = odds
-        ? `Pinnacle has ${esc(s.team)} at ${(odds.pWin * 100).toFixed(0)}% to beat ${esc(odds.opponent)}`
-        : `no moneyline yet, so priced near a coin flip — the books' blind shade has faded to 51.6% under`;
+      const partner = s.legs.find((l) => l.team !== s.team);
+      const why = odds ? ` Pinnacle has ${esc(s.team)} at ${(odds.pWin * 100).toFixed(0)}% to win.` : '';
       return `<div class="stack">
         <div class="evbar">
           <span class="evnum flat">${s.requiredMultiplier.toFixed(2)}×</span>
-          <span class="evlab"><b>${s.legs.length}-pick, ${esc(s.team)} ${s.side}s</b> needs this to break even —
-            take it only if your app pays more. ${why}. Same-team legs make it
-            ${s.lift.toFixed(2)}× likelier to sweep than independent picks.</span>
+          <span class="evlab"><b>${s.legs.length}-pick: ${esc(s.team)} ${s.side}s${
+            partner ? ` + ${esc(partner.team ?? 'opponent')} ${s.side}` : ''
+          }</b><br>Worth it if your app pays more than ${s.requiredMultiplier.toFixed(1)}×.${why}</span>
           <span class="grow"></span>
           <form method="post" action="/build/stage" class="inline">
             <input type="hidden" name="prop_ids" value="${s.legs.map((l) => l.propId).join(',')}">
@@ -2071,7 +2231,7 @@ export function buildPage(o: {
               // a winner from a loser — so a leg resting on it is a leg resting
               // on nothing, however confident the percentage looks.
               l.source === 'market'
-                ? `<span title="Sided by the team, not the player: the books' measured line shade, and Pinnacle's moneyline where there is one.">team + line shade</span>`
+                ? `<span title="Sided by the team, not the player: Pinnacle's moneyline where there is one, otherwise close to a coin flip.">team read</span>`
                 : l.source === 'consensus'
                 ? `<span title="Direction read off the other books: this app is ${l.gap?.toFixed(1)} off their median. No projection involved.">${l.gap?.toFixed(1)} off the crowd</span>`
                 : `<span title="No consensus available — fewer than three books price this market, so the side comes from our projection, which has been measured at AUC 0.495 and has shown no ability to pick winners.">projection only</span>`

@@ -24,6 +24,13 @@ change-detected.
    POLL_CRON    = */15 * * * *
    ARCHIVE_RAW  = false
    ```
+   Also on the logger today: `ODDSPAPI_KEY` (Pinnacle moneylines, pulled daily
+   on `ODDS_CRON`, default `31 11 * * *`, capped at `ODDSPAPI_MONTHLY_CAP`,
+   default 220) and, optionally, `BACKFILL_DAYS` for the resumable bo3
+   backfill. The dashboard is a second service, `bropprop-dashboard`, built
+   from the same repo and told apart by `SERVICE_ROLE` (`web`); it needs
+   `DASHBOARD_PASSWORD`. Never print these — `railway variables` shows every
+   secret in plaintext.
    `${{Postgres.DATABASE_URL}}` is a Railway reference variable — it resolves to
    the **private** `postgres.railway.internal` host, which keeps the database off
    the public internet and off your egress bill.
@@ -33,9 +40,20 @@ change-detected.
 There's no `PORT` and no healthcheck because this service serves no HTTP. That's
 expected for a worker — Railway won't hold it against you.
 
-**Watch the first deploy for:** `poll start`, then a `prizepicks:` and an
-`underdog:` line. If Postgres refuses TLS, set `DATABASE_SSL=false` (private
+**Watch the first deploy for:** `poll start`, then a line per book —
+`prizepicks`, `underdog` and `sleeper`. If Postgres refuses TLS, set `DATABASE_SSL=false` (private
 networking doesn't use TLS; `src/db.ts` infers this but the override is there).
+
+## Deploying a change
+
+Railway builds both services from `main`. Work happens on a branch, so a deploy
+is `git checkout main && git merge --ff-only <branch> && git push origin main`
+(allow-listed; no need to ask). Migrations apply on boot. A deploy restarts the
+container and kills any job running in it. Reach the container with
+`railway ssh --project 707463d9-4970-480f-abec-35397aecbd88 --environment
+production --service bropprop-logger` — pass the flags, since the CLI's
+per-directory link breaks on a path case flip. More in RUNBOOK, "The logger"
+and "Deploys".
 
 ## Things that will bite you
 

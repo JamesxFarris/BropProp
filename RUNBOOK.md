@@ -231,6 +231,12 @@ Recorded so nobody spends money or a verification queue on a solved problem.
 
 Measured 2026-09-10 against the books' own closing lines, every settled prop.
 
+> **Superseded 2026-09-11: the shade faded.** Over every settled leg to date the
+> under is 51.6%, series 46-32, p = 0.14 — no longer significant — and
+> `MEASURED_UNDER_BASELINE` is now 0.516. The 44.7% / 55.3% figures below were
+> the first four days. Kept as the record; do not price from them. See
+> "Correction, 2026-09-11" under the blowout effect.
+
 ```
 settled legs 2137, pushed 24
 over-rate  ALL                    44.7%   (2137)
@@ -275,6 +281,13 @@ The break-even per-leg rate at 22x is **45.32%**, and the measured over-rate of
 measured both-under lift is 1.209 against both-over 1.211 — so the structure
 works identically and only the side changes.
 
+> **Superseded 2026-09-11.** With the shade gone, unders are not the default
+> side and this table overstates the under row. The side now comes from the
+> team's moneyline (a favourite above ~63% flips to the over), and **all-over
+> 5+1 stacks are a top recommendation**, because the opponent leg follows an
+> all-over core far more than the pair-fitted model assumed — see "The
+> opponent leg follows the core" below. The 22x quote itself stands.
+
 ### Before betting the house on it
 
 - **133 series from a four-day window.** Logging began 2026-09-06. A single
@@ -287,6 +300,8 @@ works identically and only the side changes.
 - The correlation figure is measured against our own line convention (prior
   median + 0.5), not the books'. The physical driver — map count, pace — should
   carry across, but that is an argument rather than a measurement.
+  *Checked 2026-09-11: on the books' own lines, k-teammates-all-under rates
+  match the model within about 1%. It carries across.*
 - `shrink()` and the projection are NOT involved in any of this. The claim is
   entirely about the book's line and the shape of the slip.
 
@@ -299,6 +314,11 @@ npm run validate:calls          # includes the over/under baseline
 
 
 ### The blowout effect: the biggest number in the project
+
+> **Superseded 2026-09-11: the table below is partly circular.** It counted
+> each player's own kills in deciding who lost. The fair split on the books'
+> own lines is losers 57.2% / winners 45.7% under (paired p = 0.040) — see
+> "Correction, 2026-09-11" at the end of this section.
 
 Measured 2026-09-10 over **4,967 CS2 series** with walk-forward lines
 (`raw/blowout.mjs`). "Losing team" is inferred from team kill totals over the
@@ -346,7 +366,8 @@ aggregator section below.
 #### The honest caveats
 
 - The 62% / 66% figures are **not achievable**. They assume perfect foreknowledge
-  of the result. Only the 58–60% band is real, and even that is an estimate
+  of the result *(and were inflated — see the correction below; a 25% dog now
+  prices at 54.3%, not 58.6%)*. Only the 58–60% band is real, and even that is an estimate
   derived by mixing the measured rates by an assumed win probability — it has
   not itself been measured.
 - Kill differential is a proxy for "lost". It is a good one in CS2, where kills
@@ -389,7 +410,34 @@ not 58.6%. A favourite flips to the over at about **63%**, not 87%, so
 favourite-over stacks now appear on their own. The table above ("what a market
 price is worth") used the old rates and overstates every row.
 
-### The moneyline pipeline: built, validated, not yet switched on
+### The opponent leg follows the core — measured 2026-09-11
+
+```bash
+npm run validate:tail      # CS2 archive, walk-forward lines; no book lines needed
+```
+
+`slip.ts` prices co-movement with two Gaussian factors fitted to PAIRS, from
+`npm run validate:correlation`: teammates phi 0.210 (95% CI [0.198, 0.222],
+8,923 series), rho = sin(π·phi/2) ≈ **0.324**; opponents ≈ 0.086. Pairs are the
+body of the distribution. A 5+1 stack is a tail event, and there the pair model
+is badly wrong about the opponent: after five teammates all go **over**, the
+opponent's over hits **87%** (the model says about 58%); after five all go
+**under**, his under hits **72%**. Over minus under excludes zero at every core
+size, and every half-year since 2024 agrees on the overs; the under tail has
+weakened in 2026. The books' own closing lines agreed on the overs, 88% over 60
+series. The team core itself is not mis-modelled — P(k teammates all hit)
+matches the archive within a few percent.
+
+Why overs: five players all over usually means long maps or overtime, which
+feeds the other five too. Five all under is a mix of short maps and stomps,
+which partly cancel.
+
+So `findStacks` now builds both sides for every team, with the partner always
+on the core's side and priced from the measured `PARTNER_SHIFT` in `slip.ts`
+(the full table is in its comment). **All-over 5+1 stacks are now a top
+recommendation.** Re-run `validate:tail` as the archive grows.
+
+### The moneyline pipeline: built, validated, live since 2026-09-11
 
 Built 2026-09-10. Pinnacle's CS2 moneylines come in through OddsPapi
 (`src/adapters/oddspapi.ts`), get turned into an under probability per team
@@ -455,18 +503,30 @@ the board query returns one entry per book per row in 32ms; a real parsed
 Pinnacle fixture round-trips through the adapter's own INSERTs (1.628 / 2.18 →
 57.25% home). Each run was confirmed rolled back.
 
-**To switch it on** (not done — it's a production change):
+**Switched on 2026-09-11.** `ODDSPAPI_KEY` is set on the logger (never print
+it — `railway variables` shows every secret in plaintext), `main` is deployed,
+and migrations 015-017 applied on boot. The logger pulls once a day on
+`ODDS_CRON` (default `31 11 * * *`), stopping at `ODDSPAPI_MONTHLY_CAP`
+(default 220 of the free 250). First good pull: 8 fixtures for 4 requests.
+What was run, for reference:
 
 ```bash
 railway variables set ODDSPAPI_KEY=<key> --service bropprop-logger --environment production
-# then deploy the branch; migrations 015-017 apply on boot
-npx tsx src/adapters/oddspapi.ts CS2     # one manual pull, costs ~4 requests
+# then deploy; migrations 015-017 apply on boot
+npx tsx src/adapters/oddspapi.ts CS2     # one manual pull, ~4 requests; run it inside the container
 ```
 
 ## Consensus across books — the one signal that is not our projection
 
 Built 2026-09-10, **and not yet measured**. Read this before trusting anything
 the board's edge chip says.
+
+> **Superseded.** The two-book, market-anchored version was graded on
+> 2026-09-10 and failed: 74-73 over 147 series, p = 1.00 ("GRADED" below). A
+> third CS2 book, Sleeper, then arrived on 2026-09-11, so the three-book crowd
+> path now runs on CS2; LoL still has two books. The crowd version itself has
+> never been graded — that run had 0 three-book markets. Re-run
+> `validate:consensus` once three-book data settles; do not rebuild the module.
 
 ### Why this exists
 
@@ -557,6 +617,7 @@ the result impossible to attribute when it is finally scored.
 **Whether any of this wins.** It has never been measured, because it cannot be:
 a consensus needs three books and only two have ever been logged. `npm run
 validate:consensus` exists and currently reports "nothing to measure".
+*(Superseded — see the note at the top of this section.)*
 
 The bar when data arrives is **not** "is the hit rate above 55%". It is "does
 this beat a coin flip across independent SERIES", tested with the exact sign
@@ -578,6 +639,10 @@ With two books the edge chip never renders, `bookEdges()` returns `[]`, and the
 optimiser falls back to the projection on every leg. That blankness is correct
 and is the honest state of the system. It lights up the day a third book lands.
 
+*Superseded 2026-09-11: the third book landed (Sleeper, CS2 only). CS2 markets
+priced by all three — 159 on the first poll — can now carry a crowd line; LoL
+still cannot. The measured edge lives on the Stacks card, not the edge chip.*
+
 ## More books, and what a sharp line is actually worth
 
 Probed 2026-09-08. The short version: the sharp-sportsbook idea does not pay
@@ -598,7 +663,10 @@ on kills per map: **14.88 (tier b), 14.88 (c), 14.67 (a), 14.29 (s)**.
 
 So a sharp book's moneyline or handicap would not have helped, and neither
 would the free team rankings bo3.gg publishes. **Do not build an opponent
-adjustment for kills.** The one live version of the idea is narrower: a
+adjustment for kills.** *(Superseded 2026-09-11 for the moneyline: a
+market-implied result does move under-rates — losers 57.2% against winners
+45.7% on the books' own lines, paired p = 0.040 — and Pinnacle's moneyline now
+prices the Stacks card. The box-score result stands.)* The one live version of the idea is narrower: a
 market's *total maps* line prices whether a Bo3 goes to three, which is
 exactly the void risk on a maps 1-3 prop. That was not tested and is worth
 testing separately.
@@ -629,7 +697,7 @@ better measurement, and it has never been tried.
 | Book | State |
 |---|---|
 | **Bovada** | Open, no auth, real prices, and **77 live esports events** covering **61 of 61** of our upcoming CS2 matches (re-measured 2026-09-09). An earlier note here said "four esports events, total, not worth an adapter" — that was sampled at a dead hour and is wrong; it is why this avenue sat unused. Match markets only: moneyline, map spread, total maps. **No player props.** |
-| **Pinnacle** | Matchup list open: **131 CS2 matchups**, right down to tier-C qualifiers. Prices return `401 No authorization token provided`. |
+| **Pinnacle** | Matchup list open: **131 CS2 matchups**, right down to tier-C qualifiers. Prices return `401 No authorization token provided`. Its CS2 moneylines now arrive via OddsPapi instead (live 2026-09-11). |
 | **Sleeper** | **LIVE — the third CS2 book.** Ruled out on 2026-09-10 in error: `sport_info()` was asked for cs2/csgo/lol/val/dota, and Sleeper's code for Counter-Strike is **`cs`**. `GET api.sleeper.app/lines/available` answers with no auth; on 2026-09-11 it carried 222 CS2 props (117 kills, 105 headshots, maps 1-2), every one with a team and both prices, 191 of them joining a PrizePicks/Underdog market. **No LoL.** Adapter: `src/adapters/sleeper.ts`. |
 | **ParlayPlay** | Cloudflare bot wall on every path. No unwalled host found (`partner-api`, `api-prod`, `backend` all fail DNS). |
 | **Betr, Chalkboard** | No web API at all. `www.betr.app` is a **Webflow marketing site**; chalkboard.io's only call is Tinybird analytics. Mobile apps only. |
@@ -672,12 +740,15 @@ Two things about Sleeper worth knowing before leaning on it:
 Full research: `docs/BOOKS.md`.
 
 
+*The original 2026-09-10 text follows, kept as the record. Its Sleeper row is
+wrong; the rest held up.*
+
 Settled 2026-09-10 after probing every remaining candidate. **There is no third
 DFS book carrying esports player props that is reachable from a server.**
 
 | Ruled out | How |
 |---|---|
-| Sleeper | Carries no esports. Its own `app_info` and `sport_info()` say so, unauthenticated. |
+| Sleeper | ~~Carries no esports.~~ **Wrong: Sleeper is live as the third CS2 book.** `sport_info()` was asked for `cs2`; Sleeper's code is `cs`. |
 | Dabble | Open, but 3 CS2 fixtures and no LoL. 20 markets-path shapes tried, all 404. |
 | Thunderpick, ParlayPlay, HotStreak, BetOnline, Stake | Cloudflare / 403 HTML wall. |
 | Rivalry | Answers with a genuinely empty `data: []`. |
@@ -696,14 +767,18 @@ is often *more* open than the web one because it never meets a browser
 challenge. Getting at it means proxying the phone once (HTTP Toolkit or
 mitmproxy, CA installed on the device), reading the endpoint and auth shape,
 then talking to it from the logger. Before spending that effort on any given
-app, check it actually lists CS2 or LoL props — Sleeper looked promising for
-weeks and carries none.
+app, check it actually lists CS2 or LoL props — using the vendor's own sport
+codes. Sleeper was written off here as carrying none; it carries CS2 as `cs`.
 
 ### What to do with two books instead
 
 Since a three-book consensus cannot be assembled, the consensus module in
 `src/web/consensus.ts` stays dark. It is correct and tested and it will light
 up if a third book ever lands, but it is not a plan for now.
+
+*Superseded 2026-09-11: for CS2 a third book has landed (Sleeper). What
+follows is still the path for LoL, and for any CS2 market Sleeper does not
+list.*
 
 The two-book move that DOES work rests on an asymmetry already in the data:
 **Underdog publishes genuine two-sided American odds and PrizePicks does not.**
@@ -784,6 +859,12 @@ book rather than from our own history. It does not buy a consensus on kills.
 `ODDSPAPI_KEY`, and the adapter can be written against the real payload. No
 adapter has been written yet, deliberately — writing a parser for a payload
 nobody has seen is how the Sleeper work nearly went wrong.
+
+*Done 2026-09-10/11: the key is on the logger, `src/adapters/oddspapi.ts`
+pulls Pinnacle's CS2 moneylines daily, and they price the Stacks card — see
+"The moneyline pipeline" above. Handicap markets are stored raw in
+`match_odds.markets` but not parsed; total maps and the void question remain
+untested.*
 
 ### Line movement: real information, but not a winning bet
 
@@ -921,6 +1002,8 @@ reference docs look more promising than the blog.
 
 **The free tier is 250 requests a MONTH**, so this can never be a polling
 source. Treat it as a research budget for one-off pulls, and cache everything.
+*(It now runs as one daily pull of about 4 requests, capped at 220 a month —
+see "The moneyline pipeline".)*
 
 What CS2 and LoL *do* have is exactly the two match-level markets this runbook
 has had on the untested list since 2026-09-09:
@@ -1066,6 +1149,11 @@ between Brier 0.2410 and 0.2427 against 0.25 for a coin flip. Projection is
 not where an edge lives. Line disagreement between books is — which is the
 argument for more books, and against more modelling.
 
+*Superseded: line disagreement was then measured too — stale line 41-41,
+market anchor 74-73 (p = 1.00). What has survived is team-level: the
+loser/winner split, the teammate correlation and the opponent tail. See "THE
+FIRST SIGNIFICANT FINDING" and the sections after it.*
+
 ### Dead ends — do not re-test
 
 - **PandaScore free**: fixtures only; every stats endpoint 403s. Paid
@@ -1110,15 +1198,32 @@ Runs itself on Railway every 15 minutes. Nothing to do.
 
 ```bash
 railway logs --service bropprop-logger
-railway ssh --service bropprop-logger npm run report
+railway ssh --project 707463d9-4970-480f-abec-35397aecbd88 --environment production \
+  --service bropprop-logger npm run report
 ```
 
-Run those from `C:\BropProp` so the project link resolves.
+`railway ssh` works from this machine. Pass `--project` and `--environment`
+explicitly: the CLI's project link is per-directory, and a `C:\BropProp` /
+`c:\BropProp` case flip is enough to make it report "No linked project found".
+The container has the deployed `src` and `node_modules` (with tsx) but no
+`.git`; to query production, run a script inside it against
+`process.env.DATABASE_URL`. There is no local Postgres on the dev machine (no
+Docker), so locally `grade.test.ts` fails with ECONNREFUSED — environmental,
+not a regression. The Railway MCP server is not needed, and often fails to
+connect.
 
 ## Deploys
 
 Push to `main` and Railway redeploys both services. Migrations run on boot and
 are applied exactly once, so redeploys are safe.
+
+Work happens on a branch (currently `n-book-consensus`). Deploying is a
+fast-forward: `git checkout main && git merge --ff-only n-book-consensus &&
+git push origin main`. The owner has allow-listed git push/merge/checkout and
+`railway variables/up/logs`, so a deploy does not need asking. A deploy
+restarts the container and kills anything running in it; to ship the dashboard
+alone, `railway up --service bropprop-dashboard --detach`. To know new code is
+live, grep `/app/src` for a new symbol over `railway ssh` rather than waiting.
 
 ## Where things live
 

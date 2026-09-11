@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { offeredSides, marketDisagreement } from './render.js';
+import { offeredSides, marketDisagreement, formatPrice, sidePrices } from './render.js';
 import type { BookLine } from './boardq.js';
 
 /**
@@ -116,4 +116,45 @@ test('agreement is zero, not absent', () => {
   // A market we agree with is a real answer and must be distinguishable from
   // one we could not price at all.
   assert.equal(marketDisagreement(0.55, 0.55), 0);
+});
+
+/**
+ * Prices on the board, in each book's own notation.
+ *
+ * Every price is stored American. Sleeper's users read a payout multiplier, so
+ * the board shows theirs as one — and a wrong conversion here would print a
+ * number that disagrees with the app open beside the board, which is the one
+ * thing a comparison view must never do.
+ */
+
+test('a negative American price is 1 + 100/|price| as a multiplier', () => {
+  assert.equal(formatPrice(-116, 'decimal'), '1.86x');
+  assert.equal(formatPrice(-100, 'decimal'), '2.00x');
+});
+
+test('a positive American price is 1 + price/100 as a multiplier', () => {
+  assert.equal(formatPrice(150, 'decimal'), '2.50x');
+  assert.equal(formatPrice(100, 'decimal'), '2.00x');
+});
+
+test('American stays American, with a real minus sign', () => {
+  assert.equal(formatPrice(-112, 'american'), '−112');
+  assert.equal(formatPrice(105, 'american'), '+105');
+});
+
+test('Sleeper shows decimal and Underdog American, from the registry', () => {
+  const sl = { ...bl('sleeper', 30.5), over_price: -116, under_price: -108 };
+  assert.deepEqual(sidePrices(sl), { over: '1.86x', under: '1.93x' });
+  const ud = { ...bl('underdog', 30.5), over_price: -112, under_price: -112 };
+  assert.deepEqual(sidePrices(ud), { over: '−112', under: '−112' });
+});
+
+test('a book with no per-side price shows nothing, not a placeholder', () => {
+  // PrizePicks: the price is on the entry, so there is nothing to print.
+  assert.equal(sidePrices(bl('prizepicks', 30.5)), null);
+});
+
+test('a side the book does not offer carries no price', () => {
+  const oneWay = { ...bl('underdog', 5.5), over_price: -112, under_price: -112, over_ok: false };
+  assert.deepEqual(sidePrices(oneWay), { over: null, under: '−112' });
 });

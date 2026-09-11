@@ -36,7 +36,8 @@
    thirty things shouting; a tint keeps the meaning and lets the figures stay
    the loudest thing in the row.
 
-   Dark is the default: this is a tool used at night, next to a stream. */
+   Light is the default (see the flip below the dark tokens); dark is one tap
+   away for a tool used at night, next to a stream. */
 
 :root {
   color-scheme: dark;
@@ -150,9 +151,11 @@
   --rail-w: clamp(272px, 19vw, 380px);
 }
 
-/* Light exists, but only if it is asked for. Following the system would mean
-   a machine set to light never sees the default this tool is designed in. */
-[data-theme="light"] {
+/* Light is the default since 2026-09-11, at the owner's request: every page
+   renders light unless dark was chosen with the toggle (stored as bp-theme).
+   Written as a selector flip rather than a swap of the two blocks, so the dark
+   tokens above stay the single definition of dark. */
+:root:not([data-theme="dark"]) {
   color-scheme: light;
   --bg:        #eff4ed;
   --surface:   #ffffff;
@@ -616,6 +619,78 @@ td.match .sub2 {
 .ou { scroll-margin-top: 96px; }
 
 form.inline { display: inline; }
+
+/* ---- every app's number, side by side --------------------------------
+   Each book column carries the line, the book's own price where it has one,
+   and a mark when the line is the best number on the row for a side. The
+   mark is a tinted chip with the side's letter in it rather than colour
+   alone: green and red are the two hues most often confused, and O and U are
+   already what the take buttons say. */
+
+.bk-num { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+/* Positioned so the screen-reader text inside it (`.vh`, absolutely placed)
+   has a containing block within the table. Without it that text resolved
+   against the page, escaped the table's own scroll box, and at 820px — where
+   the table scrolls sideways inside its card — widened the whole page by
+   400px. */
+.bk-fig {
+  position: relative;
+  display: inline-flex; align-items: baseline; gap: 3px;
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+  font-size: 18px; font-weight: 500; line-height: 1.2;
+  padding: 2px 6px; border-radius: var(--r-s);
+  border: 1px solid transparent;
+}
+.bk-fig.muted { color: var(--text-3); }
+.bk-fig.best.o {
+  color: var(--over); background: var(--over-bg);
+  border-color: color-mix(in srgb, var(--over) 45%, transparent);
+}
+.bk-fig.best.u {
+  color: var(--under); background: var(--under-bg);
+  border-color: color-mix(in srgb, var(--under) 45%, transparent);
+}
+.bk-side { font-family: var(--font); font-size: 11px; font-weight: 700; }
+/* The price, under the line it belongs to. Quiet: it qualifies the number
+   above it and is not a second number to compare. */
+.bk-px {
+  display: flex; gap: 8px; padding-right: 7px;
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+  font-size: 12px; color: var(--text-3); white-space: nowrap;
+}
+.bk-px .k { font-family: var(--font); font-weight: 600; margin-right: 3px; }
+
+/* The column you are taking from. Tone, not a hue: the chrome's own "you are
+   here" colour, so it says "selected" without claiming anything about the
+   market. An inset shadow rather than a background, because the zebra and
+   hover rules set the background and this has to sit on top of both. */
+.bookcol.primary { box-shadow: inset 0 0 0 999px var(--nav-dim); }
+thead th.bookh.primary {
+  color: var(--text);
+  box-shadow: inset 0 3px 0 var(--nav), 0 1px 0 var(--line);
+}
+thead th.bookh.ref { color: var(--text-3); }
+.bookh .colnote {
+  display: block; font-size: 11px; font-weight: 500; color: var(--text-3);
+  letter-spacing: 0;
+}
+/* Reference columns read a step down, so the eye lands on the takeable one.
+   A best-number mark keeps its colour whichever column it is in. */
+.bookcol.ref .bk-fig:not(.best) { color: var(--text-2); }
+
+.book-key {
+  margin: 0; padding: 9px 18px;
+  font-size: 13px; color: var(--text-3);
+  border-bottom: 1px solid var(--line);
+}
+.book-key strong { color: var(--text-2); }
+.book-key .bk-fig { font-size: 11px; padding: 0 5px; font-family: var(--font); font-weight: 700; }
+
+/* Read aloud, never drawn: the words behind a mark that is only a letter. */
+.vh {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
 
 /* ---- slip rail ------------------------------------------------------
    Wide enough for the rail to sit beside the board, it is a sticky column.
@@ -1201,6 +1276,44 @@ button.link:hover { color: var(--under); text-decoration: underline; }
      one. It stays on the wide board, where the column exists to hold it. */
   .board-table td[data-label="Win %"] .meta { display: none; }
 
+  /* -- the phone card, trimmed --
+     A card said the same line three times (the Line chip, "Over PP 41.5",
+     and the PrizePicks row) and carried two more coloured arrows — the
+     cheaper-app chip and the stale-line chip — that could point the other way
+     from the call. What a phone keeps: who and what, the call with its
+     record, our number, and each app's line with the buttons. The rest stays
+     on the wide board. */
+  .board-table tbody .card-hide { display: none !important; }
+  .board-table tbody td:nth-child(1),
+  .board-table tbody td:nth-child(2) { order: -2; }
+  .board-table td[data-label="Lean"],
+  .board-table td[data-label="Record"] { order: -1; }
+  .board-table td[data-label="Record"] {
+    display: inline-flex !important; width: auto; margin-top: 6px; padding-right: 14px;
+  }
+  .board-table td[data-label="Record"]::before { display: none; }
+  .board-table td[data-label="Record"] .prob { font-size: 17px; }
+  .board-table td[data-label="Record"] .meta.raw { font-family: var(--font); font-size: 13px; }
+  .board-table td[data-label="Ours"] { margin-top: 6px; }
+  /* Book lines on a phone are plain numbers. The best-number marks (a tinted
+     chip with O or U in it) and the other apps' prices were a second layer of
+     coloured signals on a card that already makes one call. */
+  .board-table .bk-fig.best.o,
+  .board-table .bk-fig.best.u { color: inherit; background: none; border-color: transparent; }
+  .board-table .bk-side,
+  .board-table .bk-px { display: none; }
+  .board-table .bookcol.ref .bk-fig { color: var(--text-3); }
+  /* One app per card: the one with the best line for the call. The others'
+     numbers are worse by construction, and a phone card that printed them
+     read as a second, contradicting recommendation. The wide board keeps
+     every column. */
+  .board-table .bookcol.ref,
+  .board-table .bookcol.alt { display: none !important; }
+  .board-table .bookcol[data-best]::before {
+    content: attr(data-book) "\A" attr(data-best);
+    white-space: pre; line-height: 1.3;
+  }
+
   .formcol { display: none !important; }
   .faircol {
     display: flex !important; align-items: baseline; justify-content: space-between;
@@ -1238,17 +1351,46 @@ button.link:hover { color: var(--under); text-decoration: underline; }
   }
   .bookcol .bookcell { flex: 1; justify-content: flex-end; }
   .ou button { min-width: 46px; height: 44px; font-size: 16px; }
+  /* Price beside the line rather than under it: the line is already a row. */
+  .bookcol .bk-num { flex-direction: row; align-items: baseline; gap: 7px; }
+  .bookcol .bk-px { padding-right: 0; }
 
-  /* -- edges, disagreements: the gap and the side it favours lead -- */
-  .gaps-table tr {
-    display: grid; gap: 4px 10px; align-items: baseline;
-    grid-template-columns: auto 1fr auto;
+  /* -- the other apps: one quiet line under the one you take from --
+     Three books as three full-width lines, each with a name and a pair of
+     44px buttons, made a phone card taller than the screen. Only one of them
+     can be taken from, so only that one gets a line of its own; the rest
+     share a single line of short names and numbers after it, in the same
+     order as the wide table's columns.
+
+     Separated by space alone — not a middle dot, which DESIGN.md retired as a
+     tell, and not a rule either: two books with two-sided prices don't fit
+     one line at 390px, and a rule at the start of a wrapped line reads as a
+     stray mark. Each group leads with its own short name, which is separator
+     enough. Sized so two books quoting a flat price still share a line at
+     360px. */
+  .bookcol { order: 1; }
+  .bookcol.primary { box-shadow: none; }
+  .bookcol.ref {
+    order: 2;
+    display: inline-flex !important; flex: 0 1 auto; align-items: baseline; gap: 5px;
+    margin: 8px 18px 0 0; padding: 0; border-top: 0;
   }
-  .gaps-table .idcol   { grid-area: 1 / 1 / 2 / 3; min-width: 0; }
-  .gaps-table .statcol { grid-area: 1 / 3 / 2 / 4; justify-self: end; text-align: right; }
-  .gaps-table .gapcell { grid-area: 2 / 1 / 3 / 2; justify-self: start; margin-top: 8px; }
-  .gaps-table .sidecol { grid-area: 2 / 2 / 3 / 4; margin-top: 8px; }
-  .gaps-table .bookcol { grid-column: 1 / -1; }
+  .bookcol.ref::before { content: attr(data-short); min-width: 0; font-size: 12px; color: var(--text-3); }
+  .bookcol.ref.none { display: none !important; }
+  .bookcol.ref .bookcell { flex: none; }
+  .bookcol.ref .bk-num { gap: 5px; }
+  .bookcol.ref .bk-fig { font-size: 14px; padding: 1px 4px; }
+  .bookcol.ref .bk-px { font-size: 11px; gap: 5px; }
+
+  /* -- edges, disagreements: the gap and the side it favours lead --
+     A wrapping flex row rather than a grid, for the same reason as the board:
+     the other apps' numbers share one line, which a grid of fixed areas
+     cannot flow onto. */
+  .gaps-table tr { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 10px; }
+  .gaps-table .idcol   { flex: 1 1 0; min-width: 0; }
+  .gaps-table .statcol { flex: none; text-align: right; }
+  .gaps-table .gapcell { margin-top: 8px; }
+  .gaps-table .sidecol { flex: 1 1 auto; margin-top: 8px; }
 
   /* -- edges, movement: opened, now, and the distance travelled -- */
   .moves-table tr {

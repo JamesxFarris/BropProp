@@ -31,14 +31,25 @@ export type BookMeta = {
    * consensus, which is the thing being agreed on.
    */
   pricesSides: boolean;
+  /**
+   * How this book's own users read a price, for display only.
+   *
+   * Every price is STORED as American odds, whatever the book publishes, so
+   * the maths has one convention. But a number the reader has to convert in
+   * their head before comparing it with the app open beside them is a number
+   * they will misread. Sleeper shows a payout multiplier — 1.86x — and nobody
+   * on Sleeper has ever seen -116, so its prices are shown the way Sleeper
+   * shows them.
+   */
+  priceStyle: 'american' | 'decimal';
 };
 
 const REGISTRY: Record<string, BookMeta> = {
-  prizepicks: { code: 'prizepicks', name: 'PrizePicks', short: 'PP', pricesSides: false },
-  underdog:   { code: 'underdog',   name: 'Underdog',   short: 'UD', pricesSides: true },
+  prizepicks: { code: 'prizepicks', name: 'PrizePicks', short: 'PP', pricesSides: false, priceStyle: 'american' },
+  underdog:   { code: 'underdog',   name: 'Underdog',   short: 'UD', pricesSides: true,  priceStyle: 'american' },
   // Sleeper posts a payout multiplier on BOTH sides of every line — decimal odds,
   // stored as American prices — so it is a priced book like Underdog.
-  sleeper:    { code: 'sleeper',    name: 'Sleeper',    short: 'SL', pricesSides: true },
+  sleeper:    { code: 'sleeper',    name: 'Sleeper',    short: 'SL', pricesSides: true,  priceStyle: 'decimal' },
 };
 
 /**
@@ -52,7 +63,9 @@ const REGISTRY: Record<string, BookMeta> = {
 const ORDER = ['prizepicks', 'underdog', 'sleeper'];
 
 export function bookMeta(code: BookCode): BookMeta {
-  return REGISTRY[code] ?? { code, name: code, short: code.slice(0, 2).toUpperCase(), pricesSides: false };
+  return REGISTRY[code] ?? {
+    code, name: code, short: code.slice(0, 2).toUpperCase(), pricesSides: false, priceStyle: 'american',
+  };
 }
 
 export const bookName = (code: BookCode): string => bookMeta(code).name;
