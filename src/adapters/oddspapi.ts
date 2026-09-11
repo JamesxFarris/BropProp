@@ -25,19 +25,31 @@ import { config } from '../config.js';
  *   against memory — a container restarts on every deploy and would otherwise
  *   believe it had spent nothing.
  *
- * ## The trap that nearly shipped
+ * ## Which price belongs to which team — got wrong once, now verified
  *
- * OddsPapi's outcome ids do NOT consistently mean the same side. In the first
- * pull, outcome 171 was the home price on 11 fixtures and the AWAY price on 2 of
- * 13. Keying off the id would have attached the moneyline to the wrong team
- * about one time in seven — and the whole use of this data is to decide which
- * team's players to stack unders on. The `bookmakerOutcomeId` label ("home",
- * "away") is the only reliable source, and the parser reads nothing else.
+ * **Outcome `<market>` is participant1's price and `<market>+1` is
+ * participant2's, always.** The `bookmakerOutcomeId` label ("home"/"away") is
+ * NOT a team mapping: it is Pinnacle's own venue alignment of that participant,
+ * and Pinnacle's home is frequently OddsPapi's participant2.
  *
- * `home` is taken to be `participant1Id` and `away` `participant2Id`. That is
- * OddsPapi's documented convention and it is ASSUMED rather than verified here:
- * nothing in a single payload can distinguish it from the reverse, because a
- * swap would flip every market on the fixture consistently.
+ * This file first had it backwards. The first pull showed outcome 171 labelled
+ * "away" on 2 of 13 fixtures; that was read as "the ids are unreliable, trust the
+ * label", and the parser was switched to the label. Verified 2026-09-11 against
+ * Pinnacle's own open matchup list, joined by matchup id (embedded in
+ * `bookmakerMarketId`): on all 8 live fixtures, outcome 171 carried "home"
+ * exactly when Pinnacle aligned participant1 as home (3 of 3), and "away"
+ * exactly when it aligned participant1 as away (5 of 5). An independent
+ * Polymarket check agreed: every fixture that disagreed with Polymarket was one
+ * of the five the label-reading parser had inverted.
+ *
+ * The cost of the mistake: on 5 of 8 fixtures the win probability was attached
+ * to the other team, so the stack builder would have stacked unders on the
+ * FAVOURITE — the exact failure this data exists to prevent.
+ *
+ * In this schema `home` therefore means participant1, the team OddsPapi lists
+ * first — not the venue, and not Pinnacle's home. `home_name`, `home_price` and
+ * `p_home_win` all refer to that same team, which is the only consistency the
+ * rest of the app needs.
  */
 
 const BASE = 'https://api.oddspapi.io/v4';
@@ -100,18 +112,15 @@ export function parseFixture(
   const markets = f?.bookmakerOdds?.[bookmaker]?.markets;
   if (!markets || typeof markets !== 'object') return null;
 
-  let homePrice: number | null = null;
-  let awayPrice: number | null = null;
   const ml = markets[winnerMarket];
-  for (const o of Object.values<any>(ml?.outcomes ?? {})) {
-    const p = o?.players?.['0'];
-    if (!p) continue;
-    const price = Number(p.price);
-    if (!Number.isFinite(price) || price <= 1) continue;
-    // The label, never the outcome id — see the header.
-    if (p.bookmakerOutcomeId === 'home') homePrice = price;
-    else if (p.bookmakerOutcomeId === 'away') awayPrice = price;
-  }
+  const priceOf = (outcomeId: string): number | null => {
+    const price = Number(ml?.outcomes?.[outcomeId]?.players?.['0']?.price);
+    return Number.isFinite(price) && price > 1 ? price : null;
+  };
+  // By outcome id, never by label — see the header. <market> is participant1,
+  // <market>+1 participant2.
+  const homePrice = priceOf(winnerMarket);
+  const awayPrice = priceOf(String(Number(winnerMarket) + 1));
 
   return {
     fixtureId: String(f.fixtureId),

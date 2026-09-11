@@ -367,16 +367,31 @@ table. A deploy restarts the container, so a counter kept in memory would reset.
 Team names are cached in `oddspapi_participant` and fetched only when an unknown
 id appears. CS2 only by default, because the blowout effect was measured on CS2.
 
-**The trap that nearly shipped.** OddsPapi's outcome ids do not always mean the
-same side. In the first real pull, outcome `171` was the home price on 11
-fixtures and the **away** price on 2 of 13. Keying off the id would have put the
-moneyline on the wrong team about one fixture in seven, which means stacking
-unders on the favourite. The parser reads only the `bookmakerOutcomeId` label
-(`home` / `away`), and a test covers the flipped case.
+**Which price belongs to which team — this section first said the opposite.**
+Outcome `171` is participant1's price and `172` participant2's, **always**. The
+`bookmakerOutcomeId` label (`home`/`away`) is Pinnacle's own venue alignment of
+that participant, not a team mapping, and Pinnacle's home is often OddsPapi's
+participant2.
 
-**Assumed, not verified:** `home` is `participant1Id`. Nothing in one payload can
-tell that apart from the reverse, because a swap would flip every market on the
-fixture consistently.
+The first version read the label, on the reasoning that outcome 171 showing
+"away" on 2 of 13 fixtures meant the ids were unreliable. It was the other way
+round. Verified 2026-09-11 against Pinnacle's open matchup list (no key; it
+carries each participant's `alignment`), joined exactly by matchup id, which is
+embedded in `bookmakerMarketId`: on all 8 live fixtures, outcome 171 was
+labelled "home" exactly when Pinnacle aligned participant1 home (3/3) and "away"
+exactly when it aligned participant1 away (5/5). Polymarket agreed: every
+fixture that disagreed with it was one of the five the label parser had
+inverted.
+
+**The cost:** on 5 of 8 fixtures the win probability sat on the other team, so
+the stack builder ranked the FAVOURITE's unders as the dog's. The first set of
+"today's stacks" put NAVI Junior unders on top as a 21% dog; NAVI Junior was the
+79% favourite. Nothing was bet on it. The parser now reads outcome ids, the test
+pins the real NAVI Junior fixture, and the stored rows were corrected from their
+own raw outcomes.
+
+`home` in `match_odds` therefore means participant1 — OddsPapi's first-listed
+team — not the venue side.
 
 **Team matching** is exact after normalising, never fuzzy (`src/adapters/teamname.ts`).
 75 of 82 recent CS2 teams matched with plain lowercase-and-strip. Stripping

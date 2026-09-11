@@ -15,21 +15,35 @@ function fixture(outcomes: Array<{ id: string; label: string; price: number }>, 
   };
 }
 
-test('prices are read by label, not by outcome id', () => {
-  // The trap from the first real pull: outcome 171 was the AWAY price on 2 of
-  // 13 fixtures. Keying off the id would put the moneyline on the wrong team.
-  const normal = parseFixture(fixture([
-    { id: '171', label: 'home', price: 1.628 },
-    { id: '172', label: 'away', price: 2.18 },
+test('prices are read by outcome id; the label is only the bookmaker venue alignment', () => {
+  // The real NAVI Junior vs Privateer fixture of 2026-09-11. Outcome 171 is
+  // NAVI Junior (participant1) at 1.155 — and Pinnacle labels it "away",
+  // because Pinnacle calls Privateer the home side. Reading the label put
+  // 4.36 on NAVI Junior and turned the 79% favourite into a 21% dog.
+  const f = parseFixture(fixture([
+    { id: '171', label: 'away', price: 1.155 },
+    { id: '172', label: 'home', price: 4.36 },
   ]), '171')!;
-  const flipped = parseFixture(fixture([
-    { id: '171', label: 'away', price: 2.18 },
-    { id: '172', label: 'home', price: 1.628 },
+  assert.equal(f.homePrice, 1.155, 'participant1 takes outcome 171, whatever its label says');
+  assert.equal(f.awayPrice, 4.36);
+  assert.ok(f.pHomeWin! > 0.75, `participant1 is the favourite here, got ${f.pHomeWin}`);
+
+  // And when the labels happen to line up, nothing changes.
+  const g = parseFixture(fixture([
+    { id: '171', label: 'home', price: 1.613 },
+    { id: '172', label: 'away', price: 2.22 },
   ]), '171')!;
-  assert.equal(normal.homePrice, 1.628);
-  assert.equal(flipped.homePrice, 1.628, 'the label decides, whichever id carries it');
-  assert.equal(flipped.awayPrice, 2.18);
-  assert.equal(normal.pHomeWin, flipped.pHomeWin);
+  assert.equal(g.homePrice, 1.613);
+  assert.equal(g.awayPrice, 2.22);
+});
+
+test('LoL uses its own winner market with the same id convention', () => {
+  const f = parseFixture(fixture([
+    { id: '181', label: 'away', price: 1.5 },
+    { id: '182', label: 'home', price: 2.6 },
+  ], '181'), '181')!;
+  assert.equal(f.homePrice, 1.5);
+  assert.equal(f.awayPrice, 2.6);
 });
 
 test('the margin is removed from the moneyline', () => {
