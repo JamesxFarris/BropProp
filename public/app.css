@@ -1737,6 +1737,12 @@ body.searching .tick { display: none; }
 @keyframes count-bump { 0% { transform: scale(1); } 40% { transform: scale(1.4); } 100% { transform: scale(1); } }
 .sb-n.bump { display: inline-block; color: var(--signal); animation: count-bump .45s ease; }
 
+/* Leads being tested, on the Stats page. */
+.lead { padding: 12px 0; border-top: 1px solid var(--line); }
+.lead:first-of-type { border-top: 0; }
+.lead-h { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.lead-h b { font-weight: 600; }
+
 /* Stake sizing on a stack: type what the app pays, get a quarter-Kelly stake. */
 .kelly { display: block; margin-top: 6px; font-size: 13px; color: var(--text-2); }
 .kelly input {

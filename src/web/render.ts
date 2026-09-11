@@ -5,7 +5,7 @@ import type { FormStats, Play, CallStatus, NoCall } from './projection.js';
 import { config } from '../config.js';
 import { evaluate, edgeProgress, type LineOption, flatBreakEven } from './projection.js';
 import { staleLine } from './stale.js';
-import type { Counters, ScoreRow } from './statsq.js';
+import type { Counters, ScoreRow, LeadRow } from './statsq.js';
 import type { ClvSummary } from './clv.js';
 import type { Entry, Stack } from './optimize.js';
 import type { TeamOdds } from './matchodds.js';
@@ -2488,6 +2488,7 @@ export function statsPage(o: {
   sources: Array<{ source: string; league: string; n: number }>;
   clv: ClvSummary;
   scores: ScoreRow[];
+  leads?: LeadRow[];
 }): string {
   const c = o.counters;
 
@@ -2541,6 +2542,36 @@ export function statsPage(o: {
           )
           .join('')}</tbody>
       </table></div>`;
+
+  /**
+   * Leads: pricing patterns the bias scan found in the first days of lines,
+   * scored only on games since they were found. A lead is an edge only once it
+   * has its pre-registered sample and its whole interval still clears the
+   * five-pick bar; until then it is shown as collecting, whatever it reads.
+   */
+  const LEAD_BAR = 0.549;
+  const leadRows = o.leads ?? [];
+  const leadBody = leadRows.length === 0
+    ? `<div class="empty">Tracking starts with games from 12 September. The first
+        forward record appears after the daily scoring run.</div>`
+    : leadRows.map((l) => {
+        const need = l.series_needed ?? 0;
+        const rate = l.win_rate === null ? '—' : `${(l.win_rate * 100).toFixed(1)}%`;
+        const ci = l.ci_lo === null || l.ci_hi === null
+          ? '' : ` [${(l.ci_lo * 100).toFixed(0)}–${(l.ci_hi * 100).toFixed(0)}%]`;
+        const status = l.series < need
+          ? `collecting — ${l.series} of ~${need} matches`
+          : l.ci_lo !== null && l.ci_lo > LEAD_BAR
+            ? 'holding up: the whole interval clears the 5-pick bar'
+            : 'not holding up at full sample';
+        return `<div class="lead">
+          <div class="lead-h"><b>${esc(l.label)}</b><span class="meta">${esc(status)}</span></div>
+          <div class="meta">won ${rate}${ci} of ${l.legs} legs across ${l.series} matches since ${esc(l.since)}${
+            l.series_up !== null && l.series_down !== null ? `; matches leaning its way ${l.series_up}-${l.series_down}` : ''
+          }</div>
+          ${meter(Math.min(l.series, need || 1), need || 1, 'matches toward the target')}
+        </div>`;
+      }).join('');
 
   // The scorecard, newest first from the table; charts read oldest-first.
   const hist = [...o.scores].reverse();
@@ -2648,6 +2679,18 @@ export function statsPage(o: {
     <div class="card-head"><h2>Has the model actually been right?</h2>
       <span class="sub">every logged line replayed through the real engine, on history it had at the time</span></div>
     <div class="card-body">${scoreBody}</div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2>Leads being tested</h2>
+      <span class="sub">pricing patterns found in the first days of lines, scored only on games since</span></div>
+    <div class="card-body">
+      <p class="note">A pattern found by looking at five days of lines can't be proven by those same
+        five days. Each lead here was written down before the games it is scored on, and it only
+        counts as an edge once it reaches its target sample with its whole interval above the
+        five-pick break-even.</p>
+      ${leadBody}
+    </div>
   </div>
 
   <div class="card">

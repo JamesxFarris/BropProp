@@ -83,6 +83,34 @@ export async function sources(): Promise<Array<{ source: string; league: string;
               FROM map_stat GROUP BY 1, 2 ORDER BY n DESC`);
 }
 
+/** A pricing lead's forward record — see `db/018_lead_score.sql`. */
+export type LeadRow = {
+  lead: string;
+  label: string;
+  since: string;
+  day: string;
+  legs: number;
+  series: number;
+  win_rate: number | null;
+  ci_lo: number | null;
+  ci_hi: number | null;
+  series_up: number | null;
+  series_down: number | null;
+  series_p: number | null;
+  series_needed: number | null;
+};
+
+/** The latest record for every tracked lead. */
+export async function leadScores(): Promise<LeadRow[]> {
+  return q(
+    `SELECT DISTINCT ON (lead) lead, label,
+            to_char(since, 'YYYY-MM-DD') AS since, to_char(scored_on, 'YYYY-MM-DD') AS day,
+            legs, series, win_rate, ci_lo, ci_hi, series_up, series_down, series_p, series_needed
+       FROM lead_score
+      ORDER BY lead, scored_on DESC`,
+  );
+}
+
 /** One stored scorecard — see `db/012_model_score.sql`. */
 export type ScoreRow = {
   day: string;

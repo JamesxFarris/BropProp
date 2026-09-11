@@ -7,6 +7,38 @@ import { storeStats } from './results/store_stats.js';
 import { scoreCalls, storeScore, LEAGUES } from './results/validate_calls.js';
 import { resumeBackfill } from './results/backfill_resume.js';
 import { pullMatchOdds, BudgetExhausted } from './adapters/oddspapi.js';
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+
+/**
+ * The first day that counts as forward evidence for the pre-registered pricing
+ * leads (see src/results/validate_bias.ts, TRACKED). Fixed, not rolling: the
+ * leads were chosen from the days before it.
+ */
+const LEADS_SINCE = '2026-09-12';
+
+/**
+ * Score the pricing leads on their forward window and store today's record.
+ *
+ * A child process, not a function call: the scan loads the whole stat archive,
+ * and a job that ran this process out of memory would take the line logger
+ * down with it. Its own heap cap, a timeout, and it always resolves — a failed
+ * scan is a missing row on the Stats page, never a stopped poller.
+ */
+function runLeadScan(): Promise<void> {
+  return new Promise((resolve) => {
+    const cli = fileURLToPath(new URL('../node_modules/tsx/dist/cli.mjs', import.meta.url));
+    const script = fileURLToPath(new URL('./results/validate_bias.ts', import.meta.url));
+    const child = spawn(
+      process.execPath,
+      ['--max-old-space-size=2048', cli, script, `--since=${LEADS_SINCE}`, '--store', '--quiet'],
+      { stdio: ['ignore', 'inherit', 'inherit'] },
+    );
+    const timer = setTimeout(() => child.kill('SIGTERM'), 15 * 60e3);
+    child.on('exit', (code) => { clearTimeout(timer); console.log(`lead scan exited ${code}`); resolve(); });
+    child.on('error', (e) => { clearTimeout(timer); console.warn('lead scan failed to start:', e.message); resolve(); });
+  });
+}
 
 console.log(`BropProp logger up — schedule "${config.pollCron}", leagues ${config.leagues.join(',')}`);
 
@@ -106,6 +138,7 @@ async function scoreTick() {
         `AUC ${s.auc === null ? '—' : s.auc.toFixed(3)}, ` +
         `always-under ${pc(s.alwaysUnder)}`);
     }
+    await runLeadScan();
   } catch (err) {
     // Scoring is reporting, not collection. It must never take the logger down.
     console.warn('model score skipped:', (err as Error).message.slice(0, 120));

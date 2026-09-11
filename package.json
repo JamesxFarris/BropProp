@@ -30,7 +30,11 @@
     "validate:calls": "tsx src/results/validate_calls.ts",
     "validate:consensus": "tsx src/results/validate_consensus.ts",
     "validate:correlation": "tsx src/results/validate_correlation.ts",
-    "validate:tail": "tsx src/results/validate_tail.ts"
+    "validate:tail": "tsx src/results/validate_tail.ts",
+    "validate:bias": "tsx src/results/validate_bias.ts",
+    "validate:backtest": "tsx src/results/validate_backtest.ts",
+    "env:truth": "tsx src/results/env_truth.ts",
+    "validate:environment": "tsx src/results/validate_environment.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.7",
