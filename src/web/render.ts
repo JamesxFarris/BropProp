@@ -547,6 +547,27 @@ ${o.rail ? '<input type="checkbox" id="slipsheet" class="sheet-toggle" aria-labe
     if (input.value.trim()) apply();
   })();
 
+  // Stake sizing on a stack: quarter-Kelly from the stack's win probability
+  // and the multiplier the app is actually offering, capped at 2% of bankroll.
+  // Only stacks get this — their probability rests on measured correlation and
+  // a measured tail, where a single prop's rests on a projection that has not
+  // shown skill. Quarter, and capped, because even the measured number carries
+  // a wide interval and the app can reprice the slip.
+  document.querySelectorAll('.kelly input').forEach(function (inp) {
+    var box = inp.closest('.kelly'), out = box.querySelector('b');
+    var p = Number(box.getAttribute('data-p'));
+    function size() {
+      var m = Number(String(inp.value).replace(',', '.').replace(/[x×\s]/gi, ''));
+      if (!(m > 1) || !(p > 0)) { out.textContent = '—'; return; }
+      var kelly = (p * m - 1) / (m - 1);
+      out.textContent = kelly <= 0
+        ? 'nothing: that pays less than it needs'
+        : (Math.min(kelly / 4, 0.02) * 100).toFixed(1) + '% of your bankroll';
+    }
+    inp.addEventListener('input', size);
+    size();
+  });
+
   document.getElementById('theme').addEventListener('click', function () {
     // Light unless dark was chosen, so an unset theme toggles to dark.
     var el = document.documentElement, cur = el.getAttribute('data-theme');
@@ -2144,7 +2165,10 @@ export function buildPage(o: {
           <span class="evnum flat">${s.requiredMultiplier.toFixed(2)}×</span>
           <span class="evlab"><b>${s.legs.length}-pick: ${esc(s.team)} ${s.side}s${
             partner ? ` + ${esc(partner.team ?? 'opponent')} ${s.side}` : ''
-          }</b><br>Worth it if your app pays more than ${s.requiredMultiplier.toFixed(1)}×.${why}</span>
+          }</b><br>Worth it if your app pays more than ${s.requiredMultiplier.toFixed(1)}×.${why}
+            <span class="kelly" data-p="${s.winProb.toFixed(5)}">If it pays
+              <input type="text" inputmode="decimal" autocomplete="off" aria-label="What your app pays for this slip, as a multiplier">×,
+              stake <b>—</b></span></span>
           <span class="grow"></span>
           <form method="post" action="/build/stage" class="inline">
             <input type="hidden" name="prop_ids" value="${s.legs.map((l) => l.propId).join(',')}">

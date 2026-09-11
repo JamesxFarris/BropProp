@@ -1737,6 +1737,17 @@ body.searching .tick { display: none; }
 @keyframes count-bump { 0% { transform: scale(1); } 40% { transform: scale(1.4); } 100% { transform: scale(1); } }
 .sb-n.bump { display: inline-block; color: var(--signal); animation: count-bump .45s ease; }
 
+/* Stake sizing on a stack: type what the app pays, get a quarter-Kelly stake. */
+.kelly { display: block; margin-top: 6px; font-size: 13px; color: var(--text-2); }
+.kelly input {
+  width: 4.6em; margin: 0 2px; padding: 3px 6px; text-align: right;
+  font-family: var(--mono); font-size: 14px; font-variant-numeric: tabular-nums;
+  color: var(--text); background: var(--surface);
+  border: 1px solid var(--line-2); border-radius: var(--r-control);
+}
+.kelly input:focus { outline: 2px solid var(--focus); outline-offset: 1px; }
+.kelly b { color: var(--text); font-weight: 600; }
+
 /* The play is one solid button; the other side is a quiet one. Outlined pairs
    on every row were the other half of the generated-dashboard look. */
 .board-table .ou button.best:not(.on):not(:disabled) {
