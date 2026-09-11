@@ -277,6 +277,19 @@ changed here: it decides money and deserves its own measurement.
   win percentage ("68% O"): the model's probabilities measured as uncalibrated
   (claimed ~60%, realised ~52%, AUC ≈ 0.5), and a confident percentage is the
   fakest thing the board could print.
+  Personality, next: a bolder mark and wordmark with the tagline "Read the
+  line" (not "props with edge", which the single-prop plays have not earned);
+  a faint grain, an orange glow behind the mark and a gentle gradient in the
+  bar; a team "bug" — the short name an overlay puts in the corner, in the call
+  tag's notch, derived from the name because logos need a licensed source;
+  map-range pips (■■□ is maps 1–2 of a Bo3) so 1–2 and 1–3 props stop looking
+  identical; on a phone the line, Projected and Edge as three figures of one
+  shape beside the tag; buttons that press in; and a slip whose count pops and
+  whose new leg slides in. Declined, on the same principle as the percentage:
+  brighter colours for bigger edges, "hot" badges for 11/12 records, and
+  pulsing strong projections — bigger edges and stronger records measured as
+  no more likely to win, so dressing them up steers the reader toward noise;
+  and invented "insight" lines, which on these samples are storytelling.
 - **2026-09-11** — Light is the default, at the owner's request; dark is one
   tap away. The phone card was cut to one call made at your own app's line:
   the cheaper-app chip, the stale chip, the "+3.8 in your favour" figure and

@@ -55,6 +55,48 @@ const LEAGUE_CLASS: Record<string, string> = { CS2: 'cs2', LOL: 'lol' };
 const leagueBadge = (l: string) =>
   `<span class="lg ${LEAGUE_CLASS[l] ?? 'other'}">${esc(l)}</span>`;
 
+/**
+ * A team's short name, the way a broadcast overlay puts it in the corner.
+ *
+ * Derived from the name rather than drawn from logos, which would need a
+ * licensed source and break the day a CDN moves. The few teams every viewer
+ * knows by a different name are spelled out; the rest follow one rule: drop
+ * the filler words, keep a short single word whole or cut a long one to three
+ * letters, and take initials across several (numbers kept whole — "100T").
+ */
+const TEAM_SHORT: Record<string, string> = {
+  'natus vincere': 'NAVI', 'navi': 'NAVI', 'natus vincere junior': 'NAVI J',
+  'ninjas in pyjamas': 'NIP', 'cloud9': 'C9', 'team liquid': 'TL', 'faze clan': 'FAZE',
+  'g2 esports': 'G2', 'team spirit': 'SPIRIT', 'team vitality': 'VIT',
+};
+const TEAM_FILLER = new Set(['team', 'esports', 'esport', 'gaming', 'clan', 'club', 'academy', 'gg']);
+export function teamShort(name: string): string {
+  const key = name.trim().toLowerCase();
+  const known = TEAM_SHORT[key];
+  if (known) return known;
+  const words = key.replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter((w) => w && !TEAM_FILLER.has(w));
+  if (words.length === 0) return name.trim().slice(0, 3).toUpperCase();
+  if (words.length === 1) {
+    const w = words[0]!;
+    return (w.length <= 4 ? w : w.slice(0, 3)).toUpperCase();
+  }
+  return words.slice(0, 4).map((w) => (/^\d/.test(w) ? w : w[0])).join('').toUpperCase();
+}
+const teamBug = (name: string | null | undefined) =>
+  name ? `<span class="tbug" title="${esc(name)}">${esc(teamShort(name))}</span>` : '';
+
+/**
+ * Which maps of the series a prop covers, as pips: ■■□ is maps 1–2 of a
+ * best-of-three, ■■■□□ maps 1–3 of a LoL best-of-five. It is the difference
+ * between two props that otherwise look identical, drawn rather than read.
+ */
+const mapPips = (league: string, a: number, b: number) => {
+  const n = Math.max(league === 'LOL' ? 5 : 3, b);
+  let s = '';
+  for (let i = 1; i <= n; i++) s += `<i${i >= a && i <= b ? ' class="on"' : ''}></i>`;
+  return `<span class="mpips" aria-hidden="true">${s}</span>`;
+};
+
 function ago(iso: string | null): string {
   if (!iso) return '—';
   const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
@@ -334,6 +376,7 @@ function shell(o: {
     <h1 class="brand">
       <a href="/board" aria-label="BropProp, go to the board">${MARK}<span class="word">BropProp</span></a>
     </h1>
+    <span class="tagline hide-sm">Read the line</span>
     <nav class="tabs">
       ${tab('/board', 'Board', o.active === 'board')}
       ${tab('/build', 'Build', o.active === 'build')}
@@ -381,6 +424,22 @@ ${o.rail ? '<input type="checkbox" id="slipsheet" class="sheet-toggle" aria-labe
     var t = localStorage.getItem('bp-theme');
     if (t) document.documentElement.setAttribute('data-theme', t);
   } catch (e) {}
+  // The slip notices a new leg: the count pops and the leg slides in. Taking a
+  // pick is a form post and a redirect, so the page can't know what changed —
+  // it compares against the count it saw last time. Pure decoration; with
+  // scripts off, the slip simply shows the leg.
+  (function () {
+    try {
+      var legs = document.querySelectorAll('.slip-legs .leg');
+      var n = legs.length;
+      var prev = Number(sessionStorage.getItem('bp-legs') || '0');
+      if (n > prev) {
+        if (legs[n - 1]) legs[n - 1].classList.add('just-added');
+        document.querySelectorAll('.sb-n').forEach(function (e) { e.classList.add('bump'); });
+      }
+      sessionStorage.setItem('bp-legs', String(n));
+    } catch (e) {}
+  })();
   // Kick-off times in the reader's own timezone. The server can only know
   // UTC, so it renders the relative form and this fills in the clock time.
   (function () {
@@ -517,7 +576,7 @@ function sheetBar(picks: PickRow[]): string {
     <span class="sb-k">Your slip</span>
     ${
       n === 0
-        ? '<span class="sb-none">empty</span>'
+        ? '<span class="sb-none">nothing riding yet</span>'
         : `<span class="sb-n">${n}</span><span class="sb-k">leg${n === 1 ? '' : 's'}</span>`
     }
     <span class="grow"></span>
@@ -530,8 +589,8 @@ function slipRail(picks: PickRow[], back: string): string {
   if (picks.length === 0) {
     return `${sheetBar(picks)}<div class="sheet-body"><div class="card">
       <div class="card-head"><h2>Your slip</h2></div>
-      <div class="empty">No legs yet. Press <strong>O</strong> or <strong>U</strong> on any
-        market to add one. Each leg records the line at the moment you take it.</div>
+      <div class="empty">Clean slate. Tap <strong>Over</strong> or <strong>Under</strong> on any
+        prop to start one — each leg keeps the line you took it at, even if it moves.</div>
     </div></div>`;
   }
 
@@ -1503,6 +1562,8 @@ export function boardPage(o: {
                 ${sameAsPrev ? '<span class="tick"></span>' : ''}
                 <div class="whobody">
                   <div class="name">${
+                    sameAsPrev ? '' : teamBug(r.books.find((b) => b.team)?.team)
+                  }${
                     histId ? `<a href="/prop/${histId}">${esc(r.handle)}</a>` : esc(r.handle)
                   }${comboChip(r)}</div>
                   ${
@@ -1526,7 +1587,7 @@ export function boardPage(o: {
             </td>
             <td>
               <div class="statname">${esc(statLabel(r.stat))}</div>
-              <div class="meta">${esc(maps(r.map_start, r.map_end))}</div>
+              <div class="meta">${mapPips(r.league, r.map_start, r.map_end)}${esc(maps(r.map_start, r.map_end))}</div>
             </td>
                         <td class="c" data-label="Ours">${
               // The model has a name — Projected — and says what it was built
@@ -1537,7 +1598,14 @@ export function boardPage(o: {
                     lineBook
                       ? `<span class="pv only-sm"><b>${num(lineBook.line)}</b><small>${esc(bookName(lineBook.book))}</small></span>`
                       : ''
-                  }<span class="pv proj" title="${esc(formNote(f, play))}"><b>${Number(ours).toFixed(1)}</b><small>Projected</small></span>`
+                  }<span class="pv proj" title="${esc(formNote(f, play))}"><b>${Number(ours).toFixed(1)}</b><small>Projected</small></span>${
+                    // On a phone the edge is the third figure in the strip, the
+                    // same shape as the line and the projection, rather than a
+                    // label bolted under the call tag.
+                    play && play.edge > 0
+                      ? `<span class="pv edgev only-sm"><b>+${play.edge.toFixed(1)}</b><small>Edge</small></span>`
+                      : ''
+                  }`
             }</td>
             <td class="c" data-label="Lean">${playCell(play, statusOf(r).why, r, only)}</td>
             <td class="c" data-label="Record">${

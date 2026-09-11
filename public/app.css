@@ -187,9 +187,16 @@ a { color: inherit; }
    lines are. The two-tone wordmark and the thin coloured band over it are
    gone — they read as a template. The mark carries the identity now. */
 
+/* Not a flat fill: a fine grain (the texture of a broadcast graphic), a soft
+   orange glow behind the mark, and a gentle top-to-bottom gradient. All three
+   are faint — the bar should feel made, not decorated. */
 .top {
   position: sticky; top: 0; z-index: 20;
-  background: var(--bar); color: var(--bar-ink);
+  color: var(--bar-ink);
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    radial-gradient(520px 140px at 60px 50%, rgba(255, 91, 20, .16), transparent 70%),
+    linear-gradient(180deg, var(--bar-2), var(--bar));
   border-bottom: 1px solid var(--bar-line);
 }
 /* Broadcast hatching at the far right of the bar. Texture, not information:
@@ -212,10 +219,20 @@ a { color: inherit; }
   display: flex; align-items: center; gap: 11px;
   color: inherit; text-decoration: none; white-space: nowrap;
 }
-.brand .mark { display: block; width: 30px; height: 30px; flex: none; }
+.brand .mark { display: block; width: 34px; height: 34px; flex: none; }
 .brand .word {
-  font-family: var(--display); font-weight: 700; font-size: 19px; line-height: 1;
-  letter-spacing: .08em; text-transform: uppercase;
+  font-family: var(--display); font-weight: 700; font-size: 22px; line-height: 1;
+  letter-spacing: .06em; text-transform: uppercase;
+}
+/* The line under the name, said once and quietly. Not "props with edge": the
+   board's single-prop plays have not earned that claim, and a tagline that
+   overclaims is the fastest way to look like every other betting site. */
+.tagline {
+  align-self: center; margin-left: -12px; padding-left: 14px;
+  border-left: 1px solid var(--bar-line);
+  font-family: var(--display); font-size: 11.5px; font-weight: 600;
+  letter-spacing: .16em; text-transform: uppercase; white-space: nowrap;
+  color: var(--bar-muted);
 }
 /* The one flourish the mark gets: it lifts a pixel under the pointer. */
 .brand a .mark { transition: transform .15s ease; }
@@ -1301,23 +1318,30 @@ button.link:hover { color: var(--under); text-decoration: underline; }
     margin-left: auto; text-align: right;
   }
   .board-table tbody .matchline { max-width: none; }
+  /* The prop stacks on the right — the stat, then its maps — and the map range
+     never breaks between "Maps" and "1–2". */
+  .board-table tbody td:nth-child(2) .statname { display: block; }
+  .board-table tbody td:nth-child(2) .meta { display: block; margin: 3px 0 0; white-space: nowrap; }
+  /* One strip: their line, the projection and the edge as three figures of
+     the same shape, with the call tag centred beside them — integrated, not a
+     label bolted under the tag. Tighter to the record below it. */
   .board-table td[data-label="Ours"] {
-    order: -2; display: flex !important; align-items: flex-start; gap: 26px;
-    flex: 1 1 auto; margin-top: 16px; padding-right: 0;
+    order: -2; display: flex !important; align-items: flex-start; gap: 20px;
+    flex: 1 1 auto; margin-top: 14px; padding-right: 0;
   }
   .board-table td[data-label="Ours"]::before { display: none; }
   .board-table td[data-label="Lean"] {
-    order: -2; display: flex !important; flex: 0 0 auto;
-    margin: 16px 0 0 auto; padding-right: 0;
+    order: -2; display: flex !important; flex: 0 0 auto; align-self: center;
+    margin: 14px 0 0 auto; padding-right: 0;
   }
-  .board-table td[data-label="Lean"] .play { flex-direction: column; align-items: flex-end; gap: 7px; }
+  .board-table td[data-label="Lean"] .pedge { display: none; }
   .board-table td[data-label="Record"] {
     order: -1; display: block !important; flex: 1 1 100%;
-    margin-top: 14px; padding-left: 0;
+    margin-top: 10px; padding-left: 0;
   }
   /* More specific than the wide-screen hide, which sits later in the file. */
   .board-table tbody td .pv.only-sm { display: inline-flex; }
-  .board-table .pv b { font-size: 26px; }
+  .board-table .pv b { font-size: 24px; }
   .board-table .pv small { display: block; }
   /* The book row becomes the action: the line and app are already above, so
      it is just the play button and the quiet other side, full width. */
@@ -1683,6 +1707,35 @@ body.searching .tick { display: none; }
 .rec b { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 17px; font-weight: 600; color: var(--text); }
 .why { margin-top: 4px; font-size: 12.5px; color: var(--text-3); }
 .nocall { color: var(--text-3); }
+
+/* Team bug: the short name an overlay puts in the corner, in the call tag's
+   notched shape. Ink rather than a team colour — hue stays reserved for
+   meaning, and thirty team colours on one board would be thirty shouts. */
+.tbug {
+  display: inline-flex; align-items: center; height: 18px; margin-right: 8px;
+  padding: 0 9px 0 5px; vertical-align: 2px;
+  font-family: var(--display); font-size: 10.5px; font-weight: 700; letter-spacing: .06em;
+  color: var(--tag-ink); background: var(--tag);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 5px) 100%, 0 100%);
+}
+/* Map-range pips: which maps of the series the prop covers. */
+.mpips { display: inline-flex; gap: 2px; margin-right: 6px; vertical-align: 1px; }
+.mpips i { display: block; width: 6px; height: 6px; background: var(--line-2); }
+.mpips i.on { background: var(--text-2); }
+
+/* Buttons press in; the slip notices a new leg. Small, fast, and only ever in
+   response to something you did. */
+.ou button, button.go, .login-go {
+  transition: transform .08s ease, background-color .15s ease, color .15s ease;
+}
+.ou button:active:not(:disabled), button.go:active, .login-go:active { transform: scale(.96); }
+@keyframes leg-in {
+  from { transform: translateX(16px); background: var(--brand-dim); }
+  to   { transform: none; background: transparent; }
+}
+.leg.just-added { animation: leg-in .5s cubic-bezier(.2, .8, .2, 1); }
+@keyframes count-bump { 0% { transform: scale(1); } 40% { transform: scale(1.4); } 100% { transform: scale(1); } }
+.sb-n.bump { display: inline-block; color: var(--signal); animation: count-bump .45s ease; }
 
 /* The play is one solid button; the other side is a quiet one. Outlined pairs
    on every row were the other half of the generated-dashboard look. */

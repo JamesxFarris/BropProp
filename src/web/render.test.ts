@@ -1,7 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { offeredSides, marketDisagreement, formatPrice, sidePrices } from './render.js';
+import { offeredSides, marketDisagreement, formatPrice, sidePrices, teamShort } from './render.js';
 import type { BookLine } from './boardq.js';
+
+test('team bugs: known names spelled out, the rest by one rule', () => {
+  assert.equal(teamShort('Natus Vincere'), 'NAVI');
+  assert.equal(teamShort('FaZe Clan'), 'FAZE');
+  assert.equal(teamShort('Team Vitality'), 'VIT');
+  assert.equal(teamShort('G2 Esports'), 'G2', 'filler words drop out');
+  assert.equal(teamShort('MOUZ'), 'MOUZ', 'a short single word stays whole');
+  assert.equal(teamShort('Alliance'), 'ALL', 'a long single word is cut to three');
+  assert.equal(teamShort('Shopify Rebellion'), 'SR', 'several words give initials');
+  assert.equal(teamShort('100 Thieves'), '100T', 'numbers are kept whole');
+});
 
 /**
  * Which sides a market offers, once an app has been chosen.
