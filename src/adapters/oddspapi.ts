@@ -201,6 +201,39 @@ const asArray = (b: any): any[] => {
   return Array.isArray(d) ? d : Object.values(d ?? {});
 };
 
+/**
+ * OddsPapi's participant list, in whichever shape it arrives.
+ *
+ * The first live pull stored nothing because of this. The response maps id to
+ * name — `{"1254885": "Bushido Wildcats", ...}` — and the adapter read it as an
+ * array of objects, found neither an id nor a name on a bare string, and dropped
+ * all 989 names. Every fixture then failed the name lookup and was skipped, so
+ * a pull that spent four requests wrote zero rows. Both shapes are handled so a
+ * change on their side cannot do this silently again.
+ */
+export function parseParticipants(body: any): Array<{ id: string; name: string }> {
+  const d = body?.data ?? body;
+  const out: Array<{ id: string; name: string }> = [];
+  if (Array.isArray(d)) {
+    for (const p of d) {
+      const id = p?.participantId ?? p?.id;
+      const name = p?.participantName ?? p?.name;
+      if (id != null && name) out.push({ id: String(id), name: String(name) });
+    }
+  } else if (d && typeof d === 'object') {
+    for (const [k, v] of Object.entries(d)) {
+      if (typeof v === 'string') {
+        if (v) out.push({ id: k, name: v });
+      } else if (v && typeof v === 'object') {
+        const name = (v as any).participantName ?? (v as any).name;
+        const id = (v as any).participantId ?? (v as any).id ?? k;
+        if (name) out.push({ id: String(id), name: String(name) });
+      }
+    }
+  }
+  return out;
+}
+
 /** Names for these participant ids, fetching the list only if one is unknown. */
 async function participantNames(sportId: number, ids: string[]): Promise<Map<string, string>> {
   const known = new Map(
@@ -211,11 +244,7 @@ async function participantNames(sportId: number, ids: string[]): Promise<Map<str
   );
   if (ids.every((id) => known.has(id))) return known;
 
-  const list = asArray(await call('participants', { sportId }));
-  for (const p of list) {
-    const id = String(p.participantId ?? p.id);
-    const name = String(p.participantName ?? p.name ?? '');
-    if (!id || !name) continue;
+  for (const { id, name } of parseParticipants(await call('participants', { sportId }))) {
     known.set(id, name);
     await q(
       `INSERT INTO oddspapi_participant (sport_id, participant_id, name) VALUES ($1, $2, $3)

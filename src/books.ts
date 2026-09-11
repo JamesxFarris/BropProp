@@ -36,7 +36,9 @@ export type BookMeta = {
 const REGISTRY: Record<string, BookMeta> = {
   prizepicks: { code: 'prizepicks', name: 'PrizePicks', short: 'PP', pricesSides: false },
   underdog:   { code: 'underdog',   name: 'Underdog',   short: 'UD', pricesSides: true },
-  sleeper:    { code: 'sleeper',    name: 'Sleeper',    short: 'SL', pricesSides: false },
+  // Sleeper posts a payout multiplier on BOTH sides of every line — decimal odds,
+  // stored as American prices — so it is a priced book like Underdog.
+  sleeper:    { code: 'sleeper',    name: 'Sleeper',    short: 'SL', pricesSides: true },
 };
 
 /**
@@ -69,4 +71,4 @@ export function orderBooks<T>(items: T[], code: (t: T) => BookCode): T[] {
 }
 
 /** Codes of every book with an adapter wired into the poller. */
-export const KNOWN_BOOKS: BookCode[] = ['prizepicks', 'underdog'];
+export const KNOWN_BOOKS: BookCode[] = ['prizepicks', 'underdog', 'sleeper'];

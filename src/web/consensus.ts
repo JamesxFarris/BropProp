@@ -364,12 +364,13 @@ function sampleFor(
  * What the market thinks the true 50/50 number is — from a crowd, or from a
  * book that publishes odds.
  *
- * The crowd path is `consensusLine` above and needs three books. There are two.
- * There is not going to be a third: settled 2026-09-10, Sleeper carries no
- * esports at all, Dabble has three CS2 fixtures, and every other pick'em app is
- * behind Cloudflare or has no web API. The only source of esports player-prop
- * prices beyond these two is PandaScore, which produces its own odds and sells
- * them B2B.
+ * The crowd path is `consensusLine` above and needs three books. For CS2 there
+ * now are three: Sleeper was wrongly recorded on 2026-09-10 as carrying no
+ * esports, because it was asked for `cs2` and its code is `cs`. It has since
+ * been verified with ~200 CS2 kills and headshots markets, about 150 of them
+ * priced by all three books at once. Its prices track Underdog's closely,
+ * though, so a CS2 crowd is nearer two opinions than three. LoL still has two
+ * books, and the priced-book path below is the one that runs there.
  *
  * So this is the path that actually runs, and it rests on an asymmetry already
  * in the data: **Underdog publishes genuine two-sided American odds and

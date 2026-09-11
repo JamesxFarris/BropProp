@@ -5,6 +5,7 @@ import { pool, q } from './db.js';
 import { config } from './config.js';
 import { fetchPrizePicks } from './adapters/prizepicks.js';
 import { fetchUnderdog } from './adapters/underdog.js';
+import { fetchSleeper } from './adapters/sleeper.js';
 import { persistProps, getLeagueRefs, saveLeagueRefs } from './store.js';
 import type { FetchResult } from './adapters/types.js';
 
@@ -100,6 +101,7 @@ export async function pollOnce() {
 
   await runBook('prizepicks', () => fetchPrizePicks(ppLeagues));
   await runBook('underdog', () => fetchUnderdog(config.leagues));
+  await runBook('sleeper', () => fetchSleeper(config.leagues));
 
   console.log(`[${new Date().toISOString()}] poll done`);
 }
