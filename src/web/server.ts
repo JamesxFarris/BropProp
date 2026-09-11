@@ -389,11 +389,11 @@ const server = createServer(async (req, res) => {
       const teams = [...new Set(rows.flatMap((r) => r.books.map((b) => b.team))
         .filter((t): t is string => Boolean(t)))];
       const teamOdds = await teamWinProbs(teams).catch(() => new Map());
-      const pool = marketCandidates(rows, teamOdds, book);
-      // Aligned stacks only: an over and an under in one match are fighting
-      // each other, and the search already ranks them last for that reason.
-      const stacks = DEFAULT_SIZES.flatMap((n) =>
-        findStacks(pool, n, book).filter((s) => s.aligned).slice(0, 3));
+      // Both sides of every leg: the search builds each team's unders and its
+      // overs, and pairs each with an opponent on the SAME side, which the
+      // measured tail makes far stronger than the opponent's own better side.
+      const pool = marketCandidates(rows, teamOdds, book, { bothSides: true });
+      const stacks = DEFAULT_SIZES.flatMap((n) => findStacks(pool, n, book).slice(0, 3));
 
       return html(res, buildPage({ entries, stacks, teamOdds, book, lockedBook, picks, health: h }));
     }

@@ -6,7 +6,7 @@ import { comboParts } from '../normalize.js';
 import type { BookCode } from '../books.js';
 import { devig } from '../devig.js';
 import { pricedEdges, edgeProbability } from './consensus.js';
-import { probAllWin, requiredMultiplier, marginalLegWorthIt, type SlipLeg } from './slip.js';
+import { probAllWin, requiredMultiplier, marginalLegWorthIt, partnerGivenCore, type SlipLeg } from './slip.js';
 import { underProbForTeam, MEASURED_UNDER_BASELINE, type TeamOdds } from './matchodds.js';
 
 /**
@@ -516,71 +516,82 @@ export function findStacks(
       byTeam.set(c.team!, arr);
     }
 
+    /** One leg per player, strongest first. */
+    const onePerPlayer = (cs: Candidate[], taken = new Set<string>()): Candidate[] => {
+      const seen = new Set(taken);
+      return [...cs].sort((a, b) => b.p - a.p).filter((c) => {
+        if (c.players.some((h) => seen.has(h))) return false;
+        for (const h of c.players) seen.add(h);
+        return true;
+      });
+    };
+    const toSlip = (l: Candidate): SlipLeg => ({ p: l.p, matchKey: l.matchKey, side: l.play.side, team: l.team });
+
     for (const [team, teamLegs] of byTeam) {
-      // One leg per player, strongest first.
-      const seen = new Set<string>();
-      const pool = [...teamLegs]
-        .sort((a, b) => b.p - a.p)
-        .filter((c) => {
-          if (c.players.some((h) => seen.has(h))) return false;
-          for (const h of c.players) seen.add(h);
-          return true;
-        });
+      /**
+       * Each side is searched separately, and the partner is always on the
+       * core's side.
+       *
+       * The partner used to be whichever opponent leg was strongest on its
+       * own. Measured in the tail, that is the wrong question: after five
+       * teammates all go over, an opponent's over hits 87% and his under 13%.
+       * A sub-50% leg on the core's side beats a 55% leg against it by a mile.
+       */
+      for (const side of ['under', 'over'] as const) {
+        const pool = onePerPlayer(teamLegs.filter((c) => c.play.side === side));
 
-      for (let take = Math.min(pool.length, size); take >= minTeam; take--) {
-        const core = pool.slice(0, take);
-        const need = size - take;
+        for (let take = Math.min(pool.length, size); take >= minTeam; take--) {
+          const core = pool.slice(0, take);
+          const need = size - take;
 
-        // Partners come from the other team in the same match first — that
-        // keeps the match factor working for us — and PrizePicks requires two
-        // different teams in a lineup anyway, so a pure stack is unbuildable.
-        const others = inMatch
-          .filter((c) => c.team !== team && !core.some((k) => k.propId === c.propId))
-          .sort((a, b) => b.p - a.p);
-        const partners = others.slice(0, need);
-        if (partners.length < need) continue;
+          // Partners come from the other team in the same match — that keeps
+          // the tail working for us — and PrizePicks requires two different
+          // teams in a lineup anyway, so a pure stack is unbuildable.
+          const inCore = new Set(core.flatMap((c) => c.players));
+          const partners = onePerPlayer(
+            inMatch.filter((c) => c.team !== team && c.play.side === side),
+            inCore,
+          ).slice(0, need);
+          if (partners.length < need) continue;
 
-        const legs = [...core, ...partners];
-        if (legs.length !== size) continue;
-        if (new Set(legs.flatMap((l) => l.players)).size !== legs.flatMap((l) => l.players).length) continue;
+          const legs = [...core, ...partners];
+          if (legs.length !== size) continue;
 
-        /**
-         * Two different teams, always.
-         *
-         * PrizePicks refuses a lineup drawn from a single team, so a pure stack
-         * is not a slip — it is a screenshot of one. Without this the search
-         * happily returns the highest-correlation shape on the board and the
-         * best number on the page is one the app will not accept.
-         */
-        if (new Set(legs.map((l) => l.team)).size < 2) continue;
+          /**
+           * Two different teams, always.
+           *
+           * PrizePicks refuses a lineup drawn from a single team, so a pure
+           * stack is not a slip — it is a screenshot of one. Without this the
+           * search happily returns the highest-correlation shape on the board
+           * and the best number on the page is one the app will not accept.
+           */
+          if (new Set(legs.map((l) => l.team)).size < 2) continue;
 
-        const slipLegs: SlipLeg[] = legs.map((l) => ({
-          p: l.p, matchKey: l.matchKey, side: l.play.side, team: l.team,
-        }));
-        const winProb = probAllWin(slipLegs);
-        const indep = legs.reduce((acc, l) => acc * l.p, 1);
-        if (!(winProb > 0)) continue;
+          // One partner — every shape the Build page asks for — is priced from
+          // the measured tail. More than one falls back to the copula, which
+          // understates them; nothing on the page builds that shape today.
+          const winProb = need === 1
+            ? probAllWin(core.map(toSlip)) * partnerGivenCore(partners[0]!.p, core.length, side)
+            : probAllWin(legs.map(toSlip));
+          const indep = legs.reduce((acc, l) => acc * l.p, 1);
+          if (!(winProb > 0)) continue;
 
-        const sides = new Set(legs.map((l) => l.play.side));
-        out.push({
-          book, team, matchKey, legs,
-          aligned: sides.size === 1,
-          side: sides.size === 1 ? [...sides][0]! : 'mixed',
-          winProb,
-          winProbIndependent: indep,
-          requiredMultiplier: 1 / winProb,
-          lift: indep > 0 ? winProb / indep : 1,
-        });
+          out.push({
+            book, team, matchKey, legs,
+            aligned: true,
+            side,
+            winProb,
+            winProbIndependent: indep,
+            requiredMultiplier: 1 / winProb,
+            lift: indep > 0 ? winProb / indep : 1,
+          });
+        }
       }
     }
   }
 
-  // Lowest bar first. Ties go to the aligned stack, since a mixed one is
-  // fighting itself: an over and an under in the same match hit 20.56% against
-  // 24.85% under independence.
-  return out.sort((a, b) =>
-    a.requiredMultiplier - b.requiredMultiplier
-    || Number(b.aligned) - Number(a.aligned));
+  // Lowest bar first.
+  return out.sort((a, b) => a.requiredMultiplier - b.requiredMultiplier);
 }
 
 /**
@@ -630,6 +641,13 @@ export function marketCandidates(
   rows: MarketRow[],
   teamOdds: Map<string, TeamOdds>,
   book: BookCode,
+  /**
+   * Emit both sides of every leg rather than only its better one. The stack
+   * search wants this: a stack's partner must be on the core's side, and the
+   * measured tail makes a sub-50% partner on that side far better than a
+   * 55% partner against it.
+   */
+  opts: { bothSides?: boolean } = {},
 ): Candidate[] {
   const out: Candidate[] = [];
   const now = Date.now();
@@ -646,34 +664,37 @@ export function marketCandidates(
 
     const odds = teamOdds.get(team);
     const pUnder = odds ? underProbForTeam(odds.pWin) : MEASURED_UNDER_BASELINE;
-    const side: 'over' | 'under' = pUnder >= 0.5 ? 'under' : 'over';
-    if (side === 'under' ? !mine.under_ok : !mine.over_ok) continue;
-    const p = side === 'under' ? pUnder : 1 - pUnder;
+    const better: 'over' | 'under' = pUnder >= 0.5 ? 'under' : 'over';
+    const sides: ('over' | 'under')[] = opts.bothSides ? ['under', 'over'] : [better];
+    for (const side of sides) {
+      if (side === 'under' ? !mine.under_ok : !mine.over_ok) continue;
+      const p = side === 'under' ? pUnder : 1 - pUnder;
 
-    const rawMult = side === 'over' ? mine.over_mult : mine.under_mult;
-    const mult = rawMult === null ? 1 : Number(rawMult);
-    const line = Number(mine.line);
+      const rawMult = side === 'over' ? mine.over_mult : mine.under_mult;
+      const mult = rawMult === null ? 1 : Number(rawMult);
+      const line = Number(mine.line);
 
-    out.push({
-      row: r,
-      play: {
-        side, book, line,
-        edge: 0, edgeSd: null,
-        hitRate: p, rawWins: null, rawOf: null,
-        anchored: line, rawMean: line,
-        series: 0, strength: p, score: Math.round(p * 100),
-        method: 'series', sample: 0,
-        breakEven: null, ev: null,
-      },
-      propId: mine.prop_id,
-      p, mult,
-      source: 'market',
-      gap: null,
-      value: p * mult,
-      matchKey: r.match_title ?? `?${r.canon_handle}`,
-      team,
-      players: [r.canon_handle],
-    });
+      out.push({
+        row: r,
+        play: {
+          side, book, line,
+          edge: 0, edgeSd: null,
+          hitRate: p, rawWins: null, rawOf: null,
+          anchored: line, rawMean: line,
+          series: 0, strength: p, score: Math.round(p * 100),
+          method: 'series', sample: 0,
+          breakEven: null, ev: null,
+        },
+        propId: mine.prop_id,
+        p, mult,
+        source: 'market',
+        gap: null,
+        value: p * mult,
+        matchKey: r.match_title ?? `?${r.canon_handle}`,
+        team,
+        players: [r.canon_handle],
+      });
+    }
   }
   return out.sort((a, b) => b.value - a.value);
 }

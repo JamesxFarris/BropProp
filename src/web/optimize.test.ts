@@ -221,6 +221,7 @@ test('a bigger gap outranks a smaller one', () => {
 // ------------------------------------------------- the stack search --------
 
 import { findStacks } from './optimize.js';
+import { probAllWin as pAll, partnerGivenCore } from './slip.js';
 
 function stackCand(o: {
   player: string; team: string; match: string; p: number; side?: 'over' | 'under';
@@ -266,17 +267,17 @@ test('the correlation lift is reported and is greater than one', () => {
   assert.ok(Math.abs(s.winProb / s.winProbIndependent - s.lift) < 1e-9);
 });
 
-test('an aligned stack is preferred to one fighting itself', () => {
-  // An over and an under in the same match hit 20.56% against 24.85% under
-  // independence. A mixed stack must never outrank an aligned one.
+test('a stack never mixes sides', () => {
+  // After five teammates all go over, an opponent's over hits ~87% and his
+  // under ~13%. A mixed stack is fighting its own tail, so none is built —
+  // even when the only way to fill a shape would be an opposite-side leg.
   const board = oneMatchBoard('A vs B', 'A', 'B');
   board[2] = stackCand({ player: 'A-2', team: 'A', match: 'A vs B', p: 0.553, side: 'over' });
   const stacks = findStacks(board, 6, 'prizepicks');
-  const aligned = stacks.find((s) => s.aligned);
-  const mixed = stacks.find((s) => !s.aligned);
-  if (aligned && mixed) {
-    assert.ok(aligned.requiredMultiplier <= mixed.requiredMultiplier,
-      'an aligned stack must not need more than a mixed one');
+  assert.ok(stacks.length > 0);
+  for (const s of stacks) {
+    assert.ok(s.aligned);
+    assert.ok(s.legs.every((l) => l.play.side === s.side), 'every leg on the stack side');
   }
 });
 
@@ -311,13 +312,19 @@ test('a board with only one team in a match yields no buildable stack', () => {
   assert.deepEqual(findStacks(solo, 6, 'prizepicks'), []);
 });
 
-test('the measured shape reproduces the number that made the case', () => {
-  // Five teammates plus one opponent, every leg at the measured 55.3% under
-  // rate, should need about 10.85x — the figure the 22x quote was judged
-  // against.
+test('a 5+1 stack prices its core by the copula and its partner by the measured tail', () => {
+  // The copula is calibrated for teammates (it matched the archive at every
+  // core size) but has the opponent following at ~58% where the archive says
+  // ~72% for unders. So the partner comes from the table, and the stack needs
+  // less than the copula alone would say.
   const s = findStacks(oneMatchBoard('A vs B', 'A', 'B', 0.553), 6, 'prizepicks')[0]!;
-  assert.ok(Math.abs(s.requiredMultiplier - 10.85) < 1.2,
-    `expected ~10.85x, got ${s.requiredMultiplier}`);
+  const core = s.legs.filter((l) => l.team === s.team)
+    .map((l) => ({ p: l.p, matchKey: l.matchKey, side: l.play.side, team: l.team }));
+  assert.equal(core.length, 5);
+  const want = 1 / (pAll(core) * partnerGivenCore(0.553, 5, 'under'));
+  assert.ok(Math.abs(s.requiredMultiplier - want) < 1e-9, `${s.requiredMultiplier} vs ${want}`);
+  const copulaOnly = 1 / pAll(s.legs.map((l) => ({ p: l.p, matchKey: l.matchKey, side: l.play.side, team: l.team })));
+  assert.ok(s.requiredMultiplier < copulaOnly, 'the tail makes the stack cheaper to beat');
 });
 
 // ------------------------------------------- legs priced by the team --------
@@ -388,31 +395,40 @@ test('an under that is not offered is not a leg', () => {
   assert.deepEqual(marketCandidates([r], new Map(), 'prizepicks'), []);
 });
 
-test('the stack search builds on the underdog', () => {
-  // Five on each side of one match, the dogs priced at 25%. Every dog under is
-  // likelier than anything on the favourite, so the best six-pick is the dogs'
-  // five plus one favourite — the shape the whole strategy is about.
+test('both sides are offered when asked, priced as complements', () => {
+  const m = new Map([['Dogs', odds(0.25, 'Favs')]]);
+  const c = marketCandidates([mrow('a', 'Dogs', 1)], m, 'prizepicks', { bothSides: true });
+  assert.equal(c.length, 2);
+  const u = c.find((x) => x.play.side === 'under')!, o = c.find((x) => x.play.side === 'over')!;
+  assert.ok(Math.abs(u.p + o.p - 1) < 1e-12);
+});
+
+test('each team is stacked both ways, each with a same-side partner', () => {
+  // Five on each side of one match, the dogs priced at 25%. The dogs' unders
+  // (54.3%) pair with a favourite UNDER (48.6%) and the favourite's overs
+  // (51.4%) with a dog OVER (45.7%): a sub-50% partner on the core's side,
+  // because after the core hits it is the likely one.
   //
-  // At 75% to win the favourite's players are past the ~63% flip, so the sixth
-  // leg is a favourite OVER (51.4%), not an under (48.6%). The opponent
-  // correlation makes an opposite-side leg slightly worse than its own
-  // probability says, but not by enough to prefer a sub-50% leg.
+  // The favourite's overs come out on top. Their legs are weaker, but the over
+  // tail is much the stronger — after five overs, the dog's over hits ~89%;
+  // after five unders, the favourite's under ~64%.
   const rows: MarketRow[] = [];
   for (let i = 0; i < 5; i++) rows.push(mrow(`dog${i}`, 'Dogs', 100 + i));
   for (let i = 0; i < 5; i++) rows.push(mrow(`fav${i}`, 'Favs', 200 + i));
   const m = new Map([['Dogs', odds(0.25, 'Favs')], ['Favs', odds(0.75, 'Dogs')]]);
-  const best = findStacks(marketCandidates(rows, m, 'prizepicks'), 6, 'prizepicks')[0]!;
-  assert.equal(best.team, 'Dogs');
-  const dogs = best.legs.filter((l) => l.team === 'Dogs');
-  const favs = best.legs.filter((l) => l.team === 'Favs');
-  assert.equal(dogs.length, 5);
-  assert.ok(dogs.every((l) => l.play.side === 'under'), 'the dog legs are unders');
-  assert.equal(favs.length, 1);
-  assert.equal(favs[0]!.play.side, 'over', 'the favourite leg is its over');
-  assert.equal(best.side, 'mixed');
-  // 16.04x on 2026-09-11's constants (41.1x if the legs were independent):
-  // under the 22x a real six-pick stack was quoted at.
-  assert.ok(best.requiredMultiplier < 17, String(best.requiredMultiplier));
+  const stacks = findStacks(marketCandidates(rows, m, 'prizepicks', { bothSides: true }), 6, 'prizepicks');
+
+  const dogUnders = stacks.find((s) => s.team === 'Dogs' && s.side === 'under')!;
+  const favOvers = stacks.find((s) => s.team === 'Favs' && s.side === 'over')!;
+  assert.ok(dogUnders && favOvers);
+  for (const s of [dogUnders, favOvers]) {
+    assert.equal(s.legs.filter((l) => l.team === s.team).length, 5);
+    assert.ok(s.legs.every((l) => l.play.side === s.side));
+  }
+  assert.equal(stacks[0], favOvers);
+  // ~9.4x and ~11.1x: both well under the 22x a real six-pick was quoted at.
+  assert.ok(favOvers.requiredMultiplier < 10, String(favOvers.requiredMultiplier));
+  assert.ok(dogUnders.requiredMultiplier < 12, String(dogUnders.requiredMultiplier));
 });
 
 test('deaths and assists are never priced by the team', () => {

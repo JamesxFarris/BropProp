@@ -318,3 +318,57 @@ export function marginalLegWorthIt(
   if (payoutPrev === null || payoutNext === null || payoutNext <= 0) return null;
   return pNextLeg > payoutPrev / payoutNext;
 }
+
+/**
+ * The opponent leg of a stack, priced from measurement instead of the copula.
+ *
+ * The two factors above are fitted to PAIRS, which is the body of the
+ * distribution. A stack is a tail event — k teammates ALL over, then one
+ * opponent — and in the tail the model is badly wrong. `npm run validate:tail`,
+ * over the CS2 archive with walk-forward lines, 2026-09-11:
+ *
+ *   core   P(opp over | core over)   P(opp under | core under)   series
+ *     1          (shift 0.194)            (shift 0.171)            4,582
+ *     2      0.606  (0.393)            0.644  (0.246)              4,207
+ *     3      0.688  (0.616)            0.672  (0.321)              3,248
+ *     4      0.767  (0.872)            0.702  (0.388)              2,040
+ *     5      0.873  (1.317)            0.717  (0.397)                823
+ *
+ * The model's own implied shifts are 0.06-0.22 — it captures a sixth of the
+ * over effect at five. Over minus under excludes zero at every core size
+ * (bootstrap over series), and every half-year since 2024 agrees on the overs
+ * (1.14-1.51 at five). The UNDER tail has weakened lately: 0.90 in 2024H2,
+ * 0.24-0.28 in 2026. The books' own closing lines agreed on overs: 88% over
+ * 60 series.
+ *
+ * The overs are stronger for a physical reason: five players all over their
+ * kill lines usually means long maps or overtime, and a long map feeds the
+ * other five too. Five all under is a mix of short maps (everyone under) and
+ * stomps (the winners go over), which partly cancel.
+ *
+ * The team core is NOT corrected — the model's P(k teammates all hit) matched
+ * the archive to within a few percent at every k. Only the partner is.
+ *
+ * Stored as a probit shift so it applies to a partner at any price:
+ * P = Φ(Φ⁻¹(p) + shift). It was measured with cores near 48-52% per leg;
+ * a core of much stronger legs is a less extreme event and would shift less.
+ */
+export const PARTNER_SHIFT: Record<'over' | 'under', readonly number[]> = {
+  //      core size:  0     1      2      3      4      5
+  over:  [0, 0.194, 0.393, 0.616, 0.872, 1.317],
+  under: [0, 0.171, 0.246, 0.321, 0.388, 0.397],
+};
+
+/**
+ * P(one opponent leg hits | every leg of a same-side core of `coreSize` hit).
+ *
+ * The partner must be on the SAME side as the core. The opposite side is the
+ * complement of this and is terrible — after a 5-over core, an opponent under
+ * hits about 13% of the time — which is why stacks never mix sides.
+ */
+export function partnerGivenCore(pPartner: number, coreSize: number, side: 'over' | 'under'): number {
+  const table = PARTNER_SHIFT[side];
+  const k = Math.max(0, Math.min(table.length - 1, Math.floor(coreSize)));
+  const p = Math.min(1 - 1e-9, Math.max(1e-9, pPartner));
+  return normCdf(normInv(p) + table[k]!);
+}

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   normCdf, normInv, winCountDistribution, probAllWin, requiredMultiplier,
   slipEV, marginalLegWorthIt, RHO, RHO_TEAMMATE, RHO_OPPONENT, type SlipLeg,
+  partnerGivenCore, PARTNER_SHIFT,
 } from './slip.js';
 
 const leg = (p: number, matchKey: string, side: 'over' | 'under' = 'over'): SlipLeg =>
@@ -155,4 +156,33 @@ test('the correlation constants are the measured ones, converted properly', () =
 test('an empty slip is a certainty, not a crash', () => {
   assert.deepEqual(winCountDistribution([]), [1]);
   assert.equal(probAllWin([]), 1);
+});
+
+test('the partner table reproduces what validate:tail measured', () => {
+  // At the validator's own opponent base rate (43.0% over at a five-core), the
+  // shifts must give back the conditional rates it printed.
+  near(partnerGivenCore(0.430, 5, 'over'), 0.873, 0.005, 'opp over after 5 over');
+  near(partnerGivenCore(0.570, 5, 'under'), 0.717, 0.005, 'opp under after 5 under');
+  near(partnerGivenCore(0.5, 0, 'over'), 0.5, 1e-9, 'no core, no shift');
+});
+
+test('the opponent follows a bigger core more, and follows overs more than unders', () => {
+  for (let k = 1; k <= 5; k++) {
+    assert.ok(partnerGivenCore(0.5, k, 'over') > partnerGivenCore(0.5, k - 1, 'over'), `over k=${k}`);
+    assert.ok(partnerGivenCore(0.5, k, 'under') > partnerGivenCore(0.5, k - 1, 'under'), `under k=${k}`);
+  }
+  for (let k = 2; k <= 5; k++) {
+    assert.ok(PARTNER_SHIFT.over[k]! > PARTNER_SHIFT.under[k]!, `k=${k}: over tail must be the stronger`);
+  }
+  // Cores bigger than anything measured use the largest measured shift.
+  near(partnerGivenCore(0.5, 9, 'over'), partnerGivenCore(0.5, 5, 'over'), 1e-12);
+});
+
+test('the measured tail is far stronger than the copula says', () => {
+  // The reason the table exists: at a coin flip, the two-factor model has the
+  // opponent following a five-over core ~58% of the time. Measured, it is ~90%.
+  const core = Array.from({ length: 5 }, () => ({ p: 0.5, matchKey: 'M', side: 'over' as const, team: 'A' }));
+  const model = probAllWin([...core, { p: 0.5, matchKey: 'M', side: 'over', team: 'B' }]) / probAllWin(core);
+  assert.ok(model < 0.6, `model ${model}`);
+  assert.ok(partnerGivenCore(0.5, 5, 'over') > 0.85);
 });
