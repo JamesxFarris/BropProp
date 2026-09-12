@@ -111,6 +111,33 @@ export async function leadScores(): Promise<LeadRow[]> {
   );
 }
 
+/** The forward record of recommended stacks — see `db/019_stack_log.sql`. */
+export type StackRecord = {
+  graded: number;
+  won: number;
+  matches: number;
+  pending: number;
+  mean_required: number | null;
+  priced: number;
+  /** Mean return per unit staked, over entries whose quoted multiplier is known. */
+  mean_return: number | null;
+};
+
+export async function stackRecord(): Promise<StackRecord> {
+  const rows = await q<StackRecord>(
+    `SELECT count(*) FILTER (WHERE status IN ('won', 'lost'))::int          AS graded,
+            count(*) FILTER (WHERE status = 'won')::int                     AS won,
+            count(DISTINCT match_key) FILTER (WHERE status IN ('won','lost'))::int AS matches,
+            count(*) FILTER (WHERE status = 'pending')::int                 AS pending,
+            avg(required_mult) FILTER (WHERE status IN ('won', 'lost'))     AS mean_required,
+            count(*) FILTER (WHERE status IN ('won','lost') AND quoted_mult IS NOT NULL)::int AS priced,
+            avg(CASE WHEN status = 'won' THEN quoted_mult ELSE 0 END)
+              FILTER (WHERE status IN ('won','lost') AND quoted_mult IS NOT NULL) AS mean_return
+       FROM stack_log`,
+  );
+  return rows[0] ?? { graded: 0, won: 0, matches: 0, pending: 0, mean_required: null, priced: 0, mean_return: null };
+}
+
 /** One stored scorecard — see `db/012_model_score.sql`. */
 export type ScoreRow = {
   day: string;

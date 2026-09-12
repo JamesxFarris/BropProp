@@ -14,7 +14,7 @@ import {
   openSlipBook, WrongBookError, SideUnavailableError,
 } from './picks.js';
 import { boardPage, edgesPage, slipsPage, historyPage, buildPage, loginPage, statsPage } from './render.js';
-import { counters, historyByWeek, coverage, record, sources, scoreHistory, leadScores } from './statsq.js';
+import { counters, historyByWeek, coverage, record, sources, scoreHistory, leadScores, stackRecord } from './statsq.js';
 import { clv } from './clv.js';
 import { buildEntries, findStacks, marketCandidates, DEFAULT_SIZES } from './optimize.js';
 import { teamWinProbs } from './matchodds.js';
@@ -400,13 +400,15 @@ const server = createServer(async (req, res) => {
     }
 
     if (url.pathname === '/stats') {
-      const [h, ctr, weeks, cov, rec, src, value, scores, leads] = await Promise.all([
+      const [h, ctr, weeks, cov, rec, src, value, scores, leads, stacks] = await Promise.all([
         health(null), counters(), historyByWeek(), coverage(), record(), sources(), clv(), scoreHistory(),
-        // Empty until migration 018 exists and the first daily scan has run.
+        // Empty until migrations 018/019 exist and the jobs have run once.
         leadScores().catch(() => []),
+        stackRecord().catch(() => null),
       ]);
       return html(res, statsPage({
-        health: h, counters: ctr, weeks, coverage: cov, record: rec, sources: src, clv: value, scores, leads,
+        health: h, counters: ctr, weeks, coverage: cov, record: rec, sources: src, clv: value,
+        scores, leads, stacks,
       }));
     }
 

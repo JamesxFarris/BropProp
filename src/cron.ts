@@ -7,6 +7,7 @@ import { storeStats } from './results/store_stats.js';
 import { scoreCalls, storeScore, LEAGUES } from './results/validate_calls.js';
 import { resumeBackfill } from './results/backfill_resume.js';
 import { pullMatchOdds, BudgetExhausted } from './adapters/oddspapi.js';
+import { logStacks, gradeStacks } from './results/stack_log.js';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
@@ -173,7 +174,34 @@ async function oddsTick() {
   }
 }
 
+let stacking = false;
+
+/**
+ * Write down the stacks Build is recommending, and grade the ones whose
+ * matches have finished.
+ *
+ * The stack is the only shape here with a measured edge, and the measurement
+ * is thin — 60 series, and one screenshot of a 22x payout. This turns it into
+ * a record: what was recommended, what it needed, what the app paid where a
+ * slip was placed, and whether it came in.
+ */
+async function stacksTick() {
+  if (stacking) return;
+  stacking = true;
+  try {
+    const written = await logStacks();
+    const { graded, pending } = await gradeStacks();
+    console.log(`stacks: ${written} recommended logged, ${graded} graded, ${pending} pending`);
+  } catch (err) {
+    // Bookkeeping, never collection: this must not take the logger down.
+    console.warn('stack log skipped:', (err as Error).message.slice(0, 160));
+  } finally {
+    stacking = false;
+  }
+}
+
 cron.schedule(config.pollCron, tick);
+cron.schedule(config.stacksCron, stacksTick);
 if (config.oddspapiKey) cron.schedule(config.oddsCron, oddsTick);
 cron.schedule(config.resultsCron, gradeTick);
 cron.schedule(config.accumulateCron, accumulateTick);

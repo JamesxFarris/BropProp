@@ -5,7 +5,7 @@ import type { FormStats, Play, CallStatus, NoCall } from './projection.js';
 import { config } from '../config.js';
 import { evaluate, edgeProgress, type LineOption, flatBreakEven } from './projection.js';
 import { staleLine } from './stale.js';
-import type { Counters, ScoreRow, LeadRow } from './statsq.js';
+import type { Counters, ScoreRow, LeadRow, StackRecord } from './statsq.js';
 import type { ClvSummary } from './clv.js';
 import type { Entry, Stack } from './optimize.js';
 import type { TeamOdds } from './matchodds.js';
@@ -2500,6 +2500,7 @@ export function statsPage(o: {
   clv: ClvSummary;
   scores: ScoreRow[];
   leads?: LeadRow[];
+  stacks?: StackRecord | null;
 }): string {
   const c = o.counters;
 
@@ -2553,6 +2554,35 @@ export function statsPage(o: {
           )
           .join('')}</tbody>
       </table></div>`;
+
+  /**
+   * The stack record: the one shape with a measured edge, being checked.
+   *
+   * Hit rate is compared against what the entries needed — the average of
+   * 1/P(all win) — because a stack is only good relative to the multiplier it
+   * has to clear. `matches` rather than entries is the sample that counts:
+   * several stacks from one match share its outcome.
+   */
+  const sr = o.stacks ?? null;
+  const stackBody = sr === null || sr.graded + sr.pending === 0
+    ? `<div class="empty">No stack has been recommended and settled yet. Every stack the
+        Build page shows is written down and graded once its matches finish — the record
+        fills in on its own.</div>`
+    : `<div class="stat-row">
+        ${stat(sr.graded, 'stacks graded', `${sr.matches} matches, ${sr.pending} waiting`)}
+        ${stat(sr.graded === 0 ? '—' : `${((sr.won / sr.graded) * 100).toFixed(1)}%`, 'came in',
+               `${sr.won} of ${sr.graded}`)}
+        ${stat(sr.mean_required === null ? '—' : `${sr.mean_required.toFixed(1)}×`, 'they needed',
+               'average break-even multiplier')}
+        ${
+          sr.priced === 0 || sr.mean_return === null
+            ? stat('—', 'return per unit', 'place a slip from a stack to record what it pays')
+            : stat(`${sr.mean_return.toFixed(2)}×`, 'return per unit', `${sr.priced} placed at a known payout`)
+        }
+      </div>
+      <p class="note">A stack pays only when every leg lands, so a handful of entries says
+        nothing either way. What makes it worth watching is that the shape was priced from
+        measured correlation before any of these were placed.</p>`;
 
   /**
    * Leads: pricing patterns the bias scan found in the first days of lines,
@@ -2690,6 +2720,12 @@ export function statsPage(o: {
     <div class="card-head"><h2>Has the model actually been right?</h2>
       <span class="sub">every logged line replayed through the real engine, on history it had at the time</span></div>
     <div class="card-body">${scoreBody}</div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2>Stacks recommended</h2>
+      <span class="sub">written down when Build suggests them, graded when the matches finish</span></div>
+    <div class="card-body">${stackBody}</div>
   </div>
 
   <div class="card">

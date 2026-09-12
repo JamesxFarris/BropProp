@@ -21,6 +21,11 @@ export const config = {
   // load, so it runs here and the Stats page reads the table. Scheduled after
   // the CS2 sweep, so it scores against results the sweep has just landed.
   scoreCron: process.env.SCORE_CRON ?? '47 5 * * *',
+  // Recommended stacks, written down and graded. Every six hours rather than
+  // daily: a slate's lines appear and settle through the day, and a stack that
+  // was only on the board at 3am is still a recommendation the record should
+  // carry. Re-running corrects the day's row rather than adding another.
+  stacksCron: process.env.STACKS_CRON ?? '13 */6 * * *',
 
   // Deep CS2 backfill, resumed on boot. Off unless set.
   //
