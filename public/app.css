@@ -1252,17 +1252,17 @@ button.link:hover { color: var(--under); text-decoration: underline; }
 
   /* One verdict line: lean, confidence, value. These are three short facts
      about the same decision and they belong on the same line. */
-  .board-table td[data-label="Lean"],
+  .board-table td[data-label="Edge"],
   .board-table td[data-label="Win %"],
   .board-table td[data-label="EV"] {
     display: inline-flex !important; width: auto; padding-right: 14px;
     margin-top: 6px;
   }
-  .board-table td[data-label="Lean"]::before,
+  .board-table td[data-label="Edge"]::before,
   .board-table td[data-label="Win %"]::before,
   .board-table td[data-label="EV"]::before { display: none; }
-  .board-table td[data-label="Lean"] .play { display: flex; gap: 7px; align-items: baseline; }
-  .board-table td[data-label="Lean"] .meta { font-size: 13px; }
+  .board-table td[data-label="Edge"] .play { display: flex; gap: 7px; align-items: baseline; }
+  .board-table td[data-label="Edge"] .meta { font-size: 13px; }
   /* What the market thinks is a second opinion, and the phone has room for
      one. It stays on the wide board, where the column exists to hold it. */
   .board-table td[data-label="Win %"] .meta { display: none; }
@@ -1277,7 +1277,7 @@ button.link:hover { color: var(--under); text-decoration: underline; }
   .board-table tbody .card-hide { display: none !important; }
   .board-table tbody td:nth-child(1),
   .board-table tbody td:nth-child(2) { order: -2; }
-  .board-table td[data-label="Lean"],
+  .board-table td[data-label="Edge"],
   .board-table td[data-label="Record"] { order: -1; }
   .board-table td[data-label="Record"] {
     display: inline-flex !important; width: auto; margin-top: 6px; padding-right: 14px;
@@ -1330,11 +1330,9 @@ button.link:hover { color: var(--under); text-decoration: underline; }
     flex: 1 1 auto; margin-top: 14px; padding-right: 0;
   }
   .board-table td[data-label="Ours"]::before { display: none; }
-  .board-table td[data-label="Lean"] {
-    order: -2; display: flex !important; flex: 0 0 auto; align-self: center;
-    margin: 14px 0 0 auto; padding-right: 0;
-  }
-  .board-table td[data-label="Lean"] .pedge { display: none; }
+  /* The phone card already carries the edge as the third figure in the strip,
+     so its own cell has nothing left to show once the tag is gone. */
+  .board-table td[data-label="Edge"] { display: none !important; }
   .board-table td[data-label="Record"] {
     order: -1; display: block !important; flex: 1 1 100%;
     margin-top: 10px; padding-left: 0;
@@ -1754,15 +1752,14 @@ body.searching .tick { display: none; }
 .kelly input:focus { outline: 2px solid var(--focus); outline-offset: 1px; }
 .kelly b { color: var(--text); font-weight: 600; }
 
-/* The play is one solid button; the other side is a quiet one. Outlined pairs
-   on every row were the other half of the generated-dashboard look. */
-.board-table .ou button.best:not(.on):not(:disabled) {
-  background: var(--tag); border-color: var(--tag); color: var(--tag-ink);
+/* The board picks no side for you. Both buttons carry the same quiet outline;
+   taking one fills it. A filled button was a recommendation, and the legs the
+   projection called lost 9.5% at the bar an entry needs — so the
+   recommendation moved to Build, where the whole entry is priced. */
+.board-table .ou button:not(.on):not(:disabled) {
+  background: var(--surface); border-color: var(--line); color: var(--text-2);
 }
-.board-table .ou button:not(.best):not(.on):not(:disabled) {
-  background: transparent; border-color: transparent; color: var(--text-2);
-}
-.board-table .ou button:not(.best):not(.on):not(:disabled):hover { color: var(--text); border-color: var(--line-2); }
+.board-table .ou button:not(.on):not(:disabled):hover { color: var(--text); border-color: var(--line-2); }
 
 /* ---- the filter disclosure ----------------------------------------------
    League and search stay out; app, show and the price toggles fold away.

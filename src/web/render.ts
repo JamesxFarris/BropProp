@@ -941,10 +941,8 @@ function playCell(
   if (!play) {
     // "No play", with the engine's reason ("waiting on history", "priced
     // fair") in the tooltip rather than on the row.
-    return `<span class="meta nocall" title="${esc(why ? noCallText(why, r) : 'No play on this prop')}">No play</span>`;
+    return `<span class="meta nocall" title="${esc(why ? noCallText(why, r) : 'No projection for this prop')}">—</span>`;
   }
-  const dir = play.side === 'over' ? 'Over' : 'Under';
-  const cls = play.side === 'over' ? 'o' : 'u';
   // The hit rate has its own column and the sample size sits under the "ours"
   // chip, so repeating either here was printing the same fact three times
   // across one row. What is left is the one thing neither column says: how far
@@ -974,12 +972,24 @@ function playCell(
       : `Most of this player's series land ${play.side} the line, though a few outsized games pull the average the other way`,
     basis ? `Modelled from ${play.sample} single maps, because too few series played this exact map range` : '',
   ].filter(Boolean).join('. ');
-  // The edge is the projection's distance from the line, in the stat's own
-  // units. Shown only when it points the play's way (see `detail`).
+  /**
+   * The board states the gap and stops there — no OVER/UNDER tag, no side
+   * picked for you.
+   *
+   * Scored against the books' own closing lines (`npm run validate:backtest`),
+   * legs the projection called returned -9.5% [-16.4%, -3.2%] at the per-leg
+   * bar a Power entry needs, and -10.4% on the held-out later days: claimed
+   * 54.9%, realised 47.2%, worse than taking every under. A tag and a filled
+   * button were a recommendation the measurement does not support. What is
+   * left is the arithmetic — how far our projection sits from this line — and
+   * the reader can see which way that points from the two numbers beside it.
+   * Recommendations live on Build, where the whole entry is priced from the
+   * correlation and the tail that were measured.
+   */
   const edge = play.edge > 0
     ? `<span class="pedge">+${play.edge.toFixed(1)}<small>edge</small></span>`
-    : '';
-  return `<div class="play ${cls}" title="${esc(detail)}"><span class="dir">${dir}</span>${edge}${at}</div>`;
+    : '<span class="meta">—</span>';
+  return `<div class="play" title="${esc(detail)}">${edge}${at}</div>`;
 }
 
 // ------------------------------------------------------------------ board --
@@ -1496,7 +1506,7 @@ export function boardPage(o: {
           <th scope="col">Player</th>
           <th scope="col">Prop</th>
           <th scope="col" class="c">Projected</th>
-          <th scope="col" class="c">Play</th>
+          <th scope="col" class="c">Edge</th>
           <th scope="col" class="c">Recent</th>
           ${showEv ? '<th scope="col" class="c evcol">EV</th>' : ''}
           ${columns.map((b) => bookHead(b, only, o.lockedBook !== null)).join('')}
@@ -1628,7 +1638,7 @@ export function boardPage(o: {
                       : ''
                   }`
             }</td>
-            <td class="c" data-label="Lean">${playCell(play, statusOf(r).why, r, only)}</td>
+            <td class="c" data-label="Edge">${playCell(play, statusOf(r).why, r, only)}</td>
             <td class="c" data-label="Record">${
               // A record, not a percentage, and a defined sample: "11 of last
               // 12 matches over". This column once read "72%", which every
@@ -1656,7 +1666,8 @@ export function boardPage(o: {
               .map((code) => bookCell(r.books, code, only, (b) =>
                 ouButtons(b.prop_id, back, b.side,
                   offeredSides(r.books, code, restrict),
-                  callBook === code && play ? play.side : 'both',
+                  // No side is marked as the one to take: see `playCell`.
+                  'both',
                   { over: b.over_ok, under: b.under_ok },
                   Number(b.line)),
                 only ?? callBook))
