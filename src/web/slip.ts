@@ -380,7 +380,7 @@ export function slipEV(legs: SlipLeg[], payouts: Record<number, number>, rho?: n
  * On PrizePicks the ladder is 3x, 6x, 10x, 20x, 37.5x, which makes the steps
  * 50%, **60%**, 50%, 53.3%. The fourth leg is the expensive one: it has to win
  * 60% of the time to be worth adding, and nothing in this codebase has ever
- * produced a leg that clears 60% honestly — `shrink()`'s Beta(8) prior makes it
+ * produced a leg that clears 60% honestly — the book's own marginal makes it
  * nearly unreachable by design.
  *
  * Returns null when the payouts for either size are unknown, which is not the

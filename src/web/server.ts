@@ -395,14 +395,11 @@ const server = createServer(async (req, res) => {
         lockedBook ??
         (bookParam && KNOWN_BOOKS.includes(bookParam) ? bookParam : 'prizepicks');
       const rows = await markets({ league: filters.league, book, matched: false, search: null });
-      const form = await projectMarkets(
-        rows.map((r) => ({
-          canon_handle: r.canon_handle, handle: r.handle, league: r.league, stat: r.stat,
-          map_start: r.map_start, map_end: r.map_end,
-        })),
-      );
+      // No `projectMarkets` here any more. Build's legs are priced by the book
+      // now, so the projection this page used to run — a query over every
+      // market's stat history — fed nothing but the entry builder that has been
+      // removed. The board still runs it for its own column.
       const [picks, h] = await Promise.all([openPicks(), health(filters.league)]);
-      const entries = buildEntries(rows, form, book);
 
       // Pinnacle's view of who wins, for every team on the board. Empty until
       // the odds job has run — and until migration 017 exists at all, which is
@@ -410,6 +407,10 @@ const server = createServer(async (req, res) => {
       const teams = [...new Set(rows.flatMap((r) => r.books.map((b) => b.team))
         .filter((t): t is string => Boolean(t)))];
       const teamOdds = await teamWinProbs(teams).catch(() => new Map());
+
+      // Entries and stacks are both priced from the market now, so the odds
+      // have to be in hand before either is built.
+      const entries = buildEntries(rows, teamOdds, book);
       // Both sides of every leg: the search builds each team's unders and its
       // overs, and pairs each with an opponent on the SAME side, which the
       // measured tail makes far stronger than the opponent's own better side.

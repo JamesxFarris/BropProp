@@ -1,11 +1,8 @@
 import { config } from '../config.js';
 import type { MarketRow } from './boardq.js';
-import type { FormStats, Play } from './projection.js';
-import { recommend, type LineOption } from './projection.js';
-import { comboParts } from '../normalize.js';
+import type { Play } from './projection.js';
 import type { BookCode } from '../books.js';
 import { devig } from '../devig.js';
-import { pricedEdges, edgeProbability } from './consensus.js';
 import { probAllWin, requiredMultiplier, marginalLegWorthIt, partnerGivenCore, type SlipLeg } from './slip.js';
 import { underProbForTeam, MEASURED_UNDER_BASELINE, type TeamOdds } from './matchodds.js';
 
@@ -44,19 +41,16 @@ export type Candidate = {
   /** Win probability, shrunk toward a coin flip by how thin the evidence is. */
   p: number;
   /**
-   * Where the direction came from.
+   * Where the direction came from. Only one answer survives measurement.
    *
-   * `consensus` means the side was read off where this book sits relative to
-   * every other book pricing the market — no projection involved. `model`
-   * means it came from `recommend()`, which has been measured at AUC 0.495 and
-   * carries no demonstrated information about who wins.
-   *
-   * Recorded per leg rather than assumed for the entry, because a board will
-   * hold both kinds at once: a market three books price gets a consensus, and
-   * one only PrizePicks lists cannot.
+   * There were two others. `model` meant `recommend()`, graded at AUC 0.495 and
+   * -9.5% ROI over 3,137 real closing lines. `consensus` meant where this book
+   * sat against the others, graded 74-73 over 147 series at p = 1.00 — and the
+   * books were later found to resell one supplier's prices, so there was never
+   * a crowd to read. Both are gone; a leg is priced by the market or not at all.
    */
-  source: 'consensus' | 'model' | 'market';
-  /** How far off the crowd this book is, in stat units. Null on the model path. */
+  source: 'market';
+  /** Kept null. It held the gap from a book consensus, which never predicted. */
   gap: number | null;
   /** What this leg pays relative to a standard one (Underdog discounts some). */
   mult: number;
@@ -110,181 +104,6 @@ export type Entry = {
 };
 
 /**
- * Shrink an observed hit rate toward 0.5 in proportion to how little is behind
- * it.
- *
- * An optimiser searches for the highest numbers, which means it searches for
- * the luckiest small samples. "9 of 10" is not a 90% edge, and left raw it
- * would outrank a genuine 65% built on eighty games every time. A Beta(2,2)
- * prior costs a well-evidenced leg almost nothing and guts a thin one.
- */
-function shrink(hitRate: number, effectiveN: number): number {
-  // Deliberately heavier than a plain Beta(2,2). This estimate is not being
-  // read once — it is being maximised over roughly a hundred markets, and the
-  // maximum of many noisy estimates is biased upward whatever each one's own
-  // error looks like. The books also price these to be close to a coin flip,
-  // so a prior centred there is the honest starting point rather than a
-  // conservative one.
-  const prior = 8;
-  return (hitRate * effectiveN + 0.5 * prior) / (effectiveN + prior);
-}
-
-/**
- * How many independent observations really sit behind a play.
- *
- * A modelled play resamples single maps thousands of times, but the evidence is
- * the maps themselves, not the draws — and it takes `maps` of them to speak to
- * one range. Counting 4000 draws as 4000 observations would defeat the
- * shrinkage entirely.
- */
-function evidenceCount(play: Play, maps: number): number {
-  if (play.method === 'series') return play.series;
-  return Math.floor(play.sample / Math.max(1, maps));
-}
-
-export function candidatesFor(
-  rows: MarketRow[],
-  form: Map<string, FormStats>,
-  book: BookCode,
-): Candidate[] {
-  const out: Candidate[] = [];
-  const now = Date.now();
-
-  for (const r of rows) {
-    // A market already under way cannot be entered.
-    if (r.scheduled_at && new Date(r.scheduled_at).getTime() < now) continue;
-    // Combos used to be skipped for want of a projection. They have one now,
-    // built from the members' joint history, so they compete on the same terms
-    // as everything else — but see `players` below: a combo leg occupies every
-    // player in it, or the one-leg-per-player rule stops seeing through them.
-    const parts = comboParts(r.handle);
-    if (r.is_combo && parts.length < 2) continue;
-
-    const mine = r.books.find((b) => b.book === book);
-    if (!mine) continue;
-
-    /**
-     * A market probability for this line from whoever publishes one.
-     *
-     * PrizePicks quotes no odds — it prices by moving the line — but another
-     * book often lists the same market at the same number, and that devigged
-     * probability is a read on this line too. It only transfers when the
-     * numbers match exactly: at a different line it is a different bet.
-     *
-     * Any priced book will do, not just Underdog. The old version hardcoded
-     * one, which meant a third book publishing prices would have been ignored
-     * while the anchor sat empty.
-     */
-    const twin = r.books.find(
-      (b) => b.book !== book && b.line === mine.line
-        && b.over_price !== null && b.under_price !== null,
-    );
-    const fair = twin ? devig(twin.over_price, twin.under_price) : null;
-
-    const options: LineOption[] = [{
-      book,
-      line: Number(mine.line),
-      overOk: mine.over_ok,
-      underOk: mine.under_ok,
-      overPrice: mine.over_price === null ? null : Number(mine.over_price),
-      underPrice: mine.under_price === null ? null : Number(mine.under_price),
-      anchorOver: fair?.over ?? null,
-      anchorUnder: fair?.under ?? null,
-    }];
-
-    const maps = r.map_end - r.map_start + 1;
-    const seed = `${r.canon_handle}|${r.stat}|${r.map_start}|${r.map_end}`;
-    const f = form.get(seed);
-    const play = recommend(f, options, maps, seed);
-
-    /**
-     * Prefer the market's answer to our own.
-     *
-     * The projection decides direction only where the market cannot. With
-     * three books that means a crowd consensus; with two it means the book
-     * that publishes odds anchoring the one that does not — see
-     * `consensus.fairLine`. Either way the side comes from where a book sits
-     * against that anchor, and the probability comes from the gap measured
-     * against this player's spread: a chain with our own mean nowhere in it.
-     *
-     * The two are NOT blended. Averaging a measured-useless estimate into a
-     * measured-useful one only adds noise, and it would make the resulting
-     * number impossible to attribute when the record is finally scored. One
-     * leg, one source, recorded.
-     *
-     * The consensus side can disagree with the model's, and when it does the
-     * consensus wins outright. That is the intended behaviour: AUC 0.495 means
-     * the model's opinion is worth nothing as a tiebreak either.
-     */
-    const edge = pricedEdges(r.books, f, maps, seed).find((e) => e.book === book && e.offered);
-    const ep = edge ? edgeProbability(edge, f, maps, seed) : null;
-    const useConsensus = edge !== undefined && ep !== null;
-
-    /**
-     * A consensus leg does not need the model's permission to exist.
-     *
-     * `recommend()` returns null below MIN_SERIES or MIN_EDGE — it declines to
-     * have an opinion. Skipping the market on that basis would let a signal
-     * measured at AUC 0.495 veto one that does not depend on it at all, and
-     * quietly: the leg would just never appear. The two paths are independent
-     * and the gate has to be too.
-     */
-    if (!play && !useConsensus) continue;
-
-    const side = useConsensus ? edge.side : play!.side;
-    const p = useConsensus
-      ? shrink(ep.p, ep.n)
-      : shrink(play!.hitRate, evidenceCount(play!, maps));
-
-    const rawMult = side === 'over' ? mine.over_mult : mine.under_mult;
-    const mult = rawMult === null ? 1 : Number(rawMult);
-
-    // The displayed play must describe the side actually being staked, or the
-    // slip panel and the take button disagree about what was picked. Where the
-    // model declined entirely there is no play to amend, so one is built from
-    // what the consensus actually knows — and the fields it cannot know are
-    // null or zero rather than invented.
-    const shown: Play = useConsensus
-      ? {
-          ...(play ?? {
-            edgeSd: null, rawWins: null, rawOf: null,
-            anchored: edge.fair, rawMean: f?.mean ?? edge.fair,
-            series: f?.series ?? 0, method: 'series' as const, sample: ep.n,
-            breakEven: null, ev: null,
-          }),
-          side, line: edge.line, book,
-          // The gap IS the edge on this path, in the same stat units the model
-          // reports its own in.
-          edge: edge.gap,
-          hitRate: ep.p,
-          strength: edge.gap,
-          score: Math.min(99, Math.round(ep.p * 100)),
-        }
-      : play!;
-
-    out.push({
-      row: r,
-      play: shown,
-      propId: mine.prop_id,
-      p, mult,
-      source: useConsensus ? 'consensus' : 'model',
-      gap: useConsensus ? edge.gap : null,
-      value: p * mult,
-      matchKey: r.match_title ?? `?${r.canon_handle}`,
-      // Underdog publishes no team at all — every one of its lines came back
-      // teamless when the board was run against production — so an Underdog
-      // leg could never join a stack. The same player on the same market at
-      // another book usually does carry one, and a player's team does not
-      // depend on who is quoting him.
-      team: mine.team ?? r.books.find((b) => b.team)?.team ?? null,
-      players: parts.length >= 2 ? parts : [r.canon_handle],
-    });
-  }
-
-  return out.sort((a, b) => b.value - a.value);
-}
-
-/**
  * Take the N best legs, subject to the rules that stop an "optimal" entry
  * being an obviously bad one.
  *
@@ -307,10 +126,15 @@ export function bestEntry(
   maxPerMatch = 4,
   /**
    * Payout table to price the entry with. Injected so a test can pin the
-   * arithmetic without depending on what happens to be in the environment,
-   * and so the default can be empty without making the behaviour untestable.
+   * arithmetic without depending on what happens to be in the environment.
+   *
+   * The default is Sleeper's published ladder with anything in `PAYOUT_TABLE`
+   * layered over it, so an environment entry always wins. Built per call rather
+   * than captured in a module-level const, because `PUBLISHED_LADDER` is
+   * declared further down this file: a const here would read it before it
+   * exists. Default parameters are evaluated at call time, which is safe.
    */
-  payouts: Record<string, Record<number, number>> = BASE,
+  payouts: Record<string, Record<number, number>> = { ...PUBLISHED_LADDER, ...BASE },
 ): Entry | null {
   // An unknown payout is not a reason to refuse to pick legs. The entry is
   // still the best N markets; it just cannot be told what it pays, so the
@@ -421,9 +245,10 @@ export function bestEntry(
  *
  * A four-pick is the worst product on the PrizePicks board — 37.5% hold, and a
  * fourth leg has to win 60% of the time to be worth adding to a three-pick.
- * Nothing here has ever produced an honest 60% leg; `shrink()`'s Beta(8) prior
- * makes it nearly unreachable by construction. Offering a 4-pick by default was
- * the app recommending the shape its own maths says to avoid.
+ * Nothing here has ever produced an honest 60% leg: legs are priced at the
+ * book's own devigged marginal now, and a book that believed a side landed 60%
+ * of the time would move the line rather than post it. Offering a 4-pick by
+ * default was the app recommending the shape its own maths says to avoid.
  *
  * See docs/STRATEGY.md for the full break-even table.
  */
@@ -472,13 +297,35 @@ export const PUBLISHED_LADDER: Record<string, Record<number, number>> = {
   sleeper: { 2: 2, 3: 5, 4: 9, 5: 19, 6: 34, 7: 49, 8: 99 },
 };
 
+/**
+ * The entries offered on Build, priced by the market rather than by us.
+ *
+ * These legs used to come from `candidatesFor`, which set each one's side and
+ * probability from whichever of two signals had an opinion. Both have since
+ * been graded and **both are dead**: the per-prop model at AUC 0.495 and -9.5%
+ * ROI over 3,137 real closing lines, and the cross-book consensus at 74-73 over
+ * 147 series, p = 1.00 — the latter now with a known structural cause, namely
+ * that the books resell one supplier's opinion rather than holding three.
+ *
+ * Ranking legs by `p x mult` where `p` carries no information is not
+ * optimisation, it is sorting noise and printing the top of it. The per-leg
+ * percentages shown on the card came from the same place, and so did the
+ * required multiplier computed from them, so the headline number was noise too.
+ *
+ * So an entry is now the same honest object a stack is: each leg priced at the
+ * book's own devigged marginal where it prices both sides, and the team-outcome
+ * mixture where it does not. Nothing here claims to know better than the book.
+ * What the card is for is the arithmetic — what this many legs must be paid to
+ * break even — and that is worth showing precisely because it does not clear:
+ * it is the contrast that makes the correlated stack worth taking.
+ */
 export function buildEntries(
   rows: MarketRow[],
-  form: Map<string, FormStats>,
+  teamOdds: Map<string, TeamOdds>,
   book: BookCode,
   sizes = DEFAULT_SIZES,
 ): Entry[] {
-  const cands = candidatesFor(rows, form, book);
+  const cands = marketCandidates(rows, teamOdds, book, { stackableOnly: false, requireTeam: false });
   return sizes
     .map((n) => bestEntry(cands, n, book))
     .filter((e): e is Entry => e !== null);
@@ -646,10 +493,10 @@ export function findStacks(
 /**
  * Legs sided and priced by the two things that have actually been measured.
  *
- * `candidatesFor` takes its side from the book consensus or the projection, and
- * both have now been graded at a coin flip — 74-73 over 147 series, and AUC
- * 0.495. What survived measurement is different in kind: it is not about the
- * player at all.
+ * The side used to come from the book consensus or the projection, and both
+ * have now been graded at a coin flip — 74-73 over 147 series, and AUC 0.495.
+ * What survived measurement is different in kind: it is not about the player at
+ * all.
  *
  *   1. Losing teams' players go under more than winning teams' do — 57.2%
  *      against 45.7% on the books' own closing lines, and 39-22 (p = 0.040)
@@ -715,13 +562,23 @@ export function marketCandidates(
   teamOdds: Map<string, TeamOdds>,
   book: BookCode,
   /**
-   * Emit both sides of every leg rather than only its better one. The stack
-   * search wants this: a stack's partner must be on the core's side, and the
-   * measured tail makes a sub-50% partner on that side far better than a
-   * 55% partner against it.
+   * `bothSides` emits both sides of every leg rather than only its better one.
+   * The stack search wants this: a stack's partner must be on the core's side,
+   * and the measured tail makes a sub-50% partner on that side far better than
+   * a 55% partner against it.
+   *
+   * `stackableOnly` and `requireTeam` default to the stack search's needs, and
+   * an ENTRY turns both off. Neither restriction is about pricing a leg — a
+   * leg's marginal is the book's devigged number whatever league it is in and
+   * whoever he plays for. They exist because a STACK needs a measured
+   * correlation (CS2 only) and needs to know which players are teammates. An
+   * entry needs neither, and applying them there would silently drop every LoL
+   * market and every leg whose team no book published.
    */
-  opts: { bothSides?: boolean } = {},
+  opts: { bothSides?: boolean; stackableOnly?: boolean; requireTeam?: boolean } = {},
 ): Candidate[] {
+  const stackableOnly = opts.stackableOnly ?? true;
+  const requireTeam = opts.requireTeam ?? true;
   const out: Candidate[] = [];
   const now = Date.now();
   for (const r of rows) {
@@ -733,13 +590,18 @@ export function marketCandidates(
     // …and the league, because correlation belongs to the game. LoL kills
     // measured phi 0.005 — stacking them is the flat ladder applied to
     // independent legs, which is the bet the ladder is priced to win.
-    if (!STACKABLE_LEAGUES.has(r.league)) continue;
+    if (stackableOnly && !STACKABLE_LEAGUES.has(r.league)) continue;
     const mine = r.books.find((b) => b.book === book);
     if (!mine) continue;
     const team = mine.team ?? r.books.find((b) => b.team)?.team ?? null;
-    if (!team) continue;
+    // A stack is grouped by team, so a teamless leg cannot join one. An entry
+    // can: `winCountDistribution` gives an unknown team its own bucket, which
+    // earns it the weaker opponent correlation rather than a guess.
+    if (requireTeam && !team) continue;
 
-    const odds = teamOdds.get(team);
+    // No team means no moneyline to mix, so such a leg falls through to the
+    // book's own price, or to the measured baseline if it has none.
+    const odds = team === null ? undefined : teamOdds.get(team);
     /**
      * Where the book prices both sides, ITS number is the marginal — not our
      * flat team baseline.

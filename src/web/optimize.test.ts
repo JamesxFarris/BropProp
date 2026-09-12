@@ -27,7 +27,7 @@ const cand = (o: {
     p: o.p ?? 0.6,
     mult: o.mult ?? 1,
     value: (o.p ?? 0.6) * (o.mult ?? 1),
-    source: 'model',
+    source: 'market',
     team: null,
     gap: null,
     matchKey: o.match,
@@ -128,95 +128,17 @@ test('an unknown payout table yields legs but no payout or EV', () => {
   assert.equal(e!.legs.length, 2);
 });
 
-// ------------------------------------- where a leg's direction comes from --
+// ---------------------------------------- where a leg's price comes from ---
+//
+// There were five tests here for `candidatesFor`, asserting that a leg's
+// direction came from the book consensus where three books priced a market and
+// from the projection otherwise. Both of those signals have since been graded
+// and both are dead — the projection at AUC 0.495 and -9.5% ROI, the consensus
+// at 74-73 over 147 series, p = 1.00 — so the function they tested is gone and
+// `buildEntries` prices a leg at the book's own devigged number instead. The
+// tests that matter now are the `marketCandidates` ones below.
 
-import { candidatesFor } from './optimize.js';
 import type { MarketRow, BookLine } from './boardq.js';
-import type { FormStats } from './projection.js';
-
-function line(book: string, l: number): BookLine {
-  return {
-    book, line: l, prop_id: Math.round(l * 100),
-    over_price: null, under_price: null, over_ok: true, under_ok: true,
-    over_mult: null, under_mult: null,
-    moved: null, last_move: null, last_move_at: null, side: null, team: null,
-  };
-}
-
-function market(books: BookLine[]): MarketRow {
-  return {
-    canon_handle: 'zywoo', handle: 'ZywOo', league: 'CS2', stat: 'kills',
-    map_start: 1, map_end: 1, is_combo: false,
-    books,
-    spread: Math.max(...books.map((b) => b.line)) - Math.min(...books.map((b) => b.line)),
-    match_title: 'Vitality vs G2', scheduled_at: null, confirmed_at: '2026-09-09T00:00:00Z',
-  };
-}
-
-/** Enough real range totals for the probability path to use them directly. */
-const history: Map<string, FormStats> = new Map([
-  ['zywoo|kills|1|1', {
-    series: 10, mean: 20, sd: null, perMap: 20,
-    totals: [14, 16, 18, 20, 20, 22, 24, 26, 12, 28],
-    mapValues: [14, 16, 18, 20, 20, 22, 24, 26, 12, 28],
-  }],
-]);
-
-test('two books leave the direction to the model, because they cannot vote', () => {
-  const rows = [market([line('prizepicks', 18.5), line('underdog', 20.5)])];
-  const c = candidatesFor(rows, history, 'prizepicks');
-  // Whatever it decides, it must not claim the crowd decided it.
-  for (const x of c) assert.equal(x.source, 'model');
-});
-
-test('three books take the direction off the crowd instead of the projection', () => {
-  // PrizePicks two kills below a crowd that agrees on 20.5, so its over is the
-  // cheap side — regardless of what our own projection thinks of the player.
-  const rows = [market([
-    line('prizepicks', 18.5), line('underdog', 20.5), line('sleeper', 20.5),
-  ])];
-  const c = candidatesFor(rows, history, 'prizepicks');
-  assert.equal(c.length, 1);
-  assert.equal(c[0]!.source, 'consensus');
-  assert.equal(c[0]!.play.side, 'over');
-  assert.equal(c[0]!.gap, 2);
-});
-
-test('a consensus leg stakes the side it was scored on', () => {
-  // The bug this guards: scoring the consensus side while the displayed play
-  // still names the model's, so the slip panel and the take button disagree
-  // about what was picked.
-  const rows = [market([
-    line('prizepicks', 24.5), line('underdog', 20.5), line('sleeper', 20.5),
-  ])];
-  const c = candidatesFor(rows, history, 'prizepicks');
-  assert.equal(c[0]!.source, 'consensus');
-  assert.equal(c[0]!.play.side, 'under', 'four above the crowd leaves room underneath');
-  assert.equal(c[0]!.play.line, 24.5, 'staked at this book number, not the crowd number');
-});
-
-test('books that all agree produce no consensus leg', () => {
-  // No gap means nothing is off the crowd, so there is no market-derived
-  // direction and the model is all that is left.
-  const rows = [market([
-    line('prizepicks', 20.5), line('underdog', 20.5), line('sleeper', 20.5),
-  ])];
-  for (const x of candidatesFor(rows, history, 'prizepicks')) {
-    assert.equal(x.source, 'model');
-  }
-});
-
-test('a bigger gap outranks a smaller one', () => {
-  const rows = [
-    { ...market([line('prizepicks', 18.5), line('underdog', 20.5), line('sleeper', 20.5)]),
-      canon_handle: 'zywoo', handle: 'ZywOo', match_title: 'A vs B' },
-    { ...market([line('prizepicks', 20), line('underdog', 20.5), line('sleeper', 20.5)]),
-      canon_handle: 'zywoo', handle: 'ZywOo', match_title: 'C vs D' },
-  ];
-  const c = candidatesFor(rows, history, 'prizepicks');
-  assert.equal(c.length, 2);
-  assert.ok(c[0]!.gap! > c[1]!.gap!, 'ranked by value, and a wider gap wins more often');
-});
 
 // ------------------------------------------------- the stack search --------
 
@@ -231,7 +153,7 @@ function stackCand(o: {
     play: { side: o.side ?? 'under', line: 20, hitRate: o.p } as never,
     propId: Math.abs([...o.player].reduce((a, c) => a * 31 + c.charCodeAt(0), 7)) % 100000,
     p: o.p, mult: 1, value: o.p,
-    source: 'model', gap: null,
+    source: 'market', gap: null,
     matchKey: o.match, team: o.team, players: [o.player],
   } as Candidate;
 }

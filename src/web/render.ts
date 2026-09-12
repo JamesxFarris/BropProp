@@ -2123,13 +2123,18 @@ export function slipsPage(o: {
 // ------------------------------------------------------------------ build --
 
 /**
- * Suggested entries.
+ * Entries, priced by the book rather than by us.
  *
- * The honest framing matters more than the arithmetic here: every number below
- * rests on win probabilities this tool estimated and has never yet been graded
- * against. An EV above 1.0 means "worth it if the probabilities are right",
- * which is a claim the results page will eventually settle and cannot settle
- * today.
+ * Every leg is the book's own devigged marginal where it prices both sides, and
+ * the measured team-outcome mixture where it does not. Nothing here claims to
+ * know better than the book, because the two things that once did were graded
+ * and neither predicted: the projection at AUC 0.495 and -9.5% ROI, the
+ * cross-book consensus at 74-73 over 147 series, p = 1.00.
+ *
+ * So the card is for the arithmetic — what an entry of this many legs has to be
+ * paid to break even. That is worth showing precisely because a plain entry
+ * does not clear it: it is the contrast that makes the correlated stack above
+ * worth taking.
  */
 export function buildPage(o: {
   entries: Entry[];
@@ -2247,7 +2252,7 @@ export function buildPage(o: {
 
   const body = o.entries.length === 0
     ? `<div class="card"><div class="empty">Not enough qualifying markets to build an entry on
-       ${esc(bookName(o.book))} right now. Legs need a projection, a playable side, and a match
+       ${esc(bookName(o.book))} right now. Legs need a price, a playable side, and a match
        that hasn't started.</div></div>`
     : o.entries.map((e) => {
         /**
@@ -2287,13 +2292,11 @@ export function buildPage(o: {
           // measured. Legs the crowd chose are backed by a signal that does not
           // depend on our projection; the rest are not backed by anything that
           // has survived a measurement.
-          // Both sources have now been graded and neither wins: the projection
-          // at AUC 0.495, the market anchor at 74-73 over 147 series. So this
-          // counts them rather than endorsing them — "picked by the books" was
-          // starting to read as a quality mark for a signal measured at a coin
-          // flip, which is exactly the dressing-up this project refuses to do.
-          const backed = e.legs.filter((l) => l.source === 'consensus').length;
-          return `<span class="sub">${backed} of ${e.legs.length} legs sided by the books, ${e.legs.length - backed} by the projection — neither has beaten a coin flip</span>`;
+          // This used to split the legs into "sided by the books" and "sided by
+          // the projection" and note that neither had beaten a coin flip. Both
+          // of those signals are now gone rather than merely disclaimed, so
+          // there is nothing left to count: every leg is the book's own number.
+          return `<span class="sub">${e.legs.length} legs at ${esc(bookName(o.book))}'s own price — what the entry has to be paid, not a tip</span>`;
         })()}
       </div>
       <div class="evbar">
