@@ -1191,6 +1191,36 @@ was afterwards confirmed against the books' own closing lines (5+1 all-over
 showed how flattering a noisy stand-in line can be. Before assists ship:
 per-market partner sign, then real-line confirmation.
 
+### A payout is only usable with the same book's marginals
+
+Which books publish what, checked against the live feeds on 2026-09-12:
+
+| Book | Per-leg payout | What it means | Usable how |
+|---|---|---|---|
+| Sleeper | `sleeper_over_mult` / `sleeper_under_mult`, e.g. 2.12 / 1.52 | the WHOLE payout for that pick; an entry pays the product | priced with nothing typed in (migration 020 puts it on `current_line` as `payout_over` / `payout_under`) |
+| Underdog | `over_multiplier` / `under_multiplier`, e.g. 1.09 / 0.87 / 1.0 | RELATIVE to a standard leg | needs the base ladder, which the book does not publish — one saved quote per leg count unlocks the rest |
+| PrizePicks | none | — | the entry builder computes it behind auth; the reader records the quote |
+
+PrizePicks was verified, not assumed: the partner feed the poller uses carries
+`odds_type` (standard/demon/goblin), `is_promo`, `flash_sale_line_score`,
+`adjusted_odds` (a boolean) and `rank`, and no multiplier on the projection or
+on any of its seven included resource types.
+
+**The trap, caught the hour Sleeper's payouts went live.** Its six-pick stacks
+immediately read as needing 10.9x and paying 24-30x — an EV over 2x, which is
+not a thing a book leaves lying around. The cause: `marketCandidates` valued
+every leg at the flat 0.484 team baseline, while the stack search picked
+whichever legs the book priced LONGEST. A Sleeper pick at 2.12 over / 1.52
+under is Sleeper saying the over lands about 40% of the time; valuing it at
+0.484 and then banking the 2.12 turns the book's own opinion into imaginary
+profit.
+
+So: **where a book prices both sides, its devigged number is the leg's
+marginal**, and the measured correlation and tail apply on top of it. The stack
+edge was never a disagreement about individual legs — it is the payout ladder
+underpricing correlation, and that is the only thing the stack card should be
+claiming.
+
 ### The scorecard runs itself, daily
 
 The replay above is not a thing to remember to run. It is on a schedule, and
