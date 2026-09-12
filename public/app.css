@@ -1994,3 +1994,56 @@ body.searching .tick { display: none; }
 /* On the build page: how much of an entry rests on something measured. */
 .sub.ok { color: var(--over); }
 .sub.warn { color: var(--under); }
+
+/* ---- Board: the Best line column ----------------------------------------
+   The board used to carry Projected, Edge, Recent and Gap alongside one
+   column per app — ten in all, which overflowed the card and pushed the slip
+   rail off the right edge. Projected and Edge are gone because they showed a
+   per-prop model graded at AUC 0.495 and -9.5% ROI: they read as advice and
+   could not support it. Gap is gone because "1.5 apart" is the same fact this
+   column states in a form you can act on.
+
+   What is left is the weakest claim available and the only one that survived
+   measurement: the lowest line on offer is where an over is cheapest, the
+   highest is where an under is. Arithmetic about prices, never about players.
+
+   These override the earlier nth-child widths, which were written for the
+   ten-column board and now land on the wrong cells. */
+@media (min-width: 860px) {
+  .board-table th:nth-child(2), .board-table td:nth-child(2) { width: 15%; }
+  .board-table th:nth-child(3), .board-table td:nth-child(3) { width: auto; min-width: 21rem; }
+  .board-table th:nth-child(5), .board-table td:nth-child(5) { width: auto; }
+}
+
+td.bestcol, th.bestcol { text-align: left; }
+.bl { display: flex; align-items: baseline; gap: 8px; }
+.bl + .bl { margin-top: 5px; }
+/* Both sides are always named. Showing one would read as "take this side",
+   which is the recommendation this column exists to avoid making. */
+.bl-side {
+  font-size: 11px; font-weight: 700; letter-spacing: .04em;
+  text-transform: uppercase; min-width: 3.6em; flex: none;
+}
+.bl-side.o { color: var(--over); }
+.bl-side.u { color: var(--under); }
+.bl-num {
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+  font-size: 17px; font-weight: 600; flex: none;
+}
+.bl-book {
+  color: var(--text-2); font-size: 13px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* The record is history at this exact number, pushed to the right so it reads
+   as a footnote to the line rather than as part of the instruction. */
+.bl-rec { color: var(--text-3); font-size: 12px; margin-left: auto; flex: none; padding-left: 10px; }
+.bl-gap { color: var(--text-3); font-size: 12px; margin-top: 5px; }
+
+@media (max-width: 859px) {
+  /* On a phone the cell is already introduced by its data-label, and the row
+     is a flex card, so the two sides take the full width and the record stays
+     on the same line as its number. */
+  .board-table td.bestcol { flex: 1 1 100%; display: block !important; margin-top: 10px; }
+  .board-table td.bestcol::before { display: none; }
+  .bl-book { font-size: 12px; }
+}

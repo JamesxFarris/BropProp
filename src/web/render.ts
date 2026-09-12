@@ -52,6 +52,60 @@ const PROJECTABLE = new Set(['kills', 'headshots', 'assists', 'deaths']);
 const comboChip = (r: { handle: string }) =>
   isComboHandle(r.handle) ? ' <span class="chip warn">Combo</span>' : '';
 
+/**
+ * Where to take each side, and what this player's own history did at it.
+ *
+ * This is the only claim on the board, and it is deliberately the weakest one
+ * available: **a statement about prices, not about players.** The lowest line
+ * on offer is where an over is cheapest and the highest is where an under is,
+ * which is true by arithmetic at any number of books and cannot be wrong. It
+ * does not say the over will land. `betterSide` in consensus.ts makes the same
+ * point in the same words.
+ *
+ * It replaced a Projected column and an Edge column, both fed by the per-prop
+ * model this project graded at AUC 0.495 and -9.5% ROI over 3,137 real closing
+ * lines. Those read as advice, which is what they could not support.
+ *
+ * Both sides are named on purpose. Naming one — "Under 16.5 on PrizePicks" —
+ * reads as a recommendation to take the under, and nothing here knows that.
+ *
+ * The record is counted straight off the player's own range totals against the
+ * line being shown, so it is arithmetic too: what happened before, at this
+ * number. Never a probability.
+ */
+function bestLineCell(
+  books: { book: string; line: number | string }[],
+  totals: number[] | undefined,
+): string {
+  if (books.length === 0) return '<span class="meta">—</span>';
+  const vals = books.map((b) => Number(b.line));
+  const lo = Math.min(...vals);
+  const hi = Math.max(...vals);
+  const at = (v: number) => books.filter((b) => Number(b.line) === v).map((b) => bookName(b.book as BookCode));
+  const agree = lo === hi;
+  const where = (v: number) => {
+    const names = at(v);
+    if (agree) return books.length === 1 ? `${names[0]} only` : 'every app';
+    return names.join(' / ');
+  };
+  // Pushes are neither, so each side is counted on its own rather than one
+  // being taken as the complement of the other.
+  const rec = (v: number, side: 'over' | 'under') => {
+    if (!totals || totals.length === 0) return '';
+    const hits = totals.filter((t) => (side === 'over' ? t > v : t < v)).length;
+    return `<span class="bl-rec">${hits} of last ${totals.length}</span>`;
+  };
+  const row = (side: 'over' | 'under', v: number) =>
+    `<div class="bl">
+       <span class="bl-side ${side === 'over' ? 'o' : 'u'}">${side === 'over' ? 'Over' : 'Under'}</span>
+       <b class="bl-num">${v.toFixed(1)}</b>
+       <span class="bl-book">${esc(where(v))}</span>
+       ${rec(v, side)}
+     </div>`;
+  return row('over', lo) + row('under', hi)
+    + (agree ? '' : `<div class="bl-gap">${(hi - lo).toFixed(1)} apart</div>`);
+}
+
 const LEAGUE_CLASS: Record<string, string> = { CS2: 'cs2', LOL: 'lol' };
 const leagueBadge = (l: string) =>
   `<span class="lg ${LEAGUE_CLASS[l] ?? 'other'}">${esc(l)}</span>`;
@@ -321,7 +375,7 @@ const POLL_INTERVAL_S = 900;
  * broadcast tile with the call tag's notch cut from its corner, and a staggered
  * up and down chevron — over and under. The same drawing is public/favicon.svg.
  */
-const MARK = `<svg class="mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><path d="M0 0H32V22L22 32H0Z" fill="#FF5B14"/><path d="M6.5 15.5 12 10l5.5 5.5" fill="none" stroke="#0B1220" stroke-width="3.6" stroke-linecap="square"/><path d="M14.5 17.5 20 23l5.5-5.5" fill="none" stroke="#0B1220" stroke-width="3.6" stroke-linecap="square"/></svg>`;
+const MARK = `<svg class="mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><path d="M3.5 15.5 12 7l8.5 8.5" fill="none" stroke="#FF5B14" stroke-width="5" stroke-linecap="square"/><path d="M11.5 16.5 20 25l8.5-8.5" fill="none" stroke="#FF5B14" stroke-width="5" stroke-linecap="square"/></svg>`;
 
 function freshness(lastOk: string | null): string {
   const age = lastOk ? Math.max(0, (Date.now() - new Date(lastOk).getTime()) / 1000) : null;
@@ -1479,7 +1533,6 @@ export function boardPage(o: {
    * `Play.ev` stays populated so that record accumulates in the meantime.
    */
   const showEv = false;
-  const gapLabel = 'Gap';
 
   const body =
     ranked.length === 0
@@ -1504,19 +1557,22 @@ export function boardPage(o: {
       <div class="card-head">
         <h2>Board</h2>
         <span class="sub" title="${esc(`${summary}${
-          restrict ? `. Only props where ${bookName(only as BookCode)} has the best line for the play.` : ''
-        }`)}"><b>${counts.call}</b> plays from <b data-count>${ranked.length}</b> props</span>
+          restrict ? `. Only props where ${bookName(only as BookCode)} has the best line.` : ''
+        }`)}"><b data-count>${ranked.length}</b> props, <b>${
+          // Counted, not "plays". This used to read "99 plays from 345 props",
+          // where a play meant the projection had an opinion — a model since
+          // graded at AUC 0.495. How many markets the apps actually disagree on
+          // is a fact, and it is the one the Best line column acts on.
+          ranked.filter((r) => r.spread !== null && Number(r.spread) !== 0).length
+        }</b> where the apps differ</span>
       </div>
       <div class="scroll cards-sm"><table class="board-table stack-sm" data-filter>
         <thead><tr>
           <th scope="col">Player</th>
           <th scope="col">Prop</th>
-          <th scope="col" class="c">Projected</th>
-          <th scope="col" class="c">Edge</th>
-          <th scope="col" class="c">Recent</th>
+          <th scope="col" class="bestcol">Best line</th>
           ${showEv ? '<th scope="col" class="c evcol">EV</th>' : ''}
           ${columns.map((b) => bookHead(b, only, o.lockedBook !== null)).join('')}
-          <th scope="col" class="c gapcol">${gapLabel}</th>
         </tr></thead>
         <tbody>${ranked
           .map((r, i) => {
@@ -1532,62 +1588,20 @@ export function boardPage(o: {
             // read as duplicates. A continuation row keeps the identity quiet
             // and lets the market be the thing that differs.
             const sameAsPrev = i > 0 && ranked[i - 1]!.canon_handle === r.canon_handle;
-            // How far apart the books are on this row. Unsigned now: with more
-            // than two of them "PP minus UD" names a direction that no longer
-            // exists, and the useful fact is how wide the disagreement is.
-            const d = r.spread === null ? null : Number(r.spread);
-            const gap =
-              d === null
-                ? `<span class="gap-chip flat">—</span>`
-                : d === 0
-                  ? `<span class="gap-chip flat">same</span>`
-                  : `<span class="gap-chip up">${d.toFixed(1)}</span>`;
+            // The spread between books is no longer its own column — the Best
+            // line cell says where each side is cheapest and by how much, which
+            // is the same fact in the form a reader can act on.
             // The widest move any book on this row has made.
             const movedAll = r.books.map((b) => b.moved).filter((m): m is number => m !== null);
             const moved = movedAll.length
               ? movedAll.reduce((a, b) => (Math.abs(b) > Math.abs(a) ? b : a))
               : null;
             const histId = r.books[0]?.prop_id ?? null;
-            // Underdog's own price for the side we are calling, margin removed. Only
-            // Underdog publishes odds, so this column is blank for a market it does
-            // not list — which is honest: there is no market probability, rather
-            // than a market that thinks the chance is zero.
-            const priced = r.books.find((b) => b.over_price !== null && b.under_price !== null);
-            const fair = priced ? devig(priced.over_price, priced.under_price) : null;
-            // A market probability is a probability *of a side*. With no call
-            // there is no side to price, so there is nothing honest to show —
-            // falling through to "over" would silently pick a side the reader
-            // never chose and display it under a header that does not say which.
-            const marketProb = fair === null || play === null ? null : play.side === 'under' ? fair.under : fair.over;
-            // A symmetric price is a correct devig of exactly 0.500, and it is
-            // not an opinion. 397 of Underdog's 434 priced markets sit at
-            // -112/-112 — flat vig on both sides, no side taken. Reporting
-            // that as "market 50%" invites the reader to treat a default as a
-            // second estimate agreeing with ours, so the three cases are told
-            // apart: no price at all, a price with no view, and a real view.
-            const flatVig =
-              priced !== undefined
-              && Number(priced.over_price) === Number(priced.under_price);
-            const gapToMarket = marketDisagreement(play?.hitRate ?? null, marketProb);
-            const f = formOf(r);
-            // When there is a call, show the number the call was made from —
-            // the average anchored toward the line, not the raw one. Showing
-            // the raw mean beside a lean computed from the anchored figure
-            // would print a gap the model never acted on, which is how the
-            // board came to advertise "+3.6 in your favour" when a third of
-            // that was our own measured over-projection.
-            const ours = play
-              ? play.anchored
-              : !f
-                ? null
-                : f.series === 0
-                  ? f.perMap
-                  : f.mean;
-            // The line the play is made against, for the phone card's
-            // "41.5 PrizePicks" figure: the play's app, else the selected app.
-            const lineBook = (callBook ? r.books.find((b) => b.book === callBook) : undefined)
-              ?? (only ? r.books.find((b) => b.book === only) : undefined)
-              ?? r.books[0];
+            // The devigged market probability, the flat-vig check and the
+            // projection's own number were all computed here for the Projected
+            // and Edge columns. Those columns are gone — they showed a model
+            // graded at AUC 0.495 — and with them the work that fed them.
+            //
             // Rows the model has no opinion on are dimmed rather than removed.
             // They still belong here — a line move turns a fair one into a call,
             // and hiding them would hide why the board is quiet — but giving them
@@ -1626,47 +1640,7 @@ export function boardPage(o: {
               <div class="statname">${esc(statLabel(r.stat))}</div>
               <div class="meta">${mapPips(r.league, r.map_start, r.map_end)}${esc(maps(r.map_start, r.map_end))}</div>
             </td>
-                        <td class="c" data-label="Ours">${
-              // The model has a name — Projected — and says what it was built
-              // from (the tooltip here, a line under the record on a phone).
-              ours === null
-                ? '<span class="meta">—</span>'
-                : `${
-                    lineBook
-                      ? `<span class="pv only-sm"><b>${num(lineBook.line)}</b><small>${esc(bookName(lineBook.book))}</small></span>`
-                      : ''
-                  }<span class="pv proj" title="${esc(formNote(f, play))}"><b>${Number(ours).toFixed(1)}</b><small>Projected</small></span>${
-                    // On a phone the edge is the third figure in the strip, the
-                    // same shape as the line and the projection, rather than a
-                    // label bolted under the call tag.
-                    play && play.edge > 0
-                      ? `<span class="pv edgev only-sm"><b>+${play.edge.toFixed(1)}</b><small>Edge</small></span>`
-                      : ''
-                  }`
-            }</td>
-            <td class="c" data-label="Edge">${playCell(play, statusOf(r).why, r, only)}</td>
-            <td class="c" data-label="Record">${
-              // A record, not a percentage, and a defined sample: "11 of last
-              // 12 matches over". This column once read "72%", which every
-              // reader takes as the chance the leg wins; measured against
-              // settled outcomes the calls claimed 58.9% and realised 52.2%,
-              // with no ordering (AUC 0.521). A count of what happened makes no
-              // such promise, and the tooltip says what it is and isn't. On a
-              // phone the projection's reason sits under it.
-              play === null
-                ? '<span class="meta">—</span>'
-                : `<div class="rec" title="${esc(
-                     play.rawOf === null
-                       ? 'Estimated by resampling single maps — too few matches over this exact map range to count directly.'
-                       : `${play.rawWins} of this player's last ${play.rawOf} matches would have gone ${play.side} ` +
-                         `this line (${maps(r.map_start, r.map_end)}). That is what happened before, not the chance it happens ` +
-                         `again: across settled props, plays like this have hit about 52%, near a coin flip.`,
-                   )}">${
-                     play.rawOf === null
-                       ? 'Estimated from single maps'
-                       : `<b>${play.rawWins}</b> of last <b>${play.rawOf}</b> matches ${play.side}`
-                   }</div><div class="why only-sm">${esc(formNote(f, play))}</div>`
-            }</td>
+            <td class="bestcol" data-label="Best line">${bestLineCell(r.books, formOf(r)?.totals)}</td>
             ${showEv ? `<td class="c evcol" data-label="EV">${evCell(play)}</td>` : ''}
             ${columns
               .map((code) => bookCell(r.books, code, only, (b) =>
@@ -1678,7 +1652,6 @@ export function boardPage(o: {
                   Number(b.line)),
                 only ?? callBook))
               .join('')}
-            <td class="c gapcol">${gap}</td>
           </tr>`;
           })
           .join('')}</tbody>

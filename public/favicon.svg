@@ -1,15 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="BropProp">
   <!--
-    The BropProp mark: a broadcast tile with its bottom-right corner cut — the
-    same notch the Over/Under call tag carries on the board — and inside it an
-    up chevron and a down chevron, staggered: over and under, which is the
-    whole of what the app decides.
+    The BropProp mark: an up chevron and a down chevron, staggered — over and
+    under, which is the whole of what the app decides.
 
-    Two colours, both solid, nothing thinner than 3.6 units, because this is
-    seen at 16px far more than at 64. Orange on ink holds on a white tab strip
-    and on a near-black one.
+    No tile behind it. The mark used to sit inside a solid orange block with a
+    notched corner, which read as a coloured square at tab size rather than as
+    a logo, and carried a background the page never actually has. With the
+    block gone the chevrons carry the mark themselves, so they are drawn larger
+    and heavier: nothing here is thinner than 5 units, because this is seen at
+    16px far more often than at 64.
+
+    One colour, and it is the brand orange rather than currentColor, so the
+    mark is the same object wherever it appears. It holds on a white tab strip
+    and on a near-black one, which is the whole reason for choosing an orange
+    with this much weight in it.
   -->
-  <path d="M0 0H32V22L22 32H0Z" fill="#FF5B14"/>
-  <path d="M6.5 15.5 12 10l5.5 5.5" fill="none" stroke="#0B1220" stroke-width="3.6" stroke-linecap="square"/>
-  <path d="M14.5 17.5 20 23l5.5-5.5" fill="none" stroke="#0B1220" stroke-width="3.6" stroke-linecap="square"/>
+  <path d="M3.5 15.5 12 7l8.5 8.5" fill="none" stroke="#FF5B14" stroke-width="5" stroke-linecap="square"/>
+  <path d="M11.5 16.5 20 25l8.5-8.5" fill="none" stroke="#FF5B14" stroke-width="5" stroke-linecap="square"/>
 </svg>
