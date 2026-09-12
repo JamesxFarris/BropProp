@@ -1079,6 +1079,73 @@ buy or scrape. Anything found here can only be confirmed *forward*, by
 letting the logger accumulate more series. That is a structural constraint on
 this whole line of work, not a temporary gap.
 
+### 2026-09-11: the engine, scored properly — and what survived
+
+Three studies, one scorer. `src/results/referee.ts` is now the only way a model
+idea gets marked: Brier, log loss, AUC, a calibration table, and ROI by minimum
+edge at the Power per-leg break-evens (`perLegBreakEven`). Every interval is a
+cluster bootstrap over whole series, and there is deliberately no leg-level
+significance anywhere in it.
+
+**1. The board's own calls lose against the books.** `npm run validate:backtest`
+replays `evaluate()` walk-forward and scores it on the books' real closing
+lines: 3,137 legs over 101 series, **claimed 54.9%, realised 47.2%**, and the
+legs it called returned **−9.5% [−16.4%, −3.2%]** at the per-leg bar an entry
+needs — **−10.4% [−18.3%, −3.3%]** on the held-out later days. Worse than taking
+every under (52.1%). **0 of 213** held-out slices have a positive ROI interval.
+Shrinking (k ≈ 0.4–0.55, fitted early and tested late) fixes how large the
+claims are, not which way they point.
+
+> **The archive looked profitable and was lying.** Scored against walk-forward
+> pseudo-lines the same model reads break-even to +5.5%; against the books on
+> the same 101 series it reads −6.7%. Any estimator less noisy than the stand-in
+> line beats it. **Never validate a line idea on archive pseudo-lines** — they
+> answer "can we beat a naive line", which nobody is offering.
+
+So the board stopped claiming a play on single props (see DESIGN.md).
+
+**2. Team strength does not rescue the projection.** `npm run validate:environment`
+builds walk-forward Elo (`src/results/ratings.ts`; real map winners via
+`npm run env:truth`, bo3.gg). The ratings predict CS2 winners — AUC 0.665,
+calibrated — but are worse than Pinnacle (same favourite on 4 of 10 matched
+fixtures). For props they are worth about a tenth of knowing the winner
+outright: log loss −0.0023 [−0.0033, −0.0013] on the archive, nothing detectable
+on real lines, ROI −2.5% playing the fitted side. Closeness and expected pace
+are null. Not fed into Projected or stack pricing.
+
+**3. Where the apps are wrong: one lead, tracked forward.** `npm run validate:bias`
+is a pre-declared scan (16 slices, two pooled strategies, Holm across every
+tested level). **Nothing survives Holm** on 5.5 days of lines. The one lead with
+a structural cause is regression to the mean: where a line sits **above** the
+player's own prior median, the over hit **37.2% [31.3%, 42.7%]** (24-50 by
+series), and in the archive form-based lines above the long-run median go over
+31–38% across 40k+ legs. Tier-b and high-line-of-a-disagreeing-market are
+weaker echoes of the same thing.
+
+Leads are pre-registered and scored **only on games from 2026-09-12** — they
+were chosen from the days before it. The daily job stores each lead's forward
+record in `lead_score`; the Stats page shows it as "Leads being tested", with
+the sample each needs before it may be acted on (T2: ~280 series).
+
+```bash
+npm run validate:bias                      # the full scan
+npm run validate:bias -- --since=2026-09-12  # the forward window only
+```
+
+**4. The stack is the only measured edge, and now keeps a record.** Every stack
+Build recommends is written to `stack_log` every six hours — played or not,
+because the shape is what is being tested — with its legs, the line each was
+recommended at, P(all win) and the multiplier it must clear. It is graded
+all-must-win when the matches finish (one lost leg settles it, a push voids it,
+a partial map range stays open), and where a slip was placed on exactly those
+legs the app's **quoted** multiplier is linked back. That quote is the half of
+the EV this project cannot compute, and the Stacks card's stake box turns it
+into a quarter-Kelly stake (capped at 2%).
+
+Honest state of that edge: a 5+1 hits roughly 8–11% where a 22x quote needs
+4.5% — but that is 60 series with 13 hits and one screenshot of a payout. The
+record is the point.
+
 ### The scorecard runs itself, daily
 
 The replay above is not a thing to remember to run. It is on a schedule, and

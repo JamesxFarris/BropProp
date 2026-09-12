@@ -277,6 +277,19 @@ changed here: it decides money and deserves its own measurement.
   win percentage ("68% O"): the model's probabilities measured as uncalibrated
   (claimed ~60%, realised ~52%, AUC ≈ 0.5), and a confident percentage is the
   fakest thing the board could print.
+- **2026-09-11 (later)** — The board stopped claiming a play on single props,
+  because the claim was measured and it loses. `npm run validate:backtest`
+  scored every leg the projection called against the books' own closing lines:
+  -9.5% [-16.4%, -3.2%] at the per-leg bar a Power entry needs, -10.4% on the
+  held-out later days, claimed 54.9% against 47.2% realised — worse than taking
+  every under, with 0 of 213 held-out slices positive. So the notched
+  OVER/UNDER tag and the filled take button are gone from board rows; the
+  column is "Edge" and states the gap between the app's line and Projected,
+  and both sides stay takeable because slips are still built by hand (and
+  these apps need two players from two teams anyway). Recommendations moved to
+  Build, where the entry is priced from the measured correlation and tail.
+  Everything else on the row — team bug, line, Projected, record, map pips —
+  is untouched, at the owner's request.
   Personality, next: a bolder mark and wordmark with the tagline "Read the
   line" (not "props with edge", which the single-prop plays have not earned);
   a faint grain, an orange glow behind the mark and a gentle gradient in the
