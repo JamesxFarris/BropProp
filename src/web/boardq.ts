@@ -26,6 +26,15 @@ export type BookLine = {
   /** Underdog pays some legs below a standard one. Null where a book doesn't say. */
   over_mult: number | null;
   under_mult: number | null;
+  /**
+   * The WHOLE payout for this pick, where the book publishes one — Sleeper's
+   * 1.86 or 2.26. Not the same thing as `over_mult` above: that is relative to
+   * a standard leg and needs the book's base ladder, this needs nothing. An
+   * entry made of picks like these pays the product of them, which is why a
+   * Sleeper stack can be priced without anyone typing a quote.
+   */
+  payout_over?: number | null;
+  payout_under?: number | null;
   /** Total drift since this prop was first logged. */
   moved: number | null;
   /** The most recent single step, and when — for the stale-line signal. */
@@ -128,6 +137,7 @@ export async function markets(opts: {
               c.match_title, c.scheduled_at, c.last_seen_at,
               c.over_price, c.under_price, c.over_ok, c.under_ok,
               c.over_multiplier, c.under_multiplier, c.team_name,
+              c.payout_over, c.payout_under,
               -- Selected because it is ordered on. Nothing downstream reads
               -- it; leaving it out of the list is the kind of thing that works
               -- until a Postgres upgrade decides it shouldn't.
@@ -171,6 +181,8 @@ export async function markets(opts: {
                 'under_ok',      b.under_ok,
                 'over_mult',     b.over_multiplier::float8,
                 'under_mult',    b.under_multiplier::float8,
+                'payout_over',   b.payout_over::float8,
+                'payout_under',  b.payout_under::float8,
                 'moved',         b.moved::float8,
                 'last_move',     b.last_move::float8,
                 'last_move_at',  b.last_move_at,

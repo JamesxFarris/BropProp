@@ -2176,12 +2176,26 @@ export function buildPage(o: {
       const odds = o.teamOdds?.get(s.team);
       const partner = s.legs.find((l) => l.team !== s.team);
       const why = odds ? ` Pinnacle has ${esc(s.team)} at ${(odds.pWin * 100).toFixed(0)}% to win.` : '';
+      /**
+       * Where the book publishes what each pick pays — Sleeper does — the
+       * entry's payout is the product of them, so the EV needs nothing typed
+       * in. PrizePicks publishes no payout at all (verified against its feed:
+       * odds_type and promo flags, no multiplier), and Underdog's numbers are
+       * relative to a base ladder it does not publish, so both still need the
+       * quote. The figure is offered, not asserted: it prefills the box so one
+       * tap corrects it if the app says otherwise.
+       */
+      const published = s.legs.every((l) => (l.payout ?? 0) > 0)
+        ? s.legs.reduce((a, l) => a * (l.payout ?? 1), 1)
+        : null;
+      const paysLine = published === null ? '' :
+        ` ${esc(bookName(s.book))} pays <b>${published.toFixed(2)}×</b> on its own numbers — EV <b>${(s.winProb * published).toFixed(2)}×</b> per unit.`;
       return `<div class="stack">
         <div class="evbar">
           <span class="evnum flat">${s.requiredMultiplier.toFixed(2)}×</span>
           <span class="evlab"><b>${s.legs.length}-pick: ${esc(s.team)} ${s.side}s${
             partner ? ` + ${esc(partner.team ?? 'opponent')} ${s.side}` : ''
-          }</b><br>Worth it if your app pays more than ${s.requiredMultiplier.toFixed(1)}×.${why}
+          }</b><br>Worth it if your app pays more than ${s.requiredMultiplier.toFixed(1)}×.${why}${paysLine}
             <form class="kelly" method="post" action="/stack/quote" data-p="${s.winProb.toFixed(5)}">
               <input type="hidden" name="book" value="${esc(s.book)}">
               <input type="hidden" name="match_key" value="${esc(s.matchKey)}">
@@ -2194,6 +2208,7 @@ export function buildPage(o: {
               <input type="hidden" name="prop_ids" value="${s.legs.map((l) => l.propId).join(',')}">
               <input type="hidden" name="sides" value="${s.legs.map((l) => l.play.side).join(',')}">
               If it pays <input name="mult" type="text" inputmode="decimal" autocomplete="off"
+                value="${published === null ? '' : published.toFixed(2)}"
                 aria-label="What your app pays for this slip, as a multiplier">×,
               stake <b>—</b>
               <button class="save" title="Record what the app quoted, so we learn how it prices these">Save</button>

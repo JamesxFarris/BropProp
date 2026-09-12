@@ -60,6 +60,12 @@ export type Candidate = {
   gap: number | null;
   /** What this leg pays relative to a standard one (Underdog discounts some). */
   mult: number;
+  /**
+   * What this pick pays outright, where the book publishes it (Sleeper).
+   * Null elsewhere. An entry of such picks pays the product, so a stack made
+   * of them can be priced with no quote typed in.
+   */
+  payout?: number | null;
   /** p x mult — the whole objective, per leg. */
   value: number;
   matchKey: string;
@@ -700,6 +706,8 @@ export function marketCandidates(
 
       const rawMult = side === 'over' ? mine.over_mult : mine.under_mult;
       const mult = rawMult === null ? 1 : Number(rawMult);
+      const rawPayout = side === 'over' ? mine.payout_over : mine.payout_under;
+      const payout = rawPayout === null || rawPayout === undefined ? null : Number(rawPayout);
       const line = Number(mine.line);
 
       out.push({
@@ -714,7 +722,7 @@ export function marketCandidates(
           breakEven: null, ev: null,
         },
         propId: mine.prop_id,
-        p, mult,
+        p, mult, payout,
         source: 'market',
         gap: null,
         value: p * mult,
