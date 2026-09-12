@@ -697,7 +697,30 @@ export function marketCandidates(
     if (!team) continue;
 
     const odds = teamOdds.get(team);
-    const pUnder = odds ? underProbForTeam(odds.pWin) : MEASURED_UNDER_BASELINE;
+    /**
+     * Where the book prices both sides, ITS number is the marginal — not our
+     * flat team baseline.
+     *
+     * This matters most exactly where a book pays best. A Sleeper pick at 2.12
+     * over / 1.52 under is Sleeper saying the over lands about 40% of the time.
+     * Pricing that leg at our 0.484 and then taking the 2.12 manufactures EV
+     * out of the disagreement: the search would hunt for whichever legs the
+     * book prices longest and call the difference an edge. Measured on the
+     * first live board, that error made Sleeper six-pick stacks read as paying
+     * 24-30x against a 10.9x break-even — an edge that was really just the
+     * book's own opinion being thrown away.
+     *
+     * The stack edge is not a disagreement about legs; it is the ladder
+     * underpricing correlation. So take the book's marginals and let the
+     * measured teammate correlation and tail do the work on top of them.
+     * PrizePicks prices no side, so there the team read stands.
+     */
+    const priced = mine.over_price !== null && mine.under_price !== null
+      ? devig(Number(mine.over_price), Number(mine.under_price))
+      : null;
+    const pUnder = priced
+      ? priced.under
+      : odds ? underProbForTeam(odds.pWin) : MEASURED_UNDER_BASELINE;
     const better: 'over' | 'under' = pUnder >= 0.5 ? 'under' : 'over';
     const sides: ('over' | 'under')[] = opts.bothSides ? ['under', 'over'] : [better];
     for (const side of sides) {
