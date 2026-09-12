@@ -193,6 +193,32 @@ independent opinion. Two implications:
    2026-09-11, it is now `true`). It leans off even money on 46 markets where Underdog is flat, so
    `fairLine` gets a price on markets where it has none today.
 
+### What an entry pays (MEASURED 2026-09-12)
+
+`GET https://api.sleeper.app/payouts` — no auth, and it answers with the whole
+table:
+
+```json
+{"all_in":      {"2":2,"3":5,"4":9,"5":19,"6":34,"7":49,"8":99},
+ "all_in_pick_8":{"2":2,"3":5,"4":9,"5":19,"6":29,"7":49,"8":99},
+ "classic":     {"5":{"4":1,"5":9}, "6":{"5":1.5,"6":19}, "8":{"7":3,"8":59}},
+ "version": 7}
+```
+
+`all_in` is the Power equivalent (every pick must win); `classic` is the flex
+ladder that still pays something at n-1.
+
+**The per-pick `payout_multiplier` is NOT the entry payout.** This was recorded
+the other way round on 2026-09-11 ("an entry pays the product, no base ladder"),
+on the strength of one screenshot, and it is wrong. The multiplier is Sleeper's
+**marginal on that leg** — the number to devig, and nothing else. The product of
+six of them (1.78^6 = 31.8) lands near the 34x ladder because the ladder is set
+so a typical pick compounds into it, which is exactly why the mistake survived.
+
+Using the multiplier as both the leg's price and the entry's payout counts the
+same number twice and manufactures EV. The ladder lives in `PUBLISHED_LADDER`
+(`src/web/optimize.ts`); re-read the endpoint if `version` moves off 7.
+
 ### Settlement
 
 Per Sleeper's "Player Picks CS2 Scoring Rules" (updated 2026-08-11, DOCUMENTED):

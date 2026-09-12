@@ -1,6 +1,6 @@
 import { q } from '../db.js';
 import { markets } from '../web/boardq.js';
-import { marketCandidates, findStacks, DEFAULT_SIZES } from '../web/optimize.js';
+import { marketCandidates, findStacks, STACK_SIZES } from '../web/optimize.js';
 import { teamWinProbs } from '../web/matchodds.js';
 import { KNOWN_BOOKS, type BookCode } from '../books.js';
 
@@ -10,10 +10,13 @@ import { KNOWN_BOOKS, type BookCode } from '../books.js';
  * Stacks are priced from measured correlation and a measured tail, not from a
  * projection: teammates' results move together (rho 0.324 over 8,923 series),
  * and after five teammates all clear their lines the opponent follows 87% of
- * the time. That says a five-plus-one hits roughly 8-11%, against a 22x quote
- * needing 4.5%. It rests on 60 series and one screenshot of a payout, which is
- * not enough to bet the house on — so every stack the Build page recommends is
- * written down here and graded when its matches finish.
+ * the time (831 series, `validate:tail`). Scored end to end, a five-plus-one
+ * goes all-over 7.8% of the time on the archive's walk-forward lines and 13.0%
+ * on real closing lines (70 series), against the 2.9% a 34x six-pick needs.
+ *
+ * That is still our own arithmetic about games nobody has watched us call in
+ * advance — so every stack the Build page recommends is written down here and
+ * graded when its matches finish.
  *
  * Two jobs:
  *  - `logStacks()` rebuilds exactly what Build shows and upserts today's row
@@ -83,7 +86,7 @@ export async function logStacks(): Promise<number> {
     // measured tail doing the pricing.
     const pool = marketCandidates(rows, teamOdds, book, { bothSides: true });
     if (pool.length === 0) continue;
-    for (const size of DEFAULT_SIZES) {
+    for (const size of STACK_SIZES) {
       for (const s of findStacks(pool, size, book).slice(0, 3)) {
         const legs: LoggedLeg[] = s.legs.map((l) => ({
           prop_id: l.propId,

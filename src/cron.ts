@@ -180,10 +180,12 @@ let stacking = false;
  * Write down the stacks Build is recommending, and grade the ones whose
  * matches have finished.
  *
- * The stack is the only shape here with a measured edge, and the measurement
- * is thin — 60 series, and one screenshot of a 22x payout. This turns it into
- * a record: what was recommended, what it needed, what the app paid where a
- * slip was placed, and whether it came in.
+ * The stack is the only shape here with a measured edge. The measurement is no
+ * longer thin — the opponent tail is 831 series (`validate:tail`) and Sleeper
+ * publishes its payout ladder — but it is all still OUR arithmetic about shapes
+ * nobody has watched settle forward. This turns it into a record: what was
+ * recommended, what it needed, what the app paid where a slip was placed, and
+ * whether it came in.
  */
 async function stacksTick() {
   if (stacking) return;

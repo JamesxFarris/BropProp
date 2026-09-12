@@ -8,6 +8,7 @@ import { staleLine } from './stale.js';
 import type { Counters, ScoreRow, LeadRow, StackRecord } from './statsq.js';
 import type { ClvSummary } from './clv.js';
 import type { Entry, Stack } from './optimize.js';
+import { PUBLISHED_LADDER } from './optimize.js';
 import type { TeamOdds } from './matchodds.js';
 import { isComboHandle } from '../normalize.js';
 import { devig } from '../devig.js';
@@ -2177,19 +2178,28 @@ export function buildPage(o: {
       const partner = s.legs.find((l) => l.team !== s.team);
       const why = odds ? ` Pinnacle has ${esc(s.team)} at ${(odds.pWin * 100).toFixed(0)}% to win.` : '';
       /**
-       * Where the book publishes what each pick pays — Sleeper does — the
-       * entry's payout is the product of them, so the EV needs nothing typed
-       * in. PrizePicks publishes no payout at all (verified against its feed:
-       * odds_type and promo flags, no multiplier), and Underdog's numbers are
-       * relative to a base ladder it does not publish, so both still need the
-       * quote. The figure is offered, not asserted: it prefills the box so one
-       * tap corrects it if the app says otherwise.
+       * What this book pays for an entry of this many legs, where it publishes
+       * a ladder. Sleeper does, at api.sleeper.app/payouts, with no auth.
+       *
+       * NO BACKTICKS IN THIS COMMENT — it lives inside a template literal, and
+       * a backtick in here ends the string as far as the bundler is concerned.
+       *
+       * This used to multiply the per-pick multipliers together, reasoning that
+       * a book pricing every pick must pay their product. Sleeper's own
+       * endpoint says otherwise: all_in pays a FLAT rate by entry size, and the
+       * per-pick figure is its marginal on that leg — the thing that
+       * marketCandidates devigs to price the leg in the first place. Using it
+       * twice was counting the same number as both the odds and the payout.
+       *
+       * PrizePicks publishes no payout at all (verified against its feed:
+       * odds_type and promo flags, no multiplier), and Underdog's multipliers
+       * are relative to a base ladder it does not publish, so both still need
+       * the quote. The figure is offered, not asserted: it prefills the box so
+       * one tap corrects it if the app says otherwise.
        */
-      const published = s.legs.every((l) => (l.payout ?? 0) > 0)
-        ? s.legs.reduce((a, l) => a * (l.payout ?? 1), 1)
-        : null;
+      const published = PUBLISHED_LADDER[s.book]?.[s.legs.length] ?? null;
       const paysLine = published === null ? '' :
-        ` ${esc(bookName(s.book))} pays <b>${published.toFixed(2)}×</b> on its own numbers — EV <b>${(s.winProb * published).toFixed(2)}×</b> per unit.`;
+        ` ${esc(bookName(s.book))} pays <b>${published.toFixed(2)}×</b> for a ${s.legs.length}-pick — EV <b>${(s.winProb * published).toFixed(2)}×</b> per unit.`;
       return `<div class="stack">
         <div class="evbar">
           <span class="evnum flat">${s.requiredMultiplier.toFixed(2)}×</span>

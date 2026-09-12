@@ -16,7 +16,7 @@ import {
 import { boardPage, edgesPage, slipsPage, historyPage, buildPage, loginPage, statsPage } from './render.js';
 import { counters, historyByWeek, coverage, record, sources, scoreHistory, leadScores, stackRecord } from './statsq.js';
 import { clv } from './clv.js';
-import { buildEntries, findStacks, marketCandidates, DEFAULT_SIZES } from './optimize.js';
+import { buildEntries, findStacks, marketCandidates, STACK_SIZES } from './optimize.js';
 import { teamWinProbs } from './matchodds.js';
 import { recordStackQuote } from '../results/stack_log.js';
 import { projectMarkets } from './projection.js';
@@ -414,7 +414,7 @@ const server = createServer(async (req, res) => {
       // overs, and pairs each with an opponent on the SAME side, which the
       // measured tail makes far stronger than the opponent's own better side.
       const pool = marketCandidates(rows, teamOdds, book, { bothSides: true });
-      const stacks = DEFAULT_SIZES.flatMap((n) => findStacks(pool, n, book).slice(0, 3));
+      const stacks = STACK_SIZES.flatMap((n) => findStacks(pool, n, book).slice(0, 3));
 
       return html(res, buildPage({ entries, stacks, teamOdds, book, lockedBook, picks, health: h }));
     }

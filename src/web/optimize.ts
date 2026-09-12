@@ -429,6 +429,49 @@ export function bestEntry(
  */
 export const DEFAULT_SIZES = [3, 5, 6];
 
+/**
+ * Stack sizes: 5 and 6 only. A three-leg stack does not clear its own bar.
+ *
+ * Two teammates plus an opponent, every leg on the same side, measured end to
+ * end on the CS2 archive at walk-forward lines: it goes all-over **16.8%** of
+ * the time (4,215 series, CI [15.9, 17.8]) against the **20%** a 5x three-pick
+ * needs. On real closing lines it is 21.9% against the same 20%, but on 70
+ * series. One estimate is tight and negative, the other loose and barely
+ * positive, so the shape is not recommended.
+ *
+ * Correlation compounds faster than the ladder does, which is why the edge only
+ * appears once enough legs sit on it. The same measurement puts 4+1 at 10.1%
+ * against a 5.3% bar and 5+1 at 7.8% against 2.9%.
+ *
+ * `DEFAULT_SIZES` keeps its 3: a three-pick ENTRY of uncorrelated legs is a
+ * different product from a three-leg STACK, and is not what this measured.
+ */
+export const STACK_SIZES = [5, 6];
+
+/**
+ * What an all-must-win entry pays by leg count, where the book publishes it.
+ *
+ * Only Sleeper does: `GET api.sleeper.app/payouts`, unauthenticated, answering
+ * with `all_in` (every pick must win — the Power equivalent), `all_in_pick_8`,
+ * `classic` (a flex ladder that pays something at n-1) and its own `version`,
+ * 7 when this was read. Below is `all_in`, verified 2026-09-12.
+ *
+ * This is a hardcoded copy of a published table, which `config.ts` warns
+ * against for good reason. The difference is that this one is checkable: the
+ * endpoint is free, needs no auth and stamps a version, so drift is detectable
+ * rather than silent. Re-read it if `version` moves off 7.
+ *
+ * A per-pick multiplier is NOT this. Sleeper's 1.48-2.2 per option is its
+ * marginal on that leg — what `marketCandidates` devigs — and multiplying them
+ * together only looked right because the ladder is set so a typical pick
+ * compounds into it (1.78^6 = 31.8 against a 34x six-pick). PrizePicks and
+ * Underdog publish nothing comparable and stay absent, so the page asks for a
+ * quote rather than inventing one.
+ */
+export const PUBLISHED_LADDER: Record<string, Record<number, number>> = {
+  sleeper: { 2: 2, 3: 5, 4: 9, 5: 19, 6: 34, 7: 49, 8: 99 },
+};
+
 export function buildEntries(
   rows: MarketRow[],
   form: Map<string, FormStats>,
