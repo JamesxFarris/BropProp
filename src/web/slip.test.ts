@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   normCdf, normInv, winCountDistribution, probAllWin, requiredMultiplier,
-  slipEV, marginalLegWorthIt, RHO, RHO_TEAMMATE, RHO_OPPONENT, type SlipLeg,
+  slipEV, marginalLegWorthIt, RHO_TEAMMATE, RHO_OPPONENT, type SlipLeg,
   partnerGivenCore, PARTNER_SHIFT,
 } from './slip.js';
 
@@ -147,10 +147,11 @@ test('the correlation constants are the measured ones, converted properly', () =
   near(RHO_OPPONENT, Math.sin(Math.PI * 0.055 / 2), 1e-9);
   assert.ok(RHO_TEAMMATE > 0.32 && RHO_TEAMMATE < 0.33, String(RHO_TEAMMATE));
   assert.ok(RHO_OPPONENT > 0.08 && RHO_OPPONENT < 0.09, String(RHO_OPPONENT));
-  // The default sits between them and nearer the opponent value, because
-  // over-crediting correlation makes a slip look better than it is.
-  assert.ok(RHO > RHO_OPPONENT && RHO < RHO_TEAMMATE);
-  assert.ok(RHO - RHO_OPPONENT < RHO_TEAMMATE - RHO, 'default must lean conservative');
+  // There was a blended `RHO` asserted here too, for legs whose team was
+  // unknown. Nothing in the app ever read it — `winCountDistribution` loads the
+  // two factors separately and gives an unknown team its own bucket — so both
+  // the constant and the assertions about it are gone.
+  assert.ok(RHO_TEAMMATE > RHO_OPPONENT, 'teammates must correlate more than opponents');
 });
 
 test('an empty slip is a certainty, not a crash', () => {

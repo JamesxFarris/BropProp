@@ -63,22 +63,15 @@
 export const RHO_TEAMMATE = Math.sin(Math.PI * 0.210 / 2);   // ≈ 0.324
 export const RHO_OPPONENT = Math.sin(Math.PI * 0.055 / 2);   // ≈ 0.086
 
-/**
- * The correlation used when we do not know whether two legs are teammates.
- *
- * `MarketRow` does not yet carry a team, so the board cannot tell a teammate
- * pair from an opponent pair and this sits between the two. It is deliberately
- * nearer the opponent figure: over-crediting correlation inflates P(all win),
- * which shrinks the break-even multiplier and makes a slip look better than it
- * is. Under-crediting only costs a bet that was there.
- *
- * **Plumbing team through is the single highest-value change left**, because
- * the whole edge lives in the teammate number. See docs/STRATEGY.md.
+/*
+ * There was a blended `RHO` here, sitting between the teammate and opponent
+ * figures for legs whose team was unknown, and a `RHO_OPPOSED = -RHO`. Both are
+ * gone: `MarketRow` carries a team now (`boardq.ts`), `winCountDistribution`
+ * loads the two factors separately, and an unknown team is given its own bucket
+ * so it gets the weaker opponent correlation rather than a guess. Nothing read
+ * either constant, and the comment on them still advertised plumbing team
+ * through as the highest-value change left, years after it was done.
  */
-export const RHO = RHO_OPPONENT + 0.25 * (RHO_TEAMMATE - RHO_OPPONENT);
-
-/** Opposite sides of one match move against each other; same sides together. */
-export const RHO_OPPOSED = -RHO;
 
 const SQRT2 = Math.SQRT2;
 
@@ -223,30 +216,57 @@ export function winCountDistribution(legs: SlipLeg[], rho?: number): number[] {
       byTeam.set(key, arr);
     }
 
+    /*
+     * Per-leg constants, hoisted out of both quadrature loops.
+     *
+     * `thr` depends only on the leg's own probability and `sign` only on its
+     * direction — neither moves with the factors being integrated. They used to
+     * be computed in the innermost loop, which ran `normInv` 241 x 241 times per
+     * leg: 348,486 calls where 6 would do. A six-leg stack took 93ms, and the
+     * Build page searches a few hundred of them.
+     */
+    const teams = [...byTeam.values()].map((team) => team.map((leg) => ({
+      thr: normInv(1 - leg.p),
+      sign: leg.side === majority ? 1 : -1,
+    })));
+
+    /*
+     * One reusable buffer per team, rather than a fresh array per leg per node.
+     *
+     * The conditional distribution used to be rebuilt with
+     * `new Array(...).fill(0)` in the innermost loop, which allocated roughly
+     * 241 x 241 x legs short-lived arrays for a single slip — about 348,000 for
+     * a six-leg stack, all of it garbage. The update is done in place instead,
+     * walking k downwards so each slot is read before it is overwritten.
+     *
+     * Still bit-identical: every slot is the same two-term sum as before, and
+     * IEEE-754 addition is commutative, so the order of the two terms is free.
+     */
+    const bufs = teams.map((team) => new Array<number>(team.length + 1).fill(0));
+
     let dist = new Array(group.length + 1).fill(0);
     for (let n = 0; n < NODES; n++) {
       const m = nodes[n]!;
       // Teams are conditionally independent given the match factor, so each
       // team's own distribution is built separately and convolved.
       let matchDist: number[] = [1];
-      for (const team of byTeam.values()) {
+      for (let ti = 0; ti < teams.length; ti++) {
+        const team = teams[ti]!;
+        const buf = bufs[ti]!;
         const teamDist = new Array(team.length + 1).fill(0);
         for (let tn = 0; tn < NODES; tn++) {
           const t = nodes[tn]!;
-          let cond: number[] = [1];
+          buf[0] = 1;
+          let len = 1;
           for (const leg of team) {
-            const sign = leg.side === majority ? 1 : -1;
-            const shift = sign * (sa * m + sb * t);
-            const thr = normInv(1 - leg.p);
-            const pw = 1 - normCdf((thr - shift) / se);
-            const next = new Array(cond.length + 1).fill(0);
-            for (let k = 0; k < cond.length; k++) {
-              next[k]! += cond[k]! * (1 - pw);
-              next[k + 1]! += cond[k]! * pw;
-            }
-            cond = next;
+            const shift = leg.sign * (sa * m + sb * t);
+            const pw = 1 - normCdf((leg.thr - shift) / se);
+            buf[len] = 0;
+            for (let k = len; k >= 1; k--) buf[k] = buf[k]! * (1 - pw) + buf[k - 1]! * pw;
+            buf[0] = buf[0]! * (1 - pw);
+            len++;
           }
-          for (let k = 0; k < cond.length; k++) teamDist[k]! += weights[tn]! * cond[k]!;
+          for (let k = 0; k < len; k++) teamDist[k]! += weights[tn]! * buf[k]!;
         }
         matchDist = convolve(matchDist, teamDist);
       }

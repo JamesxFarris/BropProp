@@ -183,9 +183,16 @@ export async function gradeStacks(): Promise<{ graded: number; pending: number }
   let graded = 0;
   for (const row of pending) {
     const legs = row.legs;
+    // Stats can arrive late; give a stack a week before calling it unreadable.
+    const stale = Date.now() - new Date(row.logged_at).getTime() > 7 * 24 * H;
     // A match needs time to finish and its stats time to land.
+    //
+    // The staleness escape has to be checked HERE and not only further down: a
+    // stack whose legs all have a null `sched` (a match the books listed with no
+    // scheduled time) has `last === 0`, which failed this guard every run and
+    // never reached the stale check below — so it sat 'pending' for ever.
     const last = Math.max(...legs.map((l) => l.sched ?? 0));
-    if (!Number.isFinite(last) || last === 0 || Date.now() - last < 6 * H) continue;
+    if (!stale && (!Number.isFinite(last) || last === 0 || Date.now() - last < 6 * H)) continue;
 
     const states: LegState[] = [];
     for (const leg of legs) {
@@ -213,8 +220,6 @@ export async function gradeStacks(): Promise<{ graded: number; pending: number }
     }
 
     const outcome = stackOutcome(states);
-    // Stats can arrive late; give a stack a week before calling it unreadable.
-    const stale = Date.now() - new Date(row.logged_at).getTime() > 7 * 24 * H;
     if (outcome === 'pending' && !stale) continue;
 
     await q(
