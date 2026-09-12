@@ -338,3 +338,72 @@ Not worth building:
   - Pick6 is now an Akamai wall rather than 404s.
   - Betr has a real API host, but it returns 401.
   - OddsPapi, Bovada and Pinnacle are match-only, and so is Cloudbet (new).
+
+## 2026-09-12 re-probe: is there a fourth book?
+
+Asked again, because a reference line is worth having even from a book we would
+never place a bet at. **Answer: no — not without an account.** Sleeper remains
+the only one that was wrongly ruled out.
+
+| App | Result (MEASURED 2026-09-12) |
+|---|---|
+| **Boom Fantasy** | Endpoints FOUND — `production-api.boomfantasy.com/api/v1/contests/active` and `/api/v1/contests/lobby`. Both return **401 `JWT_MISSING`**. Needs an account. |
+| **Betr** | `api.fantasy.betr.app/graphql` answers POST (GET is 405) but returns **401 Unauthorized** on `{__typename}`. Needs an account. |
+| **Onyx** | No public feed found. `onyxpicks.com` redirects to `/login`; `onyx.bet` is a 114-byte placeholder; `onyxodds.com` is an odds-screen product and was flaky. |
+| **ParlayPlay, HotStreak** | 403 Cloudflare, unchanged. Not probed further by design. |
+| **Chalkboard, Vivid Picks** | No public API host resolves. Their sites are marketing pages (Webflow / Tinybird analytics) with no client bundle to read. |
+| **Dabble** | **Open, no auth, and it works** — see below. |
+
+### Dabble, in detail
+
+Three unauthenticated GETs, and markets come embedded in the fixtures response
+(there is no separate markets endpoint — every `/sport-fixtures/{id}/*` path is
+404):
+
+```
+GET https://api.dabble.com/competitions/active                  # 29 competitions
+GET https://api.dabble.com/competitions/{competitionId}/sport-fixtures
+    CS2 = acd5b3f6-dd7a-484f-a4e5-a747badb32c6
+    LoL = 086211fd-5445-4955-be1b-9ed7ba84641d
+```
+
+Coverage on 2026-09-12, and this is the problem: **1 CS2 fixture** (28 markets)
+against 14 matches on each of PrizePicks, Underdog and Sleeper. LoL has 2
+fixtures, mostly assists.
+
+Of the 28 CS2 markets, **10 are `pandascore_player_kill_over_under_map_one_and_map_two`**
+— which is exactly our `(player, kills, 1, 2)` key, so it would join. The rest
+are per-map (`game_N`) kills and headshots. The line is embedded in the market
+NAME ("HeavyGod game 1 kills 15.5"), and the market object carries **no price**;
+a selections/prices call would have to be found to devig it.
+
+**Verdict: not worth an adapter yet.** Ten joinable markets a day against our
+~150-200 is about 6% more coverage, for a book we cannot place a stack at.
+Revisit if its esports coverage grows.
+
+### The finding that actually matters
+
+Dabble's markets carry `"resultingType": "pandascore_game_1_player_kill_over_under"`.
+**Dabble is settling — and probably pricing — off PandaScore**, one of the two
+B2B originators this doc already identified (with Rimble) as selling to
+sportsbooks *and DFS platforms*.
+
+That is the missing explanation for a result we already have. The
+market-anchored consensus arm was graded and failed flat — 74-73 over 147
+series, p = 1.00 ([[bropprop-consensus]]) — and Sleeper's prices were found to
+lean toward Underdog's number 29 times in 33. The reason is now visible: these
+books are not independent opinions being polled. They are **one supplier's
+opinion, resold several times.** A "consensus" across them is one vote wearing
+four hats, which is why averaging them predicts nothing.
+
+Two consequences worth carrying:
+
+1. **Stop trying to build an edge out of cross-book agreement.** There is no
+   crowd here to be wise. Line *shopping* still works (books disagree on 48.7%
+   of shared markets, mean 0.84 units) because that is arithmetic, not opinion —
+   but cross-book *disagreement as a signal* has now failed twice for what turns
+   out to be a structural reason.
+2. **The only genuinely independent player-prop price would have to come from
+   outside this supplier set**, which means Rimble or PandaScore directly, at
+   B2B prices — and if PP/UD/Sleeper already buy from them, it would not be
+   independent of the books either.
