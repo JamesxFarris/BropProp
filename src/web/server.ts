@@ -18,6 +18,7 @@ import { counters, historyByWeek, coverage, record, sources, scoreHistory, leadS
 import { clv } from './clv.js';
 import { buildEntries, findStacks, marketCandidates, DEFAULT_SIZES } from './optimize.js';
 import { teamWinProbs } from './matchodds.js';
+import { recordStackQuote } from '../results/stack_log.js';
 import { projectMarkets } from './projection.js';
 import { KNOWN_BOOKS, type BookCode } from '../books.js';
 
@@ -270,6 +271,25 @@ const server = createServer(async (req, res) => {
           }
         }
         return redirect(res, '/board');
+      }
+      // What the app quoted for a stack, recorded whether or not it is played.
+      // Without it every EV here is half a calculation: we know what a stack
+      // needs, never what it pays.
+      if (url.pathname === '/stack/quote') {
+        await recordStackQuote({
+          book: body.get('book') ?? '',
+          matchKey: body.get('match_key') ?? '',
+          team: body.get('team') ?? '',
+          side: body.get('side') === 'under' ? 'under' : 'over',
+          size: Number(body.get('size')),
+          propIds: (body.get('prop_ids') ?? '').split(',').map(Number).filter(Number.isFinite),
+          sides: (body.get('sides') ?? '').split(','),
+          winProb: numOrNull(body.get('win_prob')),
+          indepProb: numOrNull(body.get('indep_prob')),
+          requiredMult: numOrNull(body.get('required_mult')),
+          quoted: Number(body.get('mult')),
+        }).catch(() => {});
+        return redirect(res, '/build');
       }
       if (url.pathname === '/slip/clear') {
         await clearOpenSlip();

@@ -638,6 +638,29 @@ export function findStacks(
  */
 const MARKET_STATS = new Set(['kills', 'headshots']);
 
+/**
+ * And which LEAGUE, because correlation is a property of the game, not the
+ * stat. Measured on the archive with `npm run validate:market`, walk-forward:
+ *
+ *   CS2 kills      teammate phi 0.168, and the tail runs with it — after four
+ *                  teammates land, the next follows 79% and an opponent 71%.
+ *                  A 5+1 all-over hits 7.8% against a 4.5% bar.
+ *   LOL kills      teammate phi **0.005**. No correlation at all: after three
+ *                  teammates land, the next is 45.6% — a coin flip. The same
+ *                  4+1 shape hits 1.6% against a 5.0% bar, so stacking LoL
+ *                  kills is a losing shape however the legs are chosen.
+ *   LOL assists    teammate phi 0.178, but opponents move AGAINST each other
+ *                  (phi -0.146): assists are shared credit on kills, and kills
+ *                  are traded between the teams. A same-side opponent leg is
+ *                  the worst leg available; the shape wants the opposite side,
+ *                  which the builder cannot express yet.
+ *
+ * So only CS2 is stackable today. LoL assists stay out until the
+ * opposite-side partner is measured and the builder can price it; LoL kills
+ * stay out because there is nothing there to price.
+ */
+const STACKABLE_LEAGUES = new Set(['CS2']);
+
 export function marketCandidates(
   rows: MarketRow[],
   teamOdds: Map<string, TeamOdds>,
@@ -658,6 +681,10 @@ export function marketCandidates(
     // mixture below prices ONE team, so a combo does not fit it.
     if (r.is_combo) continue;
     if (!MARKET_STATS.has(r.stat)) continue;
+    // …and the league, because correlation belongs to the game. LoL kills
+    // measured phi 0.005 — stacking them is the flat ladder applied to
+    // independent legs, which is the bet the ladder is priced to win.
+    if (!STACKABLE_LEAGUES.has(r.league)) continue;
     const mine = r.books.find((b) => b.book === book);
     if (!mine) continue;
     const team = mine.team ?? r.books.find((b) => b.team)?.team ?? null;

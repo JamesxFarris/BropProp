@@ -553,16 +553,21 @@ ${o.rail ? '<input type="checkbox" id="slipsheet" class="sheet-toggle" aria-labe
   // a measured tail, where a single prop's rests on a projection that has not
   // shown skill. Quarter, and capped, because even the measured number carries
   // a wide interval and the app can reprice the slip.
-  document.querySelectorAll('.kelly input').forEach(function (inp) {
+  // Only the typed multiplier: the form carries hidden fields too, and the
+  // first of those is what a bare "kelly input" selector would have found.
+  // (No backticks in here — this script lives inside a template literal.)
+  document.querySelectorAll('.kelly input[name="mult"]').forEach(function (inp) {
     var box = inp.closest('.kelly'), out = box.querySelector('b');
     var p = Number(box.getAttribute('data-p'));
     function size() {
       var m = Number(String(inp.value).replace(',', '.').replace(/[x×\s]/gi, ''));
       if (!(m > 1) || !(p > 0)) { out.textContent = '—'; return; }
       var kelly = (p * m - 1) / (m - 1);
+      // EV is the return per unit staked, stake included: 1.00x is break-even.
       out.textContent = kelly <= 0
-        ? 'nothing: that pays less than it needs'
-        : (Math.min(kelly / 4, 0.02) * 100).toFixed(1) + '% of your bankroll';
+        ? 'nothing: at ' + m + '× it pays less than it needs'
+        : (Math.min(kelly / 4, 0.02) * 100).toFixed(1) + '% of your bankroll (EV '
+          + (p * m).toFixed(2) + '× per unit)';
     }
     inp.addEventListener('input', size);
     size();
@@ -2177,9 +2182,22 @@ export function buildPage(o: {
           <span class="evlab"><b>${s.legs.length}-pick: ${esc(s.team)} ${s.side}s${
             partner ? ` + ${esc(partner.team ?? 'opponent')} ${s.side}` : ''
           }</b><br>Worth it if your app pays more than ${s.requiredMultiplier.toFixed(1)}×.${why}
-            <span class="kelly" data-p="${s.winProb.toFixed(5)}">If it pays
-              <input type="text" inputmode="decimal" autocomplete="off" aria-label="What your app pays for this slip, as a multiplier">×,
-              stake <b>—</b></span></span>
+            <form class="kelly" method="post" action="/stack/quote" data-p="${s.winProb.toFixed(5)}">
+              <input type="hidden" name="book" value="${esc(s.book)}">
+              <input type="hidden" name="match_key" value="${esc(s.matchKey)}">
+              <input type="hidden" name="team" value="${esc(s.team)}">
+              <input type="hidden" name="side" value="${esc(s.side)}">
+              <input type="hidden" name="size" value="${s.legs.length}">
+              <input type="hidden" name="win_prob" value="${s.winProb}">
+              <input type="hidden" name="indep_prob" value="${s.winProbIndependent}">
+              <input type="hidden" name="required_mult" value="${s.requiredMultiplier}">
+              <input type="hidden" name="prop_ids" value="${s.legs.map((l) => l.propId).join(',')}">
+              <input type="hidden" name="sides" value="${s.legs.map((l) => l.play.side).join(',')}">
+              If it pays <input name="mult" type="text" inputmode="decimal" autocomplete="off"
+                aria-label="What your app pays for this slip, as a multiplier">×,
+              stake <b>—</b>
+              <button class="save" title="Record what the app quoted, so we learn how it prices these">Save</button>
+            </form></span>
           <span class="grow"></span>
           <form method="post" action="/build/stage" class="inline">
             <input type="hidden" name="prop_ids" value="${s.legs.map((l) => l.propId).join(',')}">

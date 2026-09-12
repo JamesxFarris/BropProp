@@ -1751,6 +1751,16 @@ body.searching .tick { display: none; }
 }
 .kelly input:focus { outline: 2px solid var(--focus); outline-offset: 1px; }
 .kelly b { color: var(--text); font-weight: 600; }
+/* Saving the quote is the point of the box: what the app pays is the half of
+   the EV this project cannot compute, so it is worth keeping even unplayed. */
+.kelly .save {
+  margin-left: 8px; padding: 3px 10px;
+  font-family: var(--display); font-size: 11.5px; font-weight: 600;
+  letter-spacing: .08em; text-transform: uppercase;
+  color: var(--text-2); background: var(--surface);
+  border: 1px solid var(--line-2); border-radius: var(--r-control); cursor: pointer;
+}
+.kelly .save:hover { color: var(--text); border-color: var(--text-3); }
 
 /* The board picks no side for you. Both buttons carry the same quiet outline;
    taking one fills it. A filled button was a recommendation, and the legs the

@@ -34,7 +34,8 @@
     "validate:bias": "tsx src/results/validate_bias.ts",
     "validate:backtest": "tsx src/results/validate_backtest.ts",
     "env:truth": "tsx src/results/env_truth.ts",
-    "validate:environment": "tsx src/results/validate_environment.ts"
+    "validate:environment": "tsx src/results/validate_environment.ts",
+    "validate:market": "tsx src/results/validate_market.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.7",

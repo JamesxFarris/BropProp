@@ -114,6 +114,62 @@ export async function logStacks(): Promise<number> {
   return written;
 }
 
+/**
+ * Record what the app actually quoted for a stack.
+ *
+ * The multiplier is the half of the EV this project cannot compute: the apps
+ * discount a correlated slip (a 6-pick spread across six teams paid the full
+ * 37.5x, while five on one team was quoted 22x), and how steeply they discount
+ * it decides whether a stack is a good bet. So a quote is worth storing even
+ * when the slip is not placed — that is the only way the discount curve gets
+ * learned.
+ *
+ * The row is keyed like the daily job's, so a quote lands on today's row for
+ * that stack if the job already wrote one, and creates it otherwise. Legs are
+ * rebuilt from the props themselves rather than trusted from the form, so a
+ * captured row grades exactly like a logged one.
+ */
+export async function recordStackQuote(o: {
+  book: string; matchKey: string; team: string; side: string; size: number;
+  propIds: number[]; sides: string[];
+  winProb: number | null; indepProb: number | null; requiredMult: number | null;
+  quoted: number;
+}): Promise<void> {
+  if (!(o.quoted > 1) || o.propIds.length === 0) return;
+  const props = await q<{
+    prop_id: number; canon: string; handle: string; league: string; stat: string;
+    ms: number; me: number; line: string | null; sched: string | null;
+  }>(
+    `SELECT p.id AS prop_id, pl.canon_handle AS canon, pl.handle, p.league, p.stat,
+            p.map_start AS ms, p.map_end AS me,
+            (SELECT ps.line::text FROM prop_snapshot ps
+              WHERE ps.prop_id = p.id ORDER BY ps.observed_at DESC LIMIT 1) AS line,
+            extract(epoch from m.scheduled_at) * 1000 AS sched
+       FROM prop p
+       JOIN player pl ON pl.id = p.player_id
+       LEFT JOIN match m ON m.id = p.match_id
+      WHERE p.id = ANY($1::int[])`,
+    [o.propIds],
+  );
+  if (props.length === 0) return;
+  const sideOf = new Map(o.propIds.map((id, i) => [id, o.sides[i] === 'under' ? 'under' : 'over']));
+  const legs = props.map((p) => ({
+    prop_id: p.prop_id, canon: p.canon, handle: p.handle, stat: p.stat,
+    ms: p.ms, me: p.me, line: p.line === null ? 0 : Number(p.line),
+    side: sideOf.get(p.prop_id) ?? 'over',
+    sched: p.sched === null ? null : Number(p.sched),
+  }));
+  await q(
+    `INSERT INTO stack_log (book, league, match_key, team, side, size, legs,
+                            win_prob, indep_prob, required_mult, quoted_mult)
+     VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11)
+     ON CONFLICT (day, book, match_key, team, side, size) DO UPDATE SET
+       quoted_mult = EXCLUDED.quoted_mult, logged_at = now()`,
+    [o.book, props[0]!.league, o.matchKey, o.team, o.side, o.size, JSON.stringify(legs),
+     o.winProb, o.indepProb, o.requiredMult, o.quoted],
+  );
+}
+
 const H = 3600e3;
 
 /** Settle every stack whose matches have finished, and link any placed slip. */

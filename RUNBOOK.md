@@ -1146,6 +1146,51 @@ Honest state of that edge: a 5+1 hits roughly 8–11% where a 22x quote needs
 4.5% — but that is 60 series with 13 hits and one screenshot of a payout. The
 record is the point.
 
+### Which markets are stackable — measured 2026-09-12, and only CS2 is
+
+A stack is not a forecast: it is the gap between how correlated teammates'
+results are and how flat the payout ladder is. So correlation is a property of
+the GAME, not of the stat, and every market has to earn its place in the
+builder on its own data. `npm run validate:market` measures one, walk-forward:
+the base over rate, teammate and opponent pair phi, the tail (after k teammates
+land the same side, does the next teammate follow? does an opponent?), and all
+four k+1 shapes against the Power bars.
+
+```bash
+npm run validate:market -- --league=CS2 --stat=kills    --maps=1-2
+npm run validate:market -- --league=LOL --stat=assists  --maps=1-3
+```
+
+| market | teammate phi | opponent phi | after 3 land: next mate / an opponent | best k+1 shape vs its bar | verdict |
+|---|---|---|---|---|---|
+| CS2 kills, maps 1-2 | **0.168** | +0.059 | 74.4% / 67.9% | same-side 5+1 **7.8%** vs 4.5% | stack it, same-side partner |
+| LOL kills, maps 1-3 | **0.005** | −0.019 | 45.6% / 47.3% | same-side 4+1 1.6% vs 5.0% | **do not stack** — nothing to price |
+| LOL assists, maps 1-2 | **0.178** | **−0.227** | 75.9% / 37.8% | OPPOSITE 4+1 13.6% vs 5.0% | strong, but no app lists this range |
+| LOL assists, maps 1-3 | 0.178 | −0.146 | 69.7% / 41.6% | OPPOSITE 4+1 10.2% vs 5.0%; 2+1 15.6% vs **16.7%** | not yet — 427 series, and the 3-pick is under its bar |
+
+Three things fall out of this, and `STACKABLE_LEAGUES` in `optimize.ts` is CS2
+only because of them:
+
+1. **LoL kills are structurally dead for stacking.** phi 0.005 is no
+   correlation at all — after three teammates clear their lines the next is a
+   coin flip. Any LoL kills stack is the payout ladder's flat rate applied to
+   independent legs, which is exactly the bet the ladder is priced to win.
+2. **Assists invert the partner rule.** An assist is shared credit on a kill,
+   and kills are traded between the two teams, so teammates move together
+   (75.9%) while opponents move against each other (37.8%). A same-side
+   opponent leg — the one the builder always adds — is the *worst* leg on the
+   board there. Shipping assists needs a per-market partner sign, which the
+   builder cannot express yet.
+3. **Underdog lists assists over maps 1-3**, the range where the evidence is
+   thinnest (427 series) and the 3-pick shape sits under its bar. The strong
+   numbers are maps 1-2, which nobody offers.
+
+And the standing caution: all of this is walk-forward pseudo-lines. CS2's tail
+was afterwards confirmed against the books' own closing lines (5+1 all-over
+11.6% there against 7.8% here); LoL's has not been, and the model backtest
+showed how flattering a noisy stand-in line can be. Before assists ship:
+per-market partner sign, then real-line confirmation.
+
 ### The scorecard runs itself, daily
 
 The replay above is not a thing to remember to run. It is on a schedule, and
