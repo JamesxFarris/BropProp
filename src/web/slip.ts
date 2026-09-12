@@ -133,6 +133,32 @@ export type SlipLeg = {
   team?: string | null;
 };
 
+/**
+ * P(exactly k of one team's legs win), given the factor value they share.
+ *
+ * Written into `buf` in place and returning how many entries are live, because
+ * this is the innermost loop of the quadrature: allocating a fresh array here
+ * cost 4.75x the total runtime. Walking k downwards means each slot is read
+ * before it is overwritten, so one buffer suffices.
+ */
+function fillTeam(
+  team: { thr: number; sign: number }[],
+  buf: number[],
+  x: number,
+  se: number,
+): number {
+  buf[0] = 1;
+  let len = 1;
+  for (const leg of team) {
+    const pw = 1 - normCdf((leg.thr - leg.sign * x) / se);
+    buf[len] = 0;
+    for (let k = len; k >= 1; k--) buf[k] = buf[k]! * (1 - pw) + buf[k - 1]! * pw;
+    buf[0] = buf[0]! * (1 - pw);
+    len++;
+  }
+  return len;
+}
+
 /** Convolve two independent win-count distributions. */
 function convolve(a: number[], b: number[]): number[] {
   const out = new Array(a.length + b.length - 1).fill(0);
@@ -236,15 +262,35 @@ export function winCountDistribution(legs: SlipLeg[], rho?: number): number[] {
      * The conditional distribution used to be rebuilt with
      * `new Array(...).fill(0)` in the innermost loop, which allocated roughly
      * 241 x 241 x legs short-lived arrays for a single slip — about 348,000 for
-     * a six-leg stack, all of it garbage. The update is done in place instead,
+     * a six-leg stack, all of it garbage. `fillTeam` updates in place instead,
      * walking k downwards so each slot is read before it is overwritten.
-     *
-     * Still bit-identical: every slot is the same two-term sum as before, and
-     * IEEE-754 addition is commutative, so the order of the two terms is free.
      */
     const bufs = teams.map((team) => new Array<number>(team.length + 1).fill(0));
 
     let dist = new Array(group.length + 1).fill(0);
+
+    /*
+     * ONE TEAM IN THIS MATCH — the two factors add, exactly.
+     *
+     * A leg's shift is sign * (sqrt(a)*M + sqrt(b)*T). With only one team in
+     * the group there is a single T, so every leg sees the same combination of
+     * two independent normals — which is itself normal with variance a + b.
+     * The nested pair of integrals is therefore exactly one integral at
+     * rho = a + b, which for the fitted constants is RHO_TEAMMATE: a stack on
+     * one team is a one-factor model at the teammate correlation, as it should
+     * be. 241 nodes instead of 241 x 241, and every stack core takes this path.
+     */
+    if (teams.length === 1) {
+      const team = teams[0]!, buf = bufs[0]!;
+      const sg = Math.sqrt(a + b);
+      for (let n = 0; n < NODES; n++) {
+        const len = fillTeam(team, buf, sg * nodes[n]!, se);
+        for (let k = 0; k < len; k++) dist[k]! += weights[n]! * buf[k]!;
+      }
+      total = convolve(total, dist);
+      continue;
+    }
+
     for (let n = 0; n < NODES; n++) {
       const m = nodes[n]!;
       // Teams are conditionally independent given the match factor, so each
@@ -253,19 +299,29 @@ export function winCountDistribution(legs: SlipLeg[], rho?: number): number[] {
       for (let ti = 0; ti < teams.length; ti++) {
         const team = teams[ti]!;
         const buf = bufs[ti]!;
+
+        /*
+         * A ONE-LEG TEAM needs no integral over T at all.
+         *
+         * Its win probability is the Gaussian-CDF convolution
+         *   integral phi(t) * Phi(v*t - u) dt  =  Phi(-u / sqrt(1 + v^2)),
+         * an exact identity. This is the common case rather than a corner: a
+         * leg with an unknown team is given its own bucket, so an entry spread
+         * across players lands here on every leg. It is also more accurate than
+         * the quadrature it replaces, which truncated at +-6 sigma.
+         */
+        if (team.length === 1) {
+          const leg = team[0]!;
+          const u = (leg.thr - leg.sign * sa * m) / se;
+          const v = (leg.sign * sb) / se;
+          const p = normCdf(-u / Math.sqrt(1 + v * v));
+          matchDist = convolve(matchDist, [1 - p, p]);
+          continue;
+        }
+
         const teamDist = new Array(team.length + 1).fill(0);
         for (let tn = 0; tn < NODES; tn++) {
-          const t = nodes[tn]!;
-          buf[0] = 1;
-          let len = 1;
-          for (const leg of team) {
-            const shift = leg.sign * (sa * m + sb * t);
-            const pw = 1 - normCdf((leg.thr - shift) / se);
-            buf[len] = 0;
-            for (let k = len; k >= 1; k--) buf[k] = buf[k]! * (1 - pw) + buf[k - 1]! * pw;
-            buf[0] = buf[0]! * (1 - pw);
-            len++;
-          }
+          const len = fillTeam(team, buf, sa * m + sb * nodes[tn]!, se);
           for (let k = 0; k < len; k++) teamDist[k]! += weights[tn]! * buf[k]!;
         }
         matchDist = convolve(matchDist, teamDist);
