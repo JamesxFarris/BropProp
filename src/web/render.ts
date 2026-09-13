@@ -13,7 +13,7 @@ import type { TeamOdds } from './matchodds.js';
 import { isComboHandle } from '../normalize.js';
 import { devig } from '../devig.js';
 import { bookMeta, bookName, bookShort, orderBooks, KNOWN_BOOKS, type BookCode } from '../books.js';
-import { bestEdge, fairLine, betterSide } from './consensus.js';
+import { bestEdge, betterSide } from './consensus.js';
 
 export const esc = (s: unknown) =>
   String(s ?? '').replace(/[&<>"']/g, (c) =>
@@ -955,103 +955,6 @@ function staleCell(r: MarketRow): string {
   </div>`;
 }
 
-/**
- * Where this market sits against the market's own fair line.
- *
- * **Graded 2026-09-10, and it does not win.** `npm run validate:consensus`
- * scored the side this cell names across every settled market both books
- * priced: 74-73 over 147 independent series, an exact sign test of p = 1.00.
- * Bigger gaps did WORSE, not better — 58.2% at 0.5-0.9 units against 45.7% at
- * 1.0-1.9 — which is backwards from the theory and is the strongest single
- * piece of evidence against it. The arm that should have been strongest,
- * where Underdog states an actual lean rather than flat vig, was the worst at
- * 30-37 series.
- *
- * So this is kept for the same reason `staleCell` is: knowing which app has
- * the cheaper number is worth something when placing a bet you had already
- * decided on. It is an observation about two prices, not a claim about a
- * player, and the tooltip says the measurement.
- */
-function edgeCell(r: MarketRow, form?: FormStats): string {
-  const maps = r.map_end - r.map_start + 1;
-  const seed = `${r.canon_handle}|${r.stat}|${r.map_start}|${r.map_end}`;
-  const fl = fairLine(r.books, form, maps, seed);
-  const e = bestEdge(r.books, form, maps, seed);
-  if (!e || !fl) return '';
-  // Where the anchor came from decides what this cell is allowed to claim. A
-  // crowd is several books agreeing; a priced book is one book's own opinion,
-  // which is a weaker thing and must not be described as a market consensus.
-  const why = fl.method === 'crowd'
-    ? `the other ${fl.n - 1} books median ${num(e.fair)}`
-    : `${esc(bookName(fl.from ?? ''))}, the only book here quoting odds, puts the coin flip at ${num(e.fair)}`;
-  return `<div class="edge ${e.side === 'over' ? 'o' : 'u'}"
-    title="${esc(bookName(e.book))} prices this at ${num(e.line)} while ${why}. That makes its ${e.side} ${e.gap.toFixed(1)} cheaper than the market. MEASURED AND IT DOES NOT WIN: 74-73 across 147 independent series, p = 1.00. Useful for choosing where to place a bet you were making anyway; not a reason to make one.">
-    <span class="edge-k">${esc(bookShort(e.book))} ${e.side === 'over' ? 'O' : 'U'}</span>
-    <span class="edge-v">${e.gap.toFixed(1)} off ${num(e.fair)}</span>
-  </div>`;
-}
-
-function playCell(
-  play: Play | null,
-  why: NoCall | null,
-  r: { is_combo: boolean; stat: string; handle: string },
-  /** The single app on screen, if there is one. */
-  only?: string | null,
-): string {
-  if (!play) {
-    // "No play", with the engine's reason ("waiting on history", "priced
-    // fair") in the tooltip rather than on the row.
-    return `<span class="meta nocall" title="${esc(why ? noCallText(why, r) : 'No projection for this prop')}">—</span>`;
-  }
-  // The hit rate has its own column and the sample size sits under the "ours"
-  // chip, so repeating either here was printing the same fact three times
-  // across one row. What is left is the one thing neither column says: how far
-  // the number is from the line, in the units the market is quoted in.
-  const basis = play.method === 'maps' ? 'modelled' : '';
-  // Name the app and its number only when more than one app can be taken from.
-  // With a single app selected the same figure already sits in the line column
-  // two cells away — the other apps' columns are there to compare, and the
-  // call is never made on them — and printing it twice was most of why a row
-  // was hard to read.
-  // With an app selected the call is made at that app's own line only (see
-  // `optionsFor`), so it never names another app: a PrizePicks card that said
-  // "Under UD 8.5" was a PrizePicks prop advertising an Underdog bet.
-  const at =
-    only === null || only === undefined
-      ? `<span class="at card-hide">${esc(bookShort(play.book))} ${play.line.toFixed(1)}</span>`
-      : '';
-  // The detail that used to take a second line is the tag's tooltip now, so
-  // the row stays one horizontal line. Said plainly: the distance between our
-  // figure and the line. Where that distance is negative (about 7% of calls —
-  // a few outsized games drag a right-skewed average across the line while
-  // most series land on the called side) it says what actually drove the call
-  // instead of printing a gap with a minus sign in front of it.
-  const detail = [
-    play.edge > 0
-      ? `Projected ${play.edge.toFixed(1)} ${play.side === 'over' ? 'above' : 'below'} the line`
-      : `Most of this player's series land ${play.side} the line, though a few outsized games pull the average the other way`,
-    basis ? `Modelled from ${play.sample} single maps, because too few series played this exact map range` : '',
-  ].filter(Boolean).join('. ');
-  /**
-   * The board states the gap and stops there — no OVER/UNDER tag, no side
-   * picked for you.
-   *
-   * Scored against the books' own closing lines (`npm run validate:backtest`),
-   * legs the projection called returned -9.5% [-16.4%, -3.2%] at the per-leg
-   * bar a Power entry needs, and -10.4% on the held-out later days: claimed
-   * 54.9%, realised 47.2%, worse than taking every under. A tag and a filled
-   * button were a recommendation the measurement does not support. What is
-   * left is the arithmetic — how far our projection sits from this line — and
-   * the reader can see which way that points from the two numbers beside it.
-   * Recommendations live on Build, where the whole entry is priced from the
-   * correlation and the tail that were measured.
-   */
-  const edge = play.edge > 0
-    ? `<span class="pedge">+${play.edge.toFixed(1)}<small>edge</small></span>`
-    : '<span class="meta">—</span>';
-  return `<div class="play" title="${esc(detail)}">${edge}${at}</div>`;
-}
-
 // ------------------------------------------------------------------ board --
 
 /**
@@ -1646,7 +1549,8 @@ export function boardPage(o: {
               .map((code) => bookCell(r.books, code, only, (b) =>
                 ouButtons(b.prop_id, back, b.side,
                   offeredSides(r.books, code, restrict),
-                  // No side is marked as the one to take: see `playCell`.
+                  // No side is marked as the one to take. The Best line cell says where each
+                  // side is cheapest; it never says which one to back.
                   'both',
                   { over: b.over_ok, under: b.under_ok },
                   Number(b.line)),
