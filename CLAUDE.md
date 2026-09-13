@@ -64,12 +64,25 @@ the leg count is in the thousands, count the series before believing it.
 | Team ratings (walk-forward Elo) | Null for props. Kept out of pricing. |
 | Line movement / cross-book lag | **Below the bar.** 54.5% on 84 series (CI straddles 50), and you cannot take a line that already moved. |
 | 3-leg stacks | **-EV, dropped.** 16.8% vs a 20% bar. `STACK_SIZES = [5, 6]`. |
-| **Correlated stacks (5+1, 4+1)** | **The one live edge.** Teammate rho 0.324 over 8,923 series; opponent follows a 5-over core 87% of the time over 831 series, stable across five half-years. |
+| **Correlated stacks at PrizePicks** | **DEAD — priced out, measured 2026-09-13.** Eleven controlled quotes: the entry multiplier falls x0.667 per extra leg from the same match (37.5x with none shared, 7.25x with six legs in one match). Every shape comes back 0.41-0.75 EV on the model; the 5+1 is 0.57 on archive rates and 0.94 on the thin real-line estimate. The correlation is real (same-game effect 2.82x) — PrizePicks simply charges for it. |
+| **Correlated stacks at Sleeper / Underdog** | **OPEN.** Sleeper publishes one flat ladder (34x for six) with no sport dimension. If its entry builder does not discount same-match legs, the 5+1 is roughly 2.5x EV. One quote on the six-legs-one-match shape answers it. |
 
-The open question is **not** the measurement any more. It is whether the apps
-*permit* five legs from one team and how steeply they discount it — PrizePicks
-once quoted 22x on a shape listing at 37.5x. Nothing in any unauthenticated feed
-answers that, which is what `stack_log`'s quote capture exists to learn.
+**PrizePicks is answered.** On 2026-09-13 a controlled sweep (`/calibrate`,
+table `payout_quote`) measured its discount directly:
+
+| x = legs - distinct matches | 0 | 1 | 2 | 3 | 4 | 5 |
+|---|---|---|---|---|---|---|
+| six-leg Power Play quote | 37.50 | 35.50 | 25.00 | 16.50 | 10.50 | 7.25 |
+
+`quote = 37.5 x 1.453 x 0.667^x` fits every concentration within 3%. The team
+split barely matters (5+1 7.25x; 4+2 and 3+3 both 7.75x) — it keys on the
+**match**. Flipping one leg to the other side nearly doubles the quote (13.50x),
+so direction is priced too. The 3-pick base today is **6x**, not the 5x assumed
+everywhere; the 5-pick base is 20x as assumed. The remembered "22x for a six-leg
+one-team stack" fits none of this and should be treated as a different shape or
+a misremembered number.
+
+The live question is whether **Sleeper and Underdog** discount the same way.
 
 ## Honesty rules for anything user-facing
 
@@ -130,6 +143,18 @@ answers that, which is what `stack_log`'s quote capture exists to learn.
 - Small, verifiable steps. Say what you verified and what you assumed.
 
 ## Why the edge exists at all — and why it is perishable
+
+> **Corrected 2026-09-13: the conclusion of this section is wrong for
+> PrizePicks.** The board really is 100% standard lines, but the defence was
+> never on the board. It is in the entry builder, which cuts the payout by a
+> third for every extra same-match leg, so a six-leg single-match stack listing
+> at 37.5x is quoted 7.25x. That discount absorbs the correlation almost exactly:
+> across zero to five shared legs the model's EV stays flat at 0.58-0.73. "The
+> undefended ladder is the fulcrum" does not hold at PrizePicks. It may still
+> hold at Sleeper, whose ladder is published flat, and that is the test that
+> remains. The section is kept as written because it shows a true measurement
+> (100% standard lines) leading to a wrong inference (no defence) — worth
+> recognising the next time a board looks undefended.
 
 For weeks the honest position here was "the stack measures +EV, every alternative
 explanation has been eliminated, and nobody can say why it would be true." There
