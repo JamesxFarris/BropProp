@@ -208,3 +208,31 @@ game perfectly and merely measures the same event on a different date. It
 returned "96% of the lift is drift" and reversed the project's conclusion for
 about ten minutes. **Each player must come from a DIFFERENT game.** If REAL and
 the null come out nearly equal, suspect the null before believing the result.
+
+### Known bias: both correlation constants carry ~15% drift
+
+The placebo above has a consequence for the shipped parameters. `RHO_TEAMMATE`
+(0.324, from phi 0.210) was fitted on walk-forward lines, and the scatter null
+says 15% of that phi is drift rather than shared-game:
+
+```
+teammate phi  REAL 0.2074 -> rho 0.320      SCATTER 0.0314 -> rho 0.049
+same-game-only rho would be ~0.273          (48,499 teammate pairs)
+```
+
+Two independent statistics agree on the size: 15% of pairwise phi, 16% of the
+5-core lift.
+
+**This is not yet corrected, on purpose.** `PARTNER_SHIFT` — the 87% opponent
+tail — was measured on the same construction and carries the same contamination.
+Lowering rho alone would raise required multipliers while leaving the tail
+overstated, which is an internally inconsistent model: worse than a known bias
+whose sign is understood.
+
+The bias points one way: **both constants over-credit correlation, so every
+`winProb` is optimistic and every `requiredMultiplier` is too low.** Stacks look
+slightly better than they are. Treat the shipped bar as a floor.
+
+Correcting it means re-fitting rho AND the partner shift together against the
+scatter null, in one change, with the tests repinned. Worth doing before any
+stack is sized off the model rather than off a quoted multiplier.
