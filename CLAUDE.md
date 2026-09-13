@@ -128,3 +128,47 @@ answers that, which is what `stack_log`'s quote capture exists to learn.
 - Report results faithfully, including the ones that kill your own idea. Every
   entry in the graded table above was something someone here wanted to be true.
 - Small, verifiable steps. Say what you verified and what you assumed.
+
+## Why the edge exists at all — and why it is perishable
+
+For weeks the honest position here was "the stack measures +EV, every alternative
+explanation has been eliminated, and nobody can say why it would be true." There
+is now an answer, and it is structural rather than statistical.
+
+**PrizePicks withdraws the flat ladder from the sports where stacking is famous.**
+Measured directly off its partner feed on 2026-09-13, counting `odds_type`:
+
+| league | lines | standard | % standard |
+|---|---|---|---|
+| **CS2** | 172 | 172 | **100.0%** |
+| NFL | 8,719 | 1,801 | 20.7% |
+| MLB | 3,419 | 155 | 4.5% |
+| soccer | — | — | ~3% |
+
+Demon and goblin lines carry their own multipliers and cannot be assembled into
+a flat-ladder entry. So on MLB — where same-team stacking is the oldest strategy
+in daily fantasy — 95.5% of the board simply cannot be stacked at a fixed price.
+On CS2, all of it can.
+
+**The flat ladder is the thing being exploited, and it survives only where nobody
+exploits it.** That is the mechanism: not that CS2 players are more correlated
+than baseball hitters (they are, but only about 3x), but that CS2 is the one
+board where the payout structure has not been defended. The correlation is the
+lever; the undefended ladder is the fulcrum.
+
+Two consequences worth carrying:
+
+1. **The edge is perishable.** If PrizePicks notices CS2 stacking it will do what
+   it did to MLB and NFL: convert the board to demon/goblin pricing. The standard
+   line share is therefore a health metric worth watching — a fall from 100% is
+   the warning that the shape is being priced out. Nothing about our own maths
+   will tell us; the board will.
+2. **It explains the MLB control's result twice over.** MLB stacks measured weak
+   partly because opponents there are uncorrelated (phi -0.007 against CS2's
+   +0.059) and partly because the ladder is not on offer to stack against.
+
+Sleeper, by contrast, publishes ONE ladder for every sport: `GET /payouts` is
+`version: 7` with no sport dimension — `all_in` 5:19x, 6:34x applied to CS2, MLB,
+NFL and NHL alike. If the correlation edge transfers to another sport at all, it
+transfers at Sleeper first, because the ladder there has not been withdrawn
+anywhere.
