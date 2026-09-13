@@ -13,13 +13,15 @@ import {
   openPicks, addPick, removePick, placeSlip, clearOpenSlip, slips, slipPicks,
   openSlipBook, WrongBookError, SideUnavailableError,
 } from './picks.js';
-import { boardPage, edgesPage, slipsPage, historyPage, buildPage, loginPage, statsPage } from './render.js';
+import { boardPage, edgesPage, slipsPage, historyPage, buildPage, loginPage, statsPage, calibratePage } from './render.js';
 import { counters, historyByWeek, coverage, record, sources, scoreHistory, leadScores, stackRecord } from './statsq.js';
 import { clv } from './clv.js';
 import { buildEntries, findStacks, marketCandidates, STACK_SIZES } from './optimize.js';
 import { teamWinProbs } from './matchodds.js';
 import { recordStackQuote } from '../results/stack_log.js';
 import { projectMarkets } from './projection.js';
+import { calibrationPlan } from './calibrate.js';
+import { recordPayoutQuote, quotes, discountCurve } from '../results/payout_quote.js';
 import { KNOWN_BOOKS, type BookCode } from '../books.js';
 
 const PORT = Number(process.env.PORT ?? 3000);
@@ -291,6 +293,35 @@ const server = createServer(async (req, res) => {
         }).catch(() => {});
         return redirect(res, '/build');
       }
+      /**
+       * A quote from the calibration sweep. No stake, ever.
+       *
+       * The legs arrive as JSON rather than as prop ids because this records
+       * the SHAPE that was quoted, and the shape has to survive the board
+       * moving underneath it. A prop id resolved an hour later can be a
+       * different line, which would silently re-label the concentration this
+       * quote was measured at.
+       */
+      if (url.pathname === '/calibrate/quote') {
+        let legs: unknown = [];
+        try { legs = JSON.parse(body.get('legs') ?? '[]'); } catch { legs = []; }
+        await recordPayoutQuote({
+          book: body.get('book') ?? '',
+          quoted: Number(body.get('mult')),
+          note: body.get('label') ?? null,
+          entry: {
+            id: '', label: body.get('label') ?? '', goal: '',
+            size: Number(body.get('size')),
+            matches: Number(body.get('matches')),
+            excess: Number(body.get('excess')),
+            maxPerTeam: Number(body.get('max_per_team')),
+            maxPerMatch: Number(body.get('max_per_match')),
+            sameSide: body.get('same_side') === '1',
+            legs: Array.isArray(legs) ? legs as never : [],
+          },
+        }).catch(() => {});
+        return redirect(res, '/calibrate');
+      }
       if (url.pathname === '/slip/clear') {
         await clearOpenSlip();
         return redirect(res, back);
@@ -418,6 +449,27 @@ const server = createServer(async (req, res) => {
       const stacks = STACK_SIZES.flatMap((n) => findStacks(pool, n, book).slice(0, 3));
 
       return html(res, buildPage({ entries, stacks, teamOdds, book, lockedBook, picks, health: h }));
+    }
+
+    /**
+     * The payout calibration sweep — a research page, not a daily one.
+     *
+     * Deliberately off the tab bar. It is a sitting you do once to measure what
+     * the apps charge for concentration, and putting it beside Board and Build
+     * would suggest it is something to check.
+     */
+    if (url.pathname === '/calibrate') {
+      const bookParam = url.searchParams.get('book');
+      const book: BookCode =
+        lockedBook ??
+        (bookParam && KNOWN_BOOKS.includes(bookParam) ? bookParam : 'prizepicks');
+      const rows = await markets({ league: filters.league, book, matched: false, search: null });
+      const [h, captured, curve] = await Promise.all([
+        health(filters.league),
+        quotes().catch(() => []),
+        discountCurve().catch(() => []),
+      ]);
+      return html(res, calibratePage({ plan: calibrationPlan(rows, book), book, captured, curve, health: h }));
     }
 
     if (url.pathname === '/stats') {

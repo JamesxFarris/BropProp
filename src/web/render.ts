@@ -2054,7 +2054,8 @@ export function buildPage(o: {
    */
   const stacksCard = !o.stacks || o.stacks.length === 0 ? '' : `<div class="card">
     <div class="card-head"><h2>Stacks</h2>
-      <span class="sub">take one when your app pays more than the number shown</span></div>
+      <span class="sub">take one when your app pays more than the number shown ·
+        <a href="/calibrate">calibrate payouts</a></span></div>
     ${o.stacks.map((s) => {
       const odds = o.teamOdds?.get(s.team);
       const partner = s.legs.find((l) => l.team !== s.team);
@@ -2739,4 +2740,101 @@ export function statsPage(o: {
   </div>`;
 
   return shell({ title: 'Stats', active: 'stats', health: o.health, body });
+}
+
+// ------------------------------------------------------------- calibrate --
+
+/**
+ * The payout calibration sweep.
+ *
+ * One page, one sitting, no money. The apps discount an entry whose legs share
+ * a match, and the size of that discount decides whether a stack needs to hit
+ * 2.9% or 4.5% — which in turn decides whether the forward record settles in
+ * three weeks or eight months. It cannot be computed and no feed publishes it,
+ * so it has to be read off the app by hand, once, carefully.
+ *
+ * The page exists because "collect some quotes" is a bad instruction. Which
+ * entries, in what order, holding what constant — that is the whole difficulty,
+ * and it is the part a page can do for you. Build what it says, read the
+ * multiplier, type it in, move on.
+ */
+export function calibratePage(o: {
+  plan: import('./calibrate.js').CalPlan;
+  book: BookCode;
+  captured: import('../results/payout_quote.js').QuoteRow[];
+  curve: Awaited<ReturnType<typeof import('../results/payout_quote.js').discountCurve>>;
+  health: Health;
+}): string {
+  const legRow = (l: import('./calibrate.js').CalLeg) => `<tr>
+    <td class="idcol"><div class="name">${esc(l.handle)}</div>
+      <div class="meta">${esc(l.team ?? '—')} · ${esc(l.matchKey)}</div></td>
+    <td class="statcol"><div class="sub2">${esc(statLabel(l.stat))}</div>
+      <div class="meta">${esc(l.maps)}</div></td>
+    <td class="callcol"><div class="play ${l.side === 'over' ? 'o' : 'u'}">
+      <span class="dir">${l.side === 'over' ? 'Over' : 'Under'}</span>
+      <span class="at">${l.line.toFixed(1)}</span></div></td>
+  </tr>`;
+
+  const cards = o.plan.entries.map((e, i) => `<div class="card cal">
+    <div class="card-head">
+      <h2>${i + 1}. ${esc(e.label)}</h2>
+      <span class="sub">${e.size} legs · ${e.matches} match${e.matches === 1 ? '' : 'es'} ·
+        <b>${e.excess}</b> excess · biggest team block ${e.maxPerTeam}${e.sameSide ? '' : ' · mixed sides'}</span>
+    </div>
+    <p class="note">${esc(e.goal)}</p>
+    <div class="scroll cards-sm"><table class="stack-sm entry-table"><tbody>
+      ${e.legs.map(legRow).join('')}
+    </tbody></table></div>
+    <form method="post" action="/calibrate/quote" class="kelly calform">
+      <input type="hidden" name="book" value="${esc(o.book)}">
+      <input type="hidden" name="size" value="${e.size}">
+      <input type="hidden" name="matches" value="${e.matches}">
+      <input type="hidden" name="excess" value="${e.excess}">
+      <input type="hidden" name="max_per_team" value="${e.maxPerTeam}">
+      <input type="hidden" name="max_per_match" value="${e.maxPerMatch}">
+      <input type="hidden" name="same_side" value="${e.sameSide ? '1' : '0'}">
+      <input type="hidden" name="legs" value="${esc(JSON.stringify(e.legs))}">
+      <input type="hidden" name="label" value="${esc(e.label)}">
+      ${esc(bookName(o.book))} quotes <input name="mult" type="text" inputmode="decimal"
+        autocomplete="off" aria-label="The multiplier this app quotes for this entry">×
+      <button class="save">Save</button>
+    </form>
+  </div>`).join('');
+
+  const gaps = o.plan.gaps.length === 0 ? '' : `<div class="card">
+    <div class="card-head"><h2>Not buildable right now</h2></div>
+    ${o.plan.gaps.map((g) => `<p class="note"><b>${esc(g.label)}</b> — ${esc(g.why)}</p>`).join('')}
+  </div>`;
+
+  const fitted = o.curve.length === 0 ? '' : `<div class="card">
+    <div class="card-head"><h2>What the quotes say so far</h2>
+      <span class="sub">a fit needs three different concentrations at one leg count</span></div>
+    <div class="scroll"><table class="board-table"><thead><tr>
+      <th scope="col">App</th><th scope="col" class="c">Legs</th>
+      <th scope="col" class="c">Quotes</th><th scope="col" class="c">Excess spanned</th>
+      <th scope="col" class="c">Discount per excess leg</th><th scope="col">Points</th>
+    </tr></thead><tbody>${o.curve.map((c) => `<tr>
+      <td>${esc(bookName(c.book as BookCode))}</td>
+      <td class="c">${c.size}</td>
+      <td class="c">${c.n}</td>
+      <td class="c">0–${c.spanned}</td>
+      <td class="c"><b>${c.perExcess === null ? '—' : `${(c.perExcess * 100).toFixed(1)}%`}</b></td>
+      <td class="meta">${c.points.map((p) => `x${p.excess}: ${p.quoted.toFixed(2)}×`).join(' · ')}</td>
+    </tr>`).join('')}</tbody></table></div>
+  </div>`;
+
+  const body = `<div class="card">
+    <div class="card-head"><h2>Payout calibration</h2>
+      <span class="sub">${o.captured.length} quote${o.captured.length === 1 ? '' : 's'} captured</span></div>
+    <p class="note">Build each entry below in ${esc(bookName(o.book))}, read the multiplier it
+      shows you, type it in and save. <strong>Place nothing — no stake is needed and none is
+      taken.</strong> The apps cut the payout when legs share a match, and how steeply decides
+      whether a stack is worth taking at all. It is the one number this app cannot work out for
+      itself, and it only has to be measured properly once.</p>
+    <p class="note">Every entry holds something constant on purpose, so the order matters more
+      than the count. The target match is <b>${esc(o.plan.targetMatch ?? '—')}</b>.</p>
+  </div>
+  ${gaps}${cards}${fitted}`;
+
+  return shell({ title: 'Calibrate', active: 'none', health: o.health, body });
 }

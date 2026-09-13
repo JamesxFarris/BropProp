@@ -42,6 +42,17 @@ the leg count is in the thousands, count the series before believing it.
 - **The bar is the ladder, not 50%.** Per-leg break-even is 58.5% (3-pick at
   5x), 55.5% (5-pick at 19x), 55.6% (6-pick at 34x). A 54% signal is a losing
   signal here.
+- **Check independence at the base rate before calling anything an edge.**
+  A 6-pick at 34x needs 2.94%, and independent legs at p give p^6 — so any base
+  over-rate above 34^(-1/6) = **55.6%** clears that bar with no correlation at
+  all. Run as a control on MLB, this method reported a 5+1 hits shape at 6.85%
+  against a 2.94% bar: an apparent 2.3x edge that was purely an unpriced
+  favourite, base rate 61.4%, independence 5.86%, lift 1.17. Report **lift =
+  realised / independent-at-the-same-base-rate** as the headline, never the
+  realised rate against the ladder. `independenceBar()` and
+  `clearsOnBaseRateAlone()` in `slip.ts` do the arithmetic. CS2 kills maps 1-2
+  survives this (base 47.8%, independence 1.19%, realised 7.7%, lift 6.5x) — but
+  by luck of where the line convention sits, not because anything enforced it.
 
 ## What has already been graded — don't re-litigate
 

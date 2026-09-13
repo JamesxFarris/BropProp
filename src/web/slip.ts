@@ -448,3 +448,39 @@ export function partnerGivenCore(pPartner: number, coreSize: number, side: 'over
   const p = Math.min(1 - 1e-9, Math.max(1e-9, pPartner));
   return normCdf(normInv(p) + table[k]!);
 }
+
+/**
+ * The per-leg probability at which INDEPENDENCE alone clears a payout.
+ *
+ * `payout^(-1/n)`. A 6-pick at a flat 34x needs 2.94%, and independent legs at
+ * p give p^6 — so any leg probability above 34^(-1/6) = 55.6% beats that bar
+ * with no correlation whatsoever. For a 5-pick at 19x the threshold is 54.5%.
+ *
+ * This exists because the method manufactured exactly that error once. Run on
+ * MLB as a control, it reported a 5+1 hits shape at 6.85% against a 2.94% bar —
+ * an apparent 2.3x edge that was entirely a base-rate artifact: the walk-forward
+ * base over-rate was 61.4%, independence alone gives 5.86%, and the correlation
+ * lift was 1.17. A pure unpriced favourite wearing a correlation costume.
+ *
+ * So a shape is only evidence of correlation when its realised rate materially
+ * exceeds independence AT ITS OWN BASE RATE. Compare `lift`, never the realised
+ * rate against the ladder. CS2 kills maps 1-2 survives this check — base rate
+ * 47.8%, independence 1.19%, realised 7.7%, lift 6.5x — but it survives by
+ * luck of where the line convention happens to sit, not because anything in the
+ * code enforced it. Now something does.
+ *
+ * Use it before admitting any new market, league or shape.
+ */
+export function independenceBar(payout: number, legs: number): number {
+  if (!(payout > 1) || !(legs >= 1)) return NaN;
+  return Math.pow(1 / payout, 1 / legs);
+}
+
+/**
+ * Does independence alone already clear this payout at this base rate?
+ *
+ * True means the shape proves nothing: report the lift, not the edge.
+ */
+export function clearsOnBaseRateAlone(baseRate: number, payout: number, legs: number): boolean {
+  return baseRate >= independenceBar(payout, legs);
+}
