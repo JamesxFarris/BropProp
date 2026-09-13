@@ -59,6 +59,14 @@
  * parameter is higher — for a symmetric binary, phi = (2/pi)·asin(rho) — so
  * these are `sin(pi·phi/2)`. The old single RHO of 0.213 was the phi being
  * used directly as a rho, which understated the effect.
+ *
+ * Checked for drift 2026-09-13 (`npm run validate:drift`): a stale walk-forward
+ * line lets a team in form beat it together without sharing a game. Against a
+ * scatter null at windows 1, 2 and 10, drift is -3% to +1% of teammate phi and
+ * the same-game rho is 0.34-0.36, so this constant is not optimistic and is left
+ * as it is. The same run puts opponent rho at 0.22-0.24, well above the figure
+ * below; that gap is unresolved and matters only for split-team entries (a 5+1's
+ * partner is priced from PARTNER_SHIFT, not from this).
  */
 export const RHO_TEAMMATE = Math.sin(Math.PI * 0.210 / 2);   // ≈ 0.324
 export const RHO_OPPONENT = Math.sin(Math.PI * 0.055 / 2);   // ≈ 0.086

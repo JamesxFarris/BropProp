@@ -68,7 +68,7 @@ the leg count is in the thousands, count the series before believing it.
 | Buying or finding historical DFS lines | **No source.** No public archive of PrizePicks/Underdog/Sleeper esports lines exists. Line ideas can only be graded on our own forward record (real lines from 2026-09-06). |
 | 3-leg stacks | **-EV, dropped.** 16.8% vs a 20% bar. `STACK_SIZES = [5, 6]`. |
 | **Correlated stacks at PrizePicks** | **DEAD — priced out, measured 2026-09-13.** Eleven controlled quotes: the entry multiplier falls x0.667 per extra leg from the same match (37.5x with none shared, 7.25x with six legs in one match). Every shape comes back 0.41-0.75 EV on the model; the 5+1 is 0.57 on archive rates and 0.94 on the thin real-line estimate. The correlation is real (same-game effect 2.82x) — PrizePicks simply charges for it. |
-| **Correlated stacks at Underdog** | **About break-even — not a green light.** Six legs from one match quote 11.20x against 35.00x with none shared (32% of base). The 5+1 needs 8.9%: 0.87 EV on archive rates, 1.46 on the thin real-line sample, about 1.0 on the drift-corrected model. |
+| **Correlated stacks at Underdog** | **About break-even — not a green light.** Six legs from one match quote 11.20x against 35.00x with none shared (32% of base). The 5+1 needs 8.9%: 0.87 EV on archive rates, 1.46 on the thin real-line sample. An earlier "about 1.0 drift-corrected" figure rested on a drift correction that did not reproduce (see the drift section). |
 | **Correlated stacks at Sleeper** | **DEAD.** Six from one match quote 4.02x against 32.65x with none shared (12%, the steepest of the three). Needs 24.9%; EV 0.31-0.52. Its published flat ladder is not what the app pays. |
 
 **PrizePicks is answered.** On 2026-09-13 a controlled sweep (`/calibrate`,
@@ -95,13 +95,38 @@ a misremembered number.
 | Sleeper | 32.65x | 4.02x | 12% |
 
 Every app charges for concentration. Only Underdog leaves the 5+1 near
-break-even, and near break-even is exactly where the thin real-line sample and
-the ~15% drift in the correlation constants decide the answer.
+break-even, and near break-even is exactly where the thin real-line sample
+decides the answer.
 
 Two batches of those quotes were first filed under PrizePicks because the
 calibrate page defaulted to it; they were relabelled with audit notes
 (`payout_quote` ids 12-18 Underdog, 19-21 Sleeper), and a save now requires an
 explicit app choice with nothing preselected.
+
+## Checkpoint 2026-10-12 — the stop rule
+
+On 2026-09-13 the project went into **collection mode**: no new ideas and no new
+features until this date. The logger keeps collecting real lines and grading
+what is tracked. Chasing a fresh idea whenever one dies is what made every
+week feel like a dead end, because each new idea starts at zero evidence while
+the tracked ones keep getting closer to an answer.
+
+On the day, run exactly this and nothing more:
+
+1. **Leads T1-T3** (`lead_score`, forward window from 2026-09-12). A lead is
+   actionable only if ALL hold: forward series >= its `series_needed` (213 /
+   280 / 174), series-level p < 0.0167 (Bonferroni over three), and win rate
+   above the per-leg break-even of the entry it would be played in. Pace on
+   09-13 was ~12 / 10 / 5 series a day, so T3 may still be short; a short lead
+   is "not yet", never "passed".
+2. **Stacks** (`stack_log`, `priced_version = 2`, graded). A month of 5+1s
+   cannot prove a rate near the 8.9% bar, so do not look for proof. Check
+   calibration instead: sum of `win_prob` over graded stacks against stacks
+   actually won. Realised well below predicted means the stack model is
+   optimistic and Underdog is off the table too.
+3. **Decide.** If something passes, build around that one thing only. If
+   nothing does, stop development: keep the logger running if it is cheap, or
+   turn it off. Either is a real answer.
 
 ## Honesty rules for anything user-facing
 
@@ -275,7 +300,41 @@ returned "96% of the lift is drift" and reversed the project's conclusion for
 about ten minutes. **Each player must come from a DIFFERENT game.** If REAL and
 the null come out nearly equal, suspect the null before believing the result.
 
-### Known bias: both correlation constants carry ~15% drift
+### Re-measured 2026-09-13: the constants do NOT carry 15% drift
+
+`npm run validate:drift` refits both constants against the scatter null in one
+pass (4,606 CS2 series with both teams scored, walk-forward lines, cluster
+bootstrap over series). Pairwise phi uses the marginal implied by each arm's
+own tallies, and it was run at three windows because drift is local in time:
+
+```
+                 teammate phi REAL / SCATTER      drift share   same-game rho
+--window=1       0.2240 / -0.0069                   -3.1%         0.355
+--window=2       0.2239 /  0.0018                    0.8%         0.342
+--window=10      0.2238 / -0.0007                   -0.3%         0.345
+opponent phi     0.1516 /  0.003-0.008              ~3%           0.224-0.236
+tail shift k=5 over   REAL 1.327 / SCATTER 0.007 (w10); k=4 0.912 / -0.002 (w2)
+```
+
+Same-game rho comes out 0.34-0.36, at or slightly ABOVE the shipped 0.324, and
+the same-game tail shifts match the shipped `PARTNER_SHIFT` within their CIs
+(k=5 over 1.321 vs 1.317). The model's core all-over rate sits between SCATTER
+and REAL, below REAL (k=4: model 11.1%, REAL 13.4%). So the model is not
+optimistic from drift; if anything it under-credits the team core slightly.
+
+**Decision: constants unchanged.** The teammate shift is inside the noise of
+two estimators, and a correction toward MORE correlation should not be shipped
+on the back of a check designed to find less. The "15%" below came from a
+pooled-marginal phi, where the scattered arm's marginal mismatch reads as
+correlation. It is kept for the record, not as a live bias.
+
+**Open, unresolved:** opponent rho measures 0.22-0.24 here against the shipped
+0.086 (`validate:correlation`, pooled over all series including the 8,154 with
+only one team scored). It does not touch 5+1 stacks — the partner is priced
+from `PARTNER_SHIFT` — but it does touch entries that split legs across both
+teams of one match. Resolve it only if such a shape ever becomes worth playing.
+
+### Superseded: "both correlation constants carry ~15% drift"
 
 The placebo above has a consequence for the shipped parameters. `RHO_TEAMMATE`
 (0.324, from phi 0.210) was fitted on walk-forward lines, and the scatter null

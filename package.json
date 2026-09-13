@@ -31,6 +31,7 @@
     "validate:consensus": "tsx src/results/validate_consensus.ts",
     "validate:correlation": "tsx src/results/validate_correlation.ts",
     "validate:tail": "tsx src/results/validate_tail.ts",
+    "validate:drift": "tsx src/results/validate_drift.ts",
     "validate:bias": "tsx src/results/validate_bias.ts",
     "validate:backtest": "tsx src/results/validate_backtest.ts",
     "env:truth": "tsx src/results/env_truth.ts",

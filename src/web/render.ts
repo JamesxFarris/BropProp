@@ -2533,8 +2533,20 @@ export function statsPage(o: {
    * five-pick bar; until then it is shown as collecting, whatever it reads.
    */
   const LEAD_BAR = 0.549;
+  /*
+   * The stop rule, dated 2026-09-13 (CLAUDE.md, "Checkpoint 2026-10-12"): no new
+   * features until the leads have had a month to collect. Shown here because this
+   * is the page that answers it.
+   */
+  const CHECKPOINT = '2026-10-12';
+  const daysLeft = Math.ceil((Date.parse(CHECKPOINT + 'T12:00:00Z') - Date.now()) / 86400e3);
+  const checkpointNote = `<p class="note"><b>Checkpoint: 12 October${
+    daysLeft > 0 ? ` (${daysLeft} day${daysLeft === 1 ? '' : 's'} away)` : ' is here'}.</b>
+    Until then nothing new gets built; this record just collects. On the day, a lead
+    counts only if it has its full sample of matches and still clears the bar. If none
+    does, development stops.</p>`;
   const leadRows = o.leads ?? [];
-  const leadBody = leadRows.length === 0
+  const leadBody = checkpointNote + (leadRows.length === 0
     ? `<div class="empty">Tracking starts with games from 12 September. The first
         forward record appears after the daily scoring run.</div>`
     : leadRows.map((l) => {
@@ -2554,7 +2566,7 @@ export function statsPage(o: {
           }</div>
           ${meter(Math.min(l.series, need || 1), need || 1, 'matches toward the target')}
         </div>`;
-      }).join('');
+      }).join(''));
 
   // The scorecard, newest first from the table; charts read oldest-first.
   const hist = [...o.scores].reverse();
