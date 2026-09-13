@@ -60,3 +60,10 @@ test('the same name listed twice is not ambiguous', () => {
   );
   assert.equal(find('Heroic')?.id, 1);
 });
+
+test('an academy side does not collide with its senior roster', () => {
+  // Polymarket prices many academy matches. Treating "academy" as decoration
+  // would attach an academy side's moneyline to the senior team's players.
+  assert.notEqual(normTeam('Eternal Fire'), normTeam('Eternal Fire Academy'));
+  assert.notEqual(normTeam('HEROIC'), normTeam('HEROIC Academy'));
+});

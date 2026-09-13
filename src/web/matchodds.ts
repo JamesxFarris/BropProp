@@ -1,5 +1,5 @@
 import { q } from '../db.js';
-import { teamIndex } from '../adapters/teamname.js';
+import { normTeam, teamIndex } from '../adapters/teamname.js';
 
 /**
  * Turn the market's view of who wins into a probability for each player's under.
@@ -93,9 +93,34 @@ export async function teamWinProbs(ourTeams: string[]): Promise<Map<string, Team
        WHERE p_home_win IS NOT NULL
          AND starts_at > now() - interval '6 hours'`);
 
+  /*
+   * One quote per MATCH first, the freshest.
+   *
+   * Two sources can price the same match — Pinnacle through OddsPapi, and
+   * Polymarket since 2026-09-13 — and they spell teams differently ("Faze Clan",
+   * "FaZe"). teamIndex treats two different names that normalise to one key as
+   * ambiguous and drops the key, so a match priced by both would have left its
+   * teams with no moneyline at all.
+   *
+   * Deduped per match, not per team name, on purpose. The ambiguity guard exists
+   * for two DIFFERENT teams whose names normalise alike, and collapsing by name
+   * would quietly defeat it. Two rows are the same match when both teams
+   * normalise to the same pair and they start within six hours of each other.
+   */
+  const pairOf = (r: { home_name: string; away_name: string }) =>
+    [normTeam(r.home_name), normTeam(r.away_name)].sort().join('|');
+  const matches: typeof rows = [];
+  for (const r of rows) {
+    const pair = pairOf(r);
+    const start = Date.parse(r.starts_at);
+    const i = matches.findIndex((m) => pairOf(m) === pair && Math.abs(Date.parse(m.starts_at) - start) <= 6 * 3600e3);
+    if (i < 0) matches.push(r);
+    else if (Date.parse(r.observed_at) > Date.parse(matches[i]!.observed_at)) matches[i] = r;
+  }
+
   // One entry per side, so a team resolves whether it was home or away.
   const sides: Array<{ name: string } & TeamOdds> = [];
-  for (const r of rows) {
+  for (const r of matches) {
     const ph = Number(r.p_home_win);
     sides.push({ name: r.home_name, pWin: ph, opponent: r.away_name, startsAt: r.starts_at, observedAt: r.observed_at });
     sides.push({ name: r.away_name, pWin: 1 - ph, opponent: r.home_name, startsAt: r.starts_at, observedAt: r.observed_at });

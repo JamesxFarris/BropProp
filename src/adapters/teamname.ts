@@ -15,8 +15,17 @@
  * after normalising, plus a short list of aliases a person has checked.
  */
 
-/** Words that decorate a name without identifying the team. */
-const DECORATION = /\b(team|esports?|e-sports|espor|gaming|club|clan|academy|gg|cs|cs2)\b/g;
+/**
+ * Words that decorate a name without identifying the team.
+ *
+ * "academy" was on this list and is not any more. Stripping it made "Eternal
+ * Fire Academy" normalise to the same key as "Eternal Fire" — a different
+ * roster — and Polymarket, added as a moneyline source on 2026-09-13, prices a
+ * great many academy and tier-5 matches. A board listing only the senior team's
+ * players would have picked up the academy side's moneyline. An academy is a
+ * team in its own right, exactly as a junior side is.
+ */
+const DECORATION = /\b(team|esports?|e-sports|espor|gaming|club|clan|gg|cs|cs2)\b/g;
 
 /**
  * Names that differ by more than decoration. Keys and values are both already

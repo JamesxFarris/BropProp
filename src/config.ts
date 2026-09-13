@@ -57,6 +57,14 @@ export const config = {
     .split(',').map((s) => s.trim().toUpperCase()).filter(Boolean),
 
   /**
+   * Polymarket's CS2 moneylines. Free, unauthenticated and uncapped, so polled
+   * on the half hour rather than once a day: the daily OddsPapi pull only sees
+   * fixtures about fourteen hours ahead and covered 0 of 12 board matches on
+   * 2026-09-13, where Polymarket priced 11.
+   */
+  polymarketCron: process.env.POLYMARKET_CRON ?? '7,37 * * * *',
+
+  /**
    * Base payout per entry size, per book — and empty until someone fills it in.
    *
    * These used to be hardcoded as `{2:3, 3:5, 4:10, 5:20, 6:37.5}` for

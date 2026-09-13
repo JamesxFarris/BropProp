@@ -7,6 +7,7 @@ import { storeStats } from './results/store_stats.js';
 import { scoreCalls, storeScore, LEAGUES } from './results/validate_calls.js';
 import { resumeBackfill } from './results/backfill_resume.js';
 import { pullMatchOdds, BudgetExhausted } from './adapters/oddspapi.js';
+import { pullPolymarket } from './adapters/polymarket.js';
 import { logStacks, gradeStacks } from './results/stack_log.js';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -174,6 +175,29 @@ async function oddsTick() {
   }
 }
 
+let pullingPolymarket = false;
+
+/**
+ * Polymarket's moneylines, every half hour.
+ *
+ * Unlike OddsPapi there is no request budget to protect, so this runs on the
+ * board's cadence and needs no key. It fails soft: a missing moneyline only
+ * means a leg falls back to the measured baseline, which is never worth taking
+ * the logger down for.
+ */
+async function polymarketTick() {
+  if (pullingPolymarket) return;
+  pullingPolymarket = true;
+  try {
+    const r = await pullPolymarket('CS2');
+    console.log(`polymarket CS2: ${r.fixtures} upcoming fixtures, ${r.priced} priced`);
+  } catch (err) {
+    console.warn('polymarket skipped:', (err as Error).message.slice(0, 160));
+  } finally {
+    pullingPolymarket = false;
+  }
+}
+
 let stacking = false;
 
 /**
@@ -205,6 +229,7 @@ async function stacksTick() {
 cron.schedule(config.pollCron, tick);
 cron.schedule(config.stacksCron, stacksTick);
 if (config.oddspapiKey) cron.schedule(config.oddsCron, oddsTick);
+cron.schedule(config.polymarketCron, polymarketTick);
 cron.schedule(config.resultsCron, gradeTick);
 cron.schedule(config.accumulateCron, accumulateTick);
 cron.schedule(config.scoreCron, scoreTick);
