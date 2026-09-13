@@ -460,9 +460,12 @@ const server = createServer(async (req, res) => {
      */
     if (url.pathname === '/calibrate') {
       const bookParam = url.searchParams.get('book');
-      const book: BookCode =
-        lockedBook ??
-        (bookParam && KNOWN_BOOKS.includes(bookParam) ? bookParam : 'prizepicks');
+      // Only the address decides the app here, never an open slip. The sweep is
+      // research, not a slip: a lock silently turning ?book=underdog into the
+      // PrizePicks sweep would file every quote under the wrong app, and that
+      // corrupts two curves at once. Quotes did land under the wrong app once,
+      // from a link that carried no app at all.
+      const book: BookCode = bookParam && KNOWN_BOOKS.includes(bookParam) ? bookParam : 'prizepicks';
       const rows = await markets({ league: filters.league, book, matched: false, search: null });
       const [h, captured, curve] = await Promise.all([
         health(filters.league),

@@ -2055,7 +2055,7 @@ export function buildPage(o: {
   const stacksCard = !o.stacks || o.stacks.length === 0 ? '' : `<div class="card">
     <div class="card-head"><h2>Stacks</h2>
       <span class="sub">take one when your app pays more than the number shown ·
-        <a href="/calibrate">calibrate payouts</a></span></div>
+        <a href="/calibrate?book=${esc(o.book)}">calibrate payouts</a></span></div>
     ${o.stacks.map((s) => {
       const odds = o.teamOdds?.get(s.team);
       const partner = s.legs.find((l) => l.team !== s.team);
@@ -2831,6 +2831,9 @@ export function calibratePage(o: {
       taken.</strong> The apps cut the payout when legs share a match, and how steeply decides
       whether a stack is worth taking at all. It is the one number this app cannot work out for
       itself, and it only has to be measured properly once.</p>
+    <p class="note">Quoting on <b>${esc(bookName(o.book))}</b> — every quote saved on this page is
+      filed under that app. Switch: ${(['prizepicks', 'underdog', 'sleeper'] as const).map((b) =>
+        b === o.book ? `<b>${esc(bookName(b))}</b>` : `<a href="/calibrate?book=${b}">${esc(bookName(b))}</a>`).join(' · ')}</p>
     <p class="note">Every entry holds something constant on purpose, so the order matters more
       than the count. The target match is <b>${esc(o.plan.targetMatch ?? '—')}</b>.</p>
   </div>
