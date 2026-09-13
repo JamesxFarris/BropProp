@@ -88,29 +88,39 @@ export async function logStacks(): Promise<number> {
     if (pool.length === 0) continue;
     for (const size of STACK_SIZES) {
       /**
-       * Every match on the board, not the best three.
+       * The best stack on every match, rather than the best three anywhere.
        *
-       * This logged `findStacks(...).slice(0, 3)` — three stacks per book per
-       * size — while the board supplies around 65 five-cores a day on CS2 kills
-       * maps 1-2 alone. Roughly 17% of available matches reached the record.
+       * Two measured facts set this, and they pull in opposite directions.
        *
-       * That is the binding constraint on this project. A stack is graded
-       * all-must-win on a rare event, and the unit of evidence is the MATCH, so
-       * the only thing that shortens the wait for a verdict is covering more
-       * matches. Adding markets does not: map-3 props sit on the same matches
-       * that already supply a maps 1-2 stack, so they add legs and buildable
-       * slips but zero independent series.
+       * **Matches are the evidence.** Stacks on one match are graded on one
+       * game: measured ICC 0.846, design effect 6.35 at 7.3 rows per series, so
+       * a match is worth about 1.15 independent stacks however many shapes are
+       * logged on it. Only distinct matches move the verdict closer.
        *
-       * Deduped by hand rather than left to the unique key. `findStacks` returns
-       * several shapes per team — different core sizes for one entry size —
-       * sorted easiest-to-beat first, and they collide on
-       * (day, book, match_key, team, side, size). The upsert takes the LAST
-       * write, so handing it the whole list would let a worse shape overwrite a
-       * better one. First seen wins, which is the best one.
+       * **The old cap was starving them.** `.slice(0, 3)` took the three
+       * easiest-to-beat stacks per book per size across the WHOLE board, and
+       * those cluster on the same few matches — 17 of 39 available matches on
+       * 2026-09-12, at 4.0 shapes each. It was capping the thing that counts and
+       * multiplying the thing that does not.
+       *
+       * So the cap moves from the board to the match: one row per match per
+       * size, the best one. Coverage goes to every match the book prices a core
+       * on, and no single match contributes twenty rows to a record whose unit
+       * is the match.
+       *
+       * Deduped here rather than left to the unique key. `findStacks` returns
+       * several shapes per match sorted easiest-first, and they collide on
+       * (day, book, match_key, team, side, size); the upsert takes the LAST
+       * write, so handing it the whole list lets a worse shape overwrite a
+       * better one. First seen wins, and first is best.
+       *
+       * Anything READING this table still has to take one row per match — see
+       * `stackRecord`, which counts distinct match_key. Pooling rows would
+       * re-inflate exactly the sample size this comment exists to protect.
        */
       const seen = new Set<string>();
       for (const s of findStacks(pool, size, book)) {
-        const key = `${s.matchKey}|${s.team}|${s.side}|${s.legs.length}`;
+        const key = s.matchKey;
         if (seen.has(key)) continue;
         seen.add(key);
         const legs: LoggedLeg[] = s.legs.map((l) => ({
