@@ -133,7 +133,14 @@ export async function stackRecord(): Promise<StackRecord> {
             count(*) FILTER (WHERE status IN ('won','lost') AND quoted_mult IS NOT NULL)::int AS priced,
             avg(CASE WHEN status = 'won' THEN quoted_mult ELSE 0 END)
               FILTER (WHERE status IN ('won','lost') AND quoted_mult IS NOT NULL) AS mean_return
-       FROM stack_log`,
+       FROM stack_log
+       -- The record must cover only the shape actually being recommended.
+       -- Twelve LOL stacks were logged on 2026-09-12 before STACKABLE_LEAGUES
+       -- gated the builder to CS2; LOL kills measured teammate phi 0.005, so
+       -- they are a different (and uncorrelated) shape and would dilute this.
+       -- priced_version 1 rows had every leg at the flat baseline, so their
+       -- required_mult cannot be averaged with the rest (see db/021).
+       WHERE league = 'CS2' AND priced_version = 2`,
   );
   return rows[0] ?? { graded: 0, won: 0, matches: 0, pending: 0, mean_required: null, priced: 0, mean_return: null };
 }

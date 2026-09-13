@@ -87,7 +87,32 @@ export async function logStacks(): Promise<number> {
     const pool = marketCandidates(rows, teamOdds, book, { bothSides: true });
     if (pool.length === 0) continue;
     for (const size of STACK_SIZES) {
-      for (const s of findStacks(pool, size, book).slice(0, 3)) {
+      /**
+       * Every match on the board, not the best three.
+       *
+       * This logged `findStacks(...).slice(0, 3)` — three stacks per book per
+       * size — while the board supplies around 65 five-cores a day on CS2 kills
+       * maps 1-2 alone. Roughly 17% of available matches reached the record.
+       *
+       * That is the binding constraint on this project. A stack is graded
+       * all-must-win on a rare event, and the unit of evidence is the MATCH, so
+       * the only thing that shortens the wait for a verdict is covering more
+       * matches. Adding markets does not: map-3 props sit on the same matches
+       * that already supply a maps 1-2 stack, so they add legs and buildable
+       * slips but zero independent series.
+       *
+       * Deduped by hand rather than left to the unique key. `findStacks` returns
+       * several shapes per team — different core sizes for one entry size —
+       * sorted easiest-to-beat first, and they collide on
+       * (day, book, match_key, team, side, size). The upsert takes the LAST
+       * write, so handing it the whole list would let a worse shape overwrite a
+       * better one. First seen wins, which is the best one.
+       */
+      const seen = new Set<string>();
+      for (const s of findStacks(pool, size, book)) {
+        const key = `${s.matchKey}|${s.team}|${s.side}|${s.legs.length}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
         const legs: LoggedLeg[] = s.legs.map((l) => ({
           prop_id: l.propId,
           canon: l.row.canon_handle,
