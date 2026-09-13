@@ -65,7 +65,8 @@ the leg count is in the thousands, count the series before believing it.
 | Line movement / cross-book lag | **Below the bar.** 54.5% on 84 series (CI straddles 50), and you cannot take a line that already moved. |
 | 3-leg stacks | **-EV, dropped.** 16.8% vs a 20% bar. `STACK_SIZES = [5, 6]`. |
 | **Correlated stacks at PrizePicks** | **DEAD — priced out, measured 2026-09-13.** Eleven controlled quotes: the entry multiplier falls x0.667 per extra leg from the same match (37.5x with none shared, 7.25x with six legs in one match). Every shape comes back 0.41-0.75 EV on the model; the 5+1 is 0.57 on archive rates and 0.94 on the thin real-line estimate. The correlation is real (same-game effect 2.82x) — PrizePicks simply charges for it. |
-| **Correlated stacks at Sleeper / Underdog** | **OPEN.** Sleeper publishes one flat ladder (34x for six) with no sport dimension. If its entry builder does not discount same-match legs, the 5+1 is roughly 2.5x EV. One quote on the six-legs-one-match shape answers it. |
+| **Correlated stacks at Underdog** | **About break-even — not a green light.** Six legs from one match quote 11.20x against 35.00x with none shared (32% of base). The 5+1 needs 8.9%: 0.87 EV on archive rates, 1.46 on the thin real-line sample, about 1.0 on the drift-corrected model. |
+| **Correlated stacks at Sleeper** | **DEAD.** Six from one match quote 4.02x against 32.65x with none shared (12%, the steepest of the three). Needs 24.9%; EV 0.31-0.52. Its published flat ladder is not what the app pays. |
 
 **PrizePicks is answered.** On 2026-09-13 a controlled sweep (`/calibrate`,
 table `payout_quote`) measured its discount directly:
@@ -82,7 +83,22 @@ everywhere; the 5-pick base is 20x as assumed. The remembered "22x for a six-leg
 one-team stack" fits none of this and should be treated as a different shape or
 a misremembered number.
 
-The live question is whether **Sleeper and Underdog** discount the same way.
+**Underdog and Sleeper were measured the same day**, with the same sweep:
+
+| app | none shared | all six from one match | share of base |
+|---|---|---|---|
+| PrizePicks | 37.50x | 7.25x | 19% |
+| Underdog | 35.00x | 11.20x | 32% |
+| Sleeper | 32.65x | 4.02x | 12% |
+
+Every app charges for concentration. Only Underdog leaves the 5+1 near
+break-even, and near break-even is exactly where the thin real-line sample and
+the ~15% drift in the correlation constants decide the answer.
+
+Two batches of those quotes were first filed under PrizePicks because the
+calibrate page defaulted to it; they were relabelled with audit notes
+(`payout_quote` ids 12-18 Underdog, 19-21 Sleeper), and a save now requires an
+explicit app choice with nothing preselected.
 
 ## Honesty rules for anything user-facing
 
@@ -120,10 +136,14 @@ The live question is whether **Sleeper and Underdog** discount the same way.
   string as far as the bundler is concerned. This has broken the build twice.
 - Watch for TDZ in `render.ts`: consts are read by helpers defined above them.
 - `prop.extra` does not exist — it is `prop_snapshot.extra`.
-- A Sleeper per-pick `payout_multiplier` is the leg's **marginal**, not the
-  entry's payout. The entry pays a flat ladder (`PUBLISHED_LADDER`). Using the
-  multiplier as both price and payout counts the same number twice and
-  manufactures EV — it did, once.
+- **Sleeper's per-pick `payout_multiplier` is both the leg's marginal and, on an
+  uncorrelated entry, a factor of the entry's payout.** A six-leg entry with no
+  shared match quoted 32.65x against a 33.06x product of its picks' multipliers.
+  Its published `/payouts` ladder (6:34x) is NOT what the app applies, which is
+  why `PUBLISHED_LADDER` is now empty. Same-match legs are then cut hard: 4.02x
+  for six from one match. The trap that remains is pricing a stack's win
+  probability off the book's marginals and then paying it the undiscounted
+  product, which counts the correlation twice.
 
 ## Safety
 
@@ -191,6 +211,12 @@ Two consequences worth carrying:
 2. **It explains the MLB control's result twice over.** MLB stacks measured weak
    partly because opponents there are uncorrelated (phi -0.007 against CS2's
    +0.059) and partly because the ladder is not on offer to stack against.
+
+> **Corrected 2026-09-13: the next paragraph is wrong.** Sleeper's app does not
+> pay its published ladder. An uncorrelated six-leg entry pays the product of its
+> per-pick multipliers (32.65x quoted, 33.06x product), and six legs from one
+> match quote 4.02x — the steepest discount of the three apps. The edge did not
+> transfer to Sleeper.
 
 Sleeper, by contrast, publishes ONE ladder for every sport: `GET /payouts` is
 `version: 7` with no sport dimension — `all_in` 5:19x, 6:34x applied to CS2, MLB,

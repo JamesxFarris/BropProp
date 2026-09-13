@@ -2082,14 +2082,16 @@ export function buildPage(o: {
        */
       const published = PUBLISHED_LADDER[s.book]?.[s.legs.length] ?? null;
       /**
-       * The ladder is a LIST price, and a stack never gets it.
+       * The app's own quote is the only payout worth printing here.
        *
-       * Measured 2026-09-12 against the only quotes this project owns, the apps
-       * discount an entry by roughly 7.5% for each leg beyond the first in the
-       * same match — and it keys on the MATCH, not the team, so a stack's
-       * opponent leg is charged exactly like a sixth teammate. Every stack here
-       * is a single match, so every one of them is at the far end of that curve:
-       * the one six-leg quote on record came back 22x against a 37.5x list.
+       * Measured 2026-09-13 with a controlled sweep on all three apps: six legs
+       * all from one match quote 7.25x on PrizePicks, 11.20x on Underdog and
+       * 4.02x on Sleeper — 19%, 32% and 12% of what each app pays for six legs
+       * from six different matches. The cut keys on the MATCH, not the team,
+       * so a stack's opponent leg is charged like another teammate, and every
+       * stack this card builds sits at the far end of that curve. No published
+       * table reflects it (Sleeper's flat ladder is not what its app pays), so
+       * the placeholder stays empty unless a real table exists.
        *
        * So the ladder is shown as what it is and the EV that used to be
        * computed from it is gone. Multiplying a list price by our win

@@ -128,11 +128,11 @@ export function bestEntry(
    * Payout table to price the entry with. Injected so a test can pin the
    * arithmetic without depending on what happens to be in the environment.
    *
-   * The default is Sleeper's published ladder with anything in `PAYOUT_TABLE`
-   * layered over it, so an environment entry always wins. Built per call rather
-   * than captured in a module-level const, because `PUBLISHED_LADDER` is
-   * declared further down this file: a const here would read it before it
-   * exists. Default parameters are evaluated at call time, which is safe.
+   * The default is whatever `PAYOUT_TABLE` holds, layered over `PUBLISHED_LADDER`
+   * — which is empty since 2026-09-13, because Sleeper's published ladder turned
+   * out not to be what its app pays. Built per call rather than captured in a
+   * module-level const, because `PUBLISHED_LADDER` is declared further down this
+   * file. Default parameters are evaluated at call time, which is safe.
    */
   payouts: Record<string, Record<number, number>> = { ...PUBLISHED_LADDER, ...BASE },
 ): Entry | null {
@@ -293,9 +293,21 @@ export const STACK_SIZES = [5, 6];
  * Underdog publish nothing comparable and stay absent, so the page asks for a
  * quote rather than inventing one.
  */
-export const PUBLISHED_LADDER: Record<string, Record<number, number>> = {
-  sleeper: { 2: 2, 3: 5, 4: 9, 5: 19, 6: 34, 7: 49, 8: 99 },
-};
+/*
+ * EMPTIED 2026-09-13 — the comment above describes a belief that measurement
+ * overturned. Sleeper's app does not pay its published /payouts ladder. A
+ * six-leg Sleeper entry with no legs sharing a match quoted 32.65x, and the
+ * product of those six picks' own payout multipliers is 33.06x, where the ladder
+ * says exactly 34.00x: the app pays the product of per-pick multipliers. It then
+ * cuts that hard when legs share a match — six from one match quoted 4.02x, 12%
+ * of its base, the steepest of the three apps.
+ *
+ * So no app has a published number that survives contact with a real entry.
+ * PrizePicks and Underdog never had one; Sleeper's turned out not to apply. The
+ * Stacks card asks for the app's own quote instead, and the measured discount
+ * curves live in the payout_quote table, written by the /calibrate sweep.
+ */
+export const PUBLISHED_LADDER: Record<string, Record<number, number>> = {};
 
 /**
  * The entries offered on Build, priced by the market rather than by us.
