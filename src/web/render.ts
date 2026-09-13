@@ -2080,8 +2080,24 @@ export function buildPage(o: {
        * one tap corrects it if the app says otherwise.
        */
       const published = PUBLISHED_LADDER[s.book]?.[s.legs.length] ?? null;
+      /**
+       * The ladder is a LIST price, and a stack never gets it.
+       *
+       * Measured 2026-09-12 against the only quotes this project owns, the apps
+       * discount an entry by roughly 7.5% for each leg beyond the first in the
+       * same match — and it keys on the MATCH, not the team, so a stack's
+       * opponent leg is charged exactly like a sixth teammate. Every stack here
+       * is a single match, so every one of them is at the far end of that curve:
+       * the one six-leg quote on record came back 22x against a 37.5x list.
+       *
+       * So the ladder is shown as what it is and the EV that used to be
+       * computed from it is gone. Multiplying a list price by our win
+       * probability produced a number that was optimistic by about 40% on
+       * exactly the shape this card recommends, which is the kind of
+       * confidently-wrong figure `config.ts` refuses to print.
+       */
       const paysLine = published === null ? '' :
-        ` ${esc(bookName(s.book))} pays <b>${published.toFixed(2)}×</b> for a ${s.legs.length}-pick — EV <b>${(s.winProb * published).toFixed(2)}×</b> per unit.`;
+        ` ${esc(bookName(s.book))} lists <b>${published.toFixed(2)}×</b> for a ${s.legs.length}-pick, before the discount it applies to legs from one match — read the real number off the app.`;
       return `<div class="stack">
         <div class="evbar">
           <span class="evnum flat">${s.requiredMultiplier.toFixed(2)}×</span>
@@ -2100,7 +2116,7 @@ export function buildPage(o: {
               <input type="hidden" name="prop_ids" value="${s.legs.map((l) => l.propId).join(',')}">
               <input type="hidden" name="sides" value="${s.legs.map((l) => l.play.side).join(',')}">
               If it pays <input name="mult" type="text" inputmode="decimal" autocomplete="off"
-                value="${published === null ? '' : published.toFixed(2)}"
+                placeholder="${published === null ? '' : published.toFixed(2)}"
                 aria-label="What your app pays for this slip, as a multiplier">×,
               stake <b>—</b>
               <button class="save" title="Record what the app quoted, so we learn how it prices these">Save</button>
