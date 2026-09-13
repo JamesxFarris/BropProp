@@ -113,3 +113,21 @@ test('markets the book does not list, or that have started, are not offered', ()
   assert.equal(calibrationPlan(started, 'prizepicks').entries.length, 0);
   assert.equal(calibrationPlan(board(), 'underdog').entries.length, 0, 'no Underdog lines on this board');
 });
+
+test('only CS2 maps 1-2 legs enter the sweep, kills preferred', () => {
+  // The first live run pulled a LoL Map 4 line and a CS2 Map 3 line into the
+  // low-concentration entries. An app can price those on their own terms, which
+  // would move the quote for reasons the fit would misread as concentration.
+  const rows = board();
+  rows.push({ ...row('Canyon', 'HLE vs GEN', 'GEN'), league: 'LOL', map_start: 4, map_end: 4 } as MarketRow);
+  rows.push({ ...row('El1an', 'FORZE vs INOX', 'INOX'), map_start: 3, map_end: 3 } as MarketRow);
+  // A player listed on both markets must contribute kills.
+  rows.unshift({ ...row('A0', 'Fat vs Match', 'Fat'), stat: 'headshots' } as MarketRow);
+  const plan = calibrationPlan(rows, 'prizepicks');
+  const legs = plan.entries.flatMap((e) => e.legs);
+  assert.ok(!legs.some((l) => l.handle === 'Canyon'), 'LoL leg excluded');
+  assert.ok(!legs.some((l) => l.handle === 'El1an'), 'map-3 leg excluded');
+  assert.ok(legs.every((l) => l.maps === 'Maps 1-2'));
+  const a0 = legs.find((l) => l.handle === 'A0');
+  assert.equal(a0?.stat, 'kills', 'kills chosen over headshots for the same player');
+});

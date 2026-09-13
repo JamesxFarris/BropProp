@@ -101,7 +101,23 @@ export function calibrationPlan(rows: MarketRow[], book: BookCode): CalPlan {
   const legs: CalLeg[] = [];
   const seenPlayer = new Set<string>();
 
-  for (const r of rows) {
+  /*
+   * CS2 maps 1-2 only, kills before headshots.
+   *
+   * The sweep measures ONE variable — concentration — for the shape the Stacks
+   * card actually recommends, which is CS2 maps 1-2. The first live run drew a
+   * LoL Map 4 kills line and a CS2 Map 3 line into the "different matches"
+   * entries, and an app may price a cross-title entry or a map-3 leg on its own
+   * terms. Either would move the quote for reasons that have nothing to do with
+   * how many legs share a match, and the fit would read it as concentration.
+   *
+   * Kills first so a player who lists both markets contributes the stat the
+   * stacks are built from, rather than whichever row the board returned first.
+   */
+  const killsFirst = [...rows].sort((a, b) => (a.stat === 'kills' ? 0 : 1) - (b.stat === 'kills' ? 0 : 1));
+  for (const r of killsFirst) {
+    if (r.league !== 'CS2') continue;
+    if (r.map_start !== 1 || r.map_end !== 2) continue;
     if (r.is_combo) continue;
     if (r.scheduled_at && new Date(r.scheduled_at).getTime() < now) continue;
     if (!r.match_title) continue;
