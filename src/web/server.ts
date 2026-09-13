@@ -305,8 +305,14 @@ const server = createServer(async (req, res) => {
       if (url.pathname === '/calibrate/quote') {
         let legs: unknown = [];
         try { legs = JSON.parse(body.get('legs') ?? '[]'); } catch { legs = []; }
+        // The app is picked on every save, with no default. Twice quotes from
+        // Underdog and Sleeper were filed as PrizePicks because the page had
+        // quietly defaulted to it; a radio with nothing preselected cannot do
+        // that, and a save naming no valid app is refused rather than guessed.
+        const qBook = body.get('book') ?? '';
+        if (!KNOWN_BOOKS.includes(qBook)) return redirect(res, '/calibrate');
         await recordPayoutQuote({
-          book: body.get('book') ?? '',
+          book: qBook,
           quoted: Number(body.get('mult')),
           note: body.get('label') ?? null,
           entry: {

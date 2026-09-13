@@ -2786,7 +2786,6 @@ export function calibratePage(o: {
       ${e.legs.map(legRow).join('')}
     </tbody></table></div>
     <form method="post" action="/calibrate/quote" class="kelly calform">
-      <input type="hidden" name="book" value="${esc(o.book)}">
       <input type="hidden" name="size" value="${e.size}">
       <input type="hidden" name="matches" value="${e.matches}">
       <input type="hidden" name="excess" value="${e.excess}">
@@ -2795,7 +2794,11 @@ export function calibratePage(o: {
       <input type="hidden" name="same_side" value="${e.sameSide ? '1' : '0'}">
       <input type="hidden" name="legs" value="${esc(JSON.stringify(e.legs))}">
       <input type="hidden" name="label" value="${esc(e.label)}">
-      ${esc(bookName(o.book))} quotes <input name="mult" type="text" inputmode="decimal"
+      <span class="calapp">Quoted on
+        ${(['prizepicks', 'underdog', 'sleeper'] as const).map((b) =>
+          `<label><input type="radio" name="book" value="${b}" required> ${esc(bookName(b))}</label>`).join(' ')}
+      </span>
+      at <input name="mult" type="text" inputmode="decimal"
         autocomplete="off" aria-label="The multiplier this app quotes for this entry">×
       <button class="save">Save</button>
     </form>
