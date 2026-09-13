@@ -172,3 +172,39 @@ Sleeper, by contrast, publishes ONE ladder for every sport: `GET /payouts` is
 NFL and NHL alike. If the correlation edge transfers to another sport at all, it
 transfers at Sleeper first, because the ladder there has not been withdrawn
 anywhere.
+
+## The drift placebo — run it before believing any correlation
+
+A correlated-stack claim says five teammates move together **because they share a
+game**. There is a rival explanation that produces the same statistic: the line
+is stale, the team is in form, and all five beat a number that has not caught up.
+Nothing in a raw all-over rate separates the two.
+
+The control that does, borrowed from the NBA scan:
+
+| arm | construction | what it holds |
+|---|---|---|
+| REAL | the five teammates in the same series | everything |
+| **SCATTER** | each player's flag from a **different** nearby series of the same team | team, roster, era — but NO shared game |
+| SHUFFLE | each player's flag from a random series of his own | nothing |
+
+`REAL / SCATTER` is the same-game effect. `SCATTER / SHUFFLE` is drift.
+
+**Measured on CS2 kills maps 1-2, 1,921 team-series:**
+
+```
+REAL 8.80%   SCATTER 3.12%   SHUFFLE 2.08%
+REAL/SHUFFLE 4.22x total · SCATTER/SHUFFLE 1.50x drift · REAL/SCATTER 2.82x same-game
+drift accounts for 16% of the lift
+```
+
+So the CS2 effect is genuinely a game effect. **NBA fails the same test**: the
+placebo attributes 65% of its only surviving shapes to drift, and its same-game
+component goes to zero or negative under trailing-20 lines.
+
+**The trap, because it was hit once here and gave the opposite answer.** Drawing
+all five flags from ONE other game is not a placebo — it preserves the shared
+game perfectly and merely measures the same event on a different date. It
+returned "96% of the lift is drift" and reversed the project's conclusion for
+about ten minutes. **Each player must come from a DIFFERENT game.** If REAL and
+the null come out nearly equal, suspect the null before believing the result.
