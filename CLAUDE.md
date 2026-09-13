@@ -64,6 +64,8 @@ the leg count is in the thousands, count the series before believing it.
 | Team ratings (walk-forward Elo) | Null for props. Kept out of pricing. |
 | Line movement / cross-book lag | **Below the bar.** 54.5% on 84 series (CI straddles 50), and you cannot take a line that already moved. |
 | Kills vs headshots line consistency | **Not new information.** On one week of real closing lines (96 series), headshot lines 1.5+ above what the kills line and the player's headshot rate imply went under 56.5% [47.8, 65.2] on 57 series, and only on that side: when the headshot line ran low, the over hit 50%. 88% of those legs were already above the player's own headshot history — lead T2. Adding the gap moved T2-like legs from 55.9% to 58.9%, inside the noise, and the legs not covered by T2 are 10 legs over 10 series. Don't track it separately; watch T2's forward record instead. |
+| Synthetic book lines rebuilt from player history | **Fails.** Reconstructing what a book would have posted from the player's own prior series explains only about R² 0.37 of the real lines. Too loose to backtest a line idea on — it is the pseudo-line trap in another coat. |
+| Buying or finding historical DFS lines | **No source.** No public archive of PrizePicks/Underdog/Sleeper esports lines exists. Line ideas can only be graded on our own forward record (real lines from 2026-09-06). |
 | 3-leg stacks | **-EV, dropped.** 16.8% vs a 20% bar. `STACK_SIZES = [5, 6]`. |
 | **Correlated stacks at PrizePicks** | **DEAD — priced out, measured 2026-09-13.** Eleven controlled quotes: the entry multiplier falls x0.667 per extra leg from the same match (37.5x with none shared, 7.25x with six legs in one match). Every shape comes back 0.41-0.75 EV on the model; the 5+1 is 0.57 on archive rates and 0.94 on the thin real-line estimate. The correlation is real (same-game effect 2.82x) — PrizePicks simply charges for it. |
 | **Correlated stacks at Underdog** | **About break-even — not a green light.** Six legs from one match quote 11.20x against 35.00x with none shared (32% of base). The 5+1 needs 8.9%: 0.87 EV on archive rates, 1.46 on the thin real-line sample, about 1.0 on the drift-corrected model. |
@@ -129,6 +131,18 @@ explicit app choice with nothing preselected.
   `--max-old-space-size=2048` for anything loading the archive.
 - **Deploy:** `git push origin n-book-consensus:main`. Railway builds both
   services; migrations in `db/` run on worker boot.
+- **Moneylines come from two sources** into `match_odds`: OddsPapi (Pinnacle,
+  daily, budgeted) and **Polymarket** (`src/adapters/polymarket.ts`, free, no
+  key, every half hour). The daily OddsPapi pull only sees ~14 hours ahead and
+  covered 0 of 12 board matches on 2026-09-13; Polymarket covered 10. A price is
+  the bid/ask midpoint, and only when the spread is at most 0.10.
+- Polymarket lists a team's whole week, so a team routinely has several priced
+  fixtures. `resolveTeamOdds` prices each team off its **next** fixture. Before
+  that fix, the last row won and one match summed to 87% (M80 39%, Luminosity
+  48%). Sanity check after any change here: both sides of a board match sum to
+  100%.
+- "academy" is no longer stripped by `normTeam`: Polymarket prices academy
+  sides, and "Eternal Fire Academy" must not resolve to Eternal Fire.
 
 ## Code traps specific to this repo
 

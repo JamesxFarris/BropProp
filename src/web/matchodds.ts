@@ -85,14 +85,26 @@ export type TeamOdds = {
  * the favourite.
  */
 export async function teamWinProbs(ourTeams: string[]): Promise<Map<string, TeamOdds>> {
-  const rows = await q<{
-    home_name: string; away_name: string; p_home_win: string | null;
-    starts_at: string; observed_at: string;
-  }>(`SELECT home_name, away_name, p_home_win::text, starts_at, observed_at
+  const rows = await q<OddsRow>(`SELECT home_name, away_name, p_home_win::text, starts_at, observed_at
         FROM current_match_odds
        WHERE p_home_win IS NOT NULL
          AND starts_at > now() - interval '6 hours'`);
+  return resolveTeamOdds(rows, ourTeams, Date.now());
+}
 
+export type OddsRow = {
+  home_name: string; away_name: string; p_home_win: string | null;
+  starts_at: string; observed_at: string;
+};
+
+/** A fixture that started this recently still counts as the team's next one: CS2 starts run late. */
+const LATE_START_GRACE_MS = 30 * 60e3;
+
+/**
+ * Resolve each of our team names to ONE fixture's win probability. Pure, so the
+ * choice of fixture is tested rather than trusted.
+ */
+export function resolveTeamOdds(rows: OddsRow[], ourTeams: string[], now: number): Map<string, TeamOdds> {
   /*
    * One quote per MATCH first, the freshest.
    *
@@ -126,7 +138,32 @@ export async function teamWinProbs(ourTeams: string[]): Promise<Map<string, Team
     sides.push({ name: r.away_name, pWin: 1 - ph, opponent: r.home_name, startsAt: r.starts_at, observedAt: r.observed_at });
   }
 
-  const find = teamIndex(sides, (s) => s.name);
+  /*
+   * One fixture per exact team name: the next one to start.
+   *
+   * Polymarket lists a team's whole week, so M80 had five priced fixtures on
+   * 2026-09-13 — tonight against Luminosity and four on 09-17. teamIndex keeps
+   * the LAST row for a repeated name, which gave M80 a 09-17 price (39%) beside
+   * Luminosity's tonight price (48%): one match summing to 87%, and each team
+   * sided off a different game. The board's props are for the next game, so the
+   * next game's price is the one that belongs to them; a fixture only in the
+   * past is kept when there is nothing ahead.
+   *
+   * Per EXACT name, before teamIndex, so two different names that normalise
+   * alike still reach the ambiguity guard.
+   */
+  const rank = (s: { startsAt: string }) => {
+    const t = Date.parse(s.startsAt);
+    // Ahead: the earliest wins. Behind: after everything ahead, the latest wins.
+    return t >= now - LATE_START_GRACE_MS ? t : Number.MAX_SAFE_INTEGER / 2 + (now - t);
+  };
+  const next = new Map<string, (typeof sides)[number]>();
+  for (const s of sides) {
+    const kept = next.get(s.name);
+    if (!kept || rank(s) < rank(kept)) next.set(s.name, s);
+  }
+
+  const find = teamIndex([...next.values()], (s) => s.name);
   const out = new Map<string, TeamOdds>();
   for (const t of ourTeams) {
     const hit = find(t);

@@ -2017,7 +2017,7 @@ export function buildPage(o: {
   entries: Entry[];
   /** Team stacks from `findStacks`, best first. Optional so older callers still render. */
   stacks?: Stack[];
-  /** Pinnacle win probabilities by our team name, for saying why a stack is priced as it is. */
+  /** Moneyline win probabilities (Pinnacle or Polymarket) by our team name, for saying why a stack is priced as it is. */
   teamOdds?: Map<string, TeamOdds>;
   book: BookCode;
   lockedBook: string | null;
@@ -2059,7 +2059,7 @@ export function buildPage(o: {
     ${o.stacks.map((s) => {
       const odds = o.teamOdds?.get(s.team);
       const partner = s.legs.find((l) => l.team !== s.team);
-      const why = odds ? ` Pinnacle has ${esc(s.team)} at ${(odds.pWin * 100).toFixed(0)}% to win.` : '';
+      const why = odds ? ` The betting market has ${esc(s.team)} at ${(odds.pWin * 100).toFixed(0)}% to win.` : '';
       /**
        * What this book pays for an entry of this many legs, where it publishes
        * a ladder. Sleeper does, at api.sleeper.app/payouts, with no auth.
@@ -2235,7 +2235,7 @@ export function buildPage(o: {
               // a winner from a loser — so a leg resting on it is a leg resting
               // on nothing, however confident the percentage looks.
               l.source === 'market'
-                ? `<span title="Sided by the team, not the player: Pinnacle's moneyline where there is one, otherwise close to a coin flip.">team read</span>`
+                ? `<span title="Sided by the team, not the player: the match moneyline where there is one, otherwise close to a coin flip.">team read</span>`
                 : l.source === 'consensus'
                 ? `<span title="Direction read off the other books: this app is ${l.gap?.toFixed(1)} off their median. No projection involved.">${l.gap?.toFixed(1)} off the crowd</span>`
                 : `<span title="No consensus available — fewer than three books price this market, so the side comes from our projection, which has been measured at AUC 0.495 and has shown no ability to pick winners.">projection only</span>`

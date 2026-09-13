@@ -438,7 +438,7 @@ const server = createServer(async (req, res) => {
       // removed. The board still runs it for its own column.
       const [picks, h] = await Promise.all([openPicks(), health(filters.league)]);
 
-      // Pinnacle's view of who wins, for every team on the board. Empty until
+      // The market's view of who wins, for every team on the board. Empty until
       // the odds job has run — and until migration 017 exists at all, which is
       // why a failure here is swallowed rather than taking the page down.
       const teams = [...new Set(rows.flatMap((r) => r.books.map((b) => b.team))
